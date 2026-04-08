@@ -147,19 +147,80 @@ export default function Chat() {
       setIsStreaming(true);
       setStreamingMessageId(assistantId);
 
-      // Simulate streaming response (replace with real API call in production)
+      // Stream from the real Claude API
       try {
-        const response = await simulateStream(text);
-        let accumulated = "";
-        for (const chunk of response) {
-          accumulated += chunk;
-          updateLastAssistantMessage(convId, accumulated);
-          await new Promise((r) => setTimeout(r, 12 + Math.random() * 20));
+        // Build messages array for the API (all messages in this conversation)
+        const conv = conversations.find((c) => c.id === convId);
+        const apiMessages = (conv?.messages || [])
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .filter((m) => m.content.trim() !== "")
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: apiMessages,
+            pageContextId: selectedPageId || undefined,
+            conversationId: convId,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: "Request failed" }));
+          throw new Error(err.error || `HTTP ${response.status}`);
         }
-      } catch {
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response stream");
+
+        const decoder = new TextDecoder();
+        let accumulated = "";
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+
+            const jsonStr = trimmed.slice(6);
+            if (jsonStr === "[DONE]") continue;
+
+            try {
+              const data = JSON.parse(jsonStr);
+
+              if (data.type === "token") {
+                accumulated += data.text;
+                updateLastAssistantMessage(convId, accumulated);
+              } else if (data.type === "done") {
+                if (data.message) {
+                  updateLastAssistantMessage(convId, data.message);
+                }
+                if (data.pendingAction) {
+                  setPendingAction(data.pendingAction);
+                }
+              } else if (data.type === "error") {
+                throw new Error(data.error || "Stream error");
+              }
+            } catch (parseErr) {
+              // Skip malformed SSE lines
+              if (parseErr instanceof SyntaxError) continue;
+              throw parseErr;
+            }
+          }
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Something went wrong";
         updateLastAssistantMessage(
           convId,
-          "I encountered an error processing your request. Please try again."
+          `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
         );
       } finally {
         setIsStreaming(false);
@@ -302,81 +363,3 @@ export default function Chat() {
   );
 }
 
-// --- Simulated streaming for demo purposes ---
-function simulateStream(input: string): Promise<string[]> {
-  const responses: Record<string, string> = {
-    "What can I do?": `I can help you manage your Z-Health Education WordPress site. Here's what I can do:
-
-**Pages & Posts**
-- Create, edit, and delete pages and posts
-- Update content, titles, and metadata
-- Manage page templates and layouts
-
-**Media**
-- Upload and organize images
-- Set featured images on posts
-
-**SEO**
-- Analyze and optimize meta titles and descriptions
-- Suggest keyword improvements
-- Check for SEO issues
-
-**WooCommerce**
-- View and update products
-- Check order status and analytics
-
-**Bulk Operations**
-- Update multiple pages at once
-- Find and replace across content
-
-Just describe what you'd like to do in plain language, and I'll take care of the rest.`,
-    "List pages": `Here are your current pages:
-
-| Page | Status | Last Modified |
-|------|--------|---------------|
-| Home | Published | Apr 5, 2026 |
-| About Z-Health | Published | Apr 4, 2026 |
-| Courses | Published | Apr 3, 2026 |
-| Contact | Draft | Apr 1, 2026 |
-
-Would you like to edit any of these pages, or create a new one?`,
-    "New page": `I'd be happy to help you create a new page. To get started, I need a few details:
-
-1. **Page title** -- What should the page be called?
-2. **Content brief** -- What should the page cover?
-3. **Template** -- Should I use a specific page template?
-4. **Status** -- Publish immediately or save as draft?
-
-You can also just describe what you want and I'll figure out the details.`,
-    "SEO check": `I'll run a quick SEO analysis on your site. Here's what I found:
-
-**Home Page**
-- Meta title: Good length (58 chars)
-- Meta description: \`Missing -- needs attention\`
-- H1 tag: Present
-
-**About Z-Health**
-- Meta title: Good length (45 chars)
-- Meta description: Good length (142 chars)
-- H1 tag: Present
-
-**Courses**
-- Meta title: Too short (12 chars) -- recommend 50-60
-- Meta description: \`Missing -- needs attention\`
-- H1 tag: Missing
-
-> **Recommendation**: Focus on adding meta descriptions to Home and Courses pages, and expanding the Courses page title.
-
-Would you like me to fix any of these issues?`,
-  };
-
-  const response =
-    responses[input] ||
-    `I understand you'd like to: **${input}**
-
-Let me look into that for you. I'll analyze your WordPress site and determine the best approach.
-
-Is there anything specific you'd like me to focus on?`;
-
-  return Promise.resolve(response.split(""));
-}
