@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useClickOutside } from "@/lib/hooks";
 import { Search, ChevronDown, X } from "./icons";
 
@@ -17,6 +17,7 @@ interface PageSelectorProps {
   selectedPageId: number | null;
   onSelect: (pageId: number | null) => void;
   compact?: boolean;
+  mode?: "dropdown" | "list";
 }
 
 const statusColors: Record<string, string> = {
@@ -27,12 +28,236 @@ const statusColors: Record<string, string> = {
   trash: "bg-red-400",
 };
 
+const statusLabels: Record<string, string> = {
+  publish: "Published",
+  draft: "Draft",
+  pending: "Pending",
+  private: "Private",
+  trash: "Trash",
+};
+
+type FilterType = "all" | "publish" | "draft" | "page" | "post";
+
+function formatRelativeDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
 export default function PageSelector({
   pages,
   selectedPageId,
   onSelect,
   compact = false,
+  mode = "dropdown",
 }: PageSelectorProps) {
+  if (mode === "list") {
+    return (
+      <PageSelectorList
+        pages={pages}
+        selectedPageId={selectedPageId}
+        onSelect={onSelect}
+      />
+    );
+  }
+
+  return (
+    <PageSelectorDropdown
+      pages={pages}
+      selectedPageId={selectedPageId}
+      onSelect={onSelect}
+      compact={compact}
+    />
+  );
+}
+
+function PageSelectorList({
+  pages,
+  selectedPageId,
+  onSelect,
+}: {
+  pages: PageItem[];
+  selectedPageId: number | null;
+  onSelect: (pageId: number | null) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<FilterType>("all");
+
+  const filteredPages = useMemo(() => {
+    let result = pages;
+
+    // Text search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((p) => p.title.toLowerCase().includes(q));
+    }
+
+    // Filter pills
+    switch (filter) {
+      case "publish":
+        result = result.filter((p) => p.status === "publish");
+        break;
+      case "draft":
+        result = result.filter((p) => p.status === "draft" || p.status === "pending");
+        break;
+      case "page":
+        result = result.filter((p) => p.type === "page");
+        break;
+      case "post":
+        result = result.filter((p) => p.type === "post");
+        break;
+    }
+
+    return result;
+  }, [pages, search, filter]);
+
+  const filters: { label: string; value: FilterType }[] = [
+    { label: "All", value: "all" },
+    { label: "Published", value: "publish" },
+    { label: "Draft", value: "draft" },
+    { label: "Pages", value: "page" },
+    { label: "Posts", value: "post" },
+  ];
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Search */}
+      <div className="px-3 pb-2">
+        <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
+          <Search size={14} className="text-gray-400 flex-shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search pages and posts..."
+            className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter pills */}
+      <div className="px-3 pb-2">
+        <div className="flex gap-1 flex-wrap">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${
+                filter === f.value
+                  ? "bg-brand-blue text-white"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Page list */}
+      <div className="flex-1 overflow-y-auto px-2">
+        {/* Clear selection option */}
+        {selectedPageId !== null && (
+          <button
+            onClick={() => onSelect(null)}
+            className="w-full flex items-center gap-2 px-2.5 py-2 text-sm text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors mb-0.5"
+          >
+            <X size={12} />
+            <span>Clear selection</span>
+          </button>
+        )}
+
+        {filteredPages.map((page) => (
+          <button
+            key={page.id}
+            onClick={() => onSelect(page.id)}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl text-left transition-all duration-200 mb-0.5 ${
+              page.id === selectedPageId
+                ? "bg-brand-blue/[0.08] ring-1 ring-brand-blue/20"
+                : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+            }`}
+          >
+            {/* Status dot */}
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[page.status]}`}
+            />
+
+            {/* Title and meta */}
+            <div className="flex-1 min-w-0">
+              <p
+                className={`text-sm font-medium truncate ${
+                  page.id === selectedPageId
+                    ? "text-brand-blue"
+                    : "text-gray-800 dark:text-gray-200"
+                }`}
+              >
+                {page.title}
+              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 capitalize">
+                  {page.type}
+                </span>
+                <span className="text-[10px] text-gray-300 dark:text-gray-600">
+                  |
+                </span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                  {statusLabels[page.status] || page.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Modified date */}
+            {page.modified && (
+              <span className="text-[11px] text-gray-400 dark:text-gray-500 flex-shrink-0">
+                {formatRelativeDate(page.modified)}
+              </span>
+            )}
+          </button>
+        ))}
+
+        {filteredPages.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 px-4">
+            <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
+              No pages found
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PageSelectorDropdown({
+  pages,
+  selectedPageId,
+  onSelect,
+  compact,
+}: {
+  pages: PageItem[];
+  selectedPageId: number | null;
+  onSelect: (pageId: number | null) => void;
+  compact: boolean;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [focusIndex, setFocusIndex] = useState(-1);

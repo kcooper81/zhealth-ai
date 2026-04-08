@@ -7,14 +7,15 @@ const client = new Anthropic({
 export async function streamChat(
   messages: Array<{ role: string; content: string }>,
   system: string,
-  onChunk: (text: string) => void
+  onChunk: (text: string) => void,
+  model = "claude-sonnet-4-20250514"
 ): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
   let fullContent = "";
   let inputTokens = 0;
   let outputTokens = 0;
 
   const stream = client.messages.stream({
-    model: "claude-sonnet-4-20250514",
+    model,
     max_tokens: 8192,
     system,
     messages: messages.map((m) => ({
@@ -51,6 +52,7 @@ export function buildSystemPrompt(context: {
   currentPage?: { id: number; title: string; content: string };
   capabilities?: string[];
   brandGuide?: Record<string, unknown>;
+  pluginContext?: string;
 }): string {
   const pagesSection =
     context.pages && context.pages.length > 0
@@ -60,6 +62,8 @@ export function buildSystemPrompt(context: {
   const currentPageSection = context.currentPage
     ? `\n\nCurrently viewing page [${context.currentPage.id}] "${context.currentPage.title}":\n${context.currentPage.content}`
     : "";
+
+  const pluginSection = context.pluginContext || "";
 
   return `You are an expert WordPress site manager and web developer for Z-Health Education (zhealtheducation.com).
 
@@ -118,5 +122,5 @@ When generating HTML content for pages:
 - Ensure responsive design considerations
 - Optimize for accessibility (alt text, ARIA labels, semantic structure)
 
-Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pagesSection}${currentPageSection}`;
+Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${currentPageSection}`;
 }

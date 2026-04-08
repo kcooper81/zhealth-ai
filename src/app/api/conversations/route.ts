@@ -3,9 +3,11 @@ import {
   listConversations,
   createConversation,
 } from "@/lib/conversations";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET() {
   try {
+    await requireAuth();
     const conversations = await listConversations();
     return NextResponse.json(conversations);
   } catch (error) {
@@ -19,6 +21,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
     const body = await request.json();
     const { title, pageContextId } = body as {
       title?: string;

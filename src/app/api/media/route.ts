@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth();
     const { searchParams } = new URL(request.url);
     const wp = getWordPressClient();
 
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 

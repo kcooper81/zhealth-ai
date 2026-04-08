@@ -1,7 +1,20 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import type { ChatMessage, Conversation, PendingAction } from "@/lib/types";
+import type { Job } from "@/lib/jobs";
+import {
+  createJob,
+  advanceJobStep,
+  completeJob,
+  failJob,
+  cancelJob as cancelJobFn,
+  updateJobStatus,
+  addJobStep,
+  isJobActive,
+  trimJobHistory,
+} from "@/lib/jobs";
 import { useLocalStorage, useKeyboardShortcuts } from "@/lib/hooks";
 import Sidebar from "./Sidebar";
 import MessageList from "./MessageList";
@@ -11,6 +24,9 @@ import ActionConfirmation from "./ActionConfirmation";
 import Onboarding from "./Onboarding";
 import KeyboardShortcuts from "./KeyboardShortcuts";
 import WorkflowPanel from "./WorkflowPanel";
+import SettingsPanel from "./SettingsPanel";
+import { ActiveJobsBar, JobsPanel } from "./JobsPanel";
+import JobIndicator from "./JobIndicator";
 import { Menu } from "./icons";
 
 type SidebarPage = {
@@ -26,6 +42,8 @@ function generateId(): string {
 }
 
 export default function Chat() {
+  const { data: session } = useSession();
+
   // --- State ---
   const [conversations, setConversations] = useLocalStorage<Conversation[]>("zhealth-conversations", []);
   const [currentConversationId, setCurrentConversationId] = useLocalStorage<string | null>("zhealth-current-conv", null);
@@ -38,9 +56,45 @@ export default function Chat() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showWorkflows, setShowWorkflows] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [initialWorkflowId, setInitialWorkflowId] = useState<string | null>(null);
   const [, setShowOnboarding] = useState(true);
   const [pages, setPages] = useState<SidebarPage[]>([]);
+  const [selectedModel, setSelectedModel] = useLocalStorage<string>("zhealth-ai-model", "claude-sonnet-4-6");
+
+  // --- Jobs state ---
+  const [jobs, setJobs] = useLocalStorage<Job[]>("zhealth-jobs", []);
+  const [showJobsPanel, setShowJobsPanel] = useState(false);
+  const currentJobRef = useRef<string | null>(null);
+
+  // Trim job history to 50 items on change
+  useEffect(() => {
+    const trimmed = trimJobHistory(jobs);
+    if (trimmed.length !== jobs.length) {
+      setJobs(trimmed);
+    }
+  }, [jobs, setJobs]);
+
+  // Helper to update a specific job
+  const updateJob = useCallback(
+    (jobId: string, updater: (job: Job) => Job) => {
+      setJobs((prev) =>
+        prev.map((j) => (j.id === jobId ? updater(j) : j))
+      );
+    },
+    [setJobs]
+  );
+
+  const handleCancelJob = useCallback(
+    (jobId: string) => {
+      updateJob(jobId, (j) => cancelJobFn(j));
+    },
+    [updateJob]
+  );
+
+  const handleClearJobHistory = useCallback(() => {
+    setJobs((prev) => prev.filter(isJobActive));
+  }, [setJobs]);
 
   // Fetch real pages from WordPress on mount
   useEffect(() => {
@@ -152,7 +206,7 @@ export default function Chat() {
     [currentConversationId, setConversations, setCurrentConversationId]
   );
 
-  // --- Message sending ---
+  // --- Message sending (with jobs integration) ---
   const handleSend = useCallback(
     async (text: string) => {
       let convId = currentConversationId;
@@ -181,7 +235,17 @@ export default function Chat() {
       setIsStreaming(true);
       setStreamingMessageId(assistantId);
 
+      // Create a job to track this request
+      const job = createJob("chat", "Processing request...", [
+        { label: "Thinking", status: "running" },
+        { label: "Generating response", status: "pending" },
+      ]);
+      job.description = text.slice(0, 80) + (text.length > 80 ? "..." : "");
+      currentJobRef.current = job.id;
+      setJobs((prev) => [job, ...prev]);
+
       // Stream from the real Claude API
+      let streamStarted = false;
       try {
         // Build messages array for the API (all messages in this conversation)
         const conv = conversations.find((c) => c.id === convId);
@@ -197,6 +261,7 @@ export default function Chat() {
             messages: apiMessages,
             pageContextId: selectedPageId || undefined,
             conversationId: convId,
+            model: selectedModel,
           }),
         });
 
@@ -231,6 +296,15 @@ export default function Chat() {
               const data = JSON.parse(jsonStr);
 
               if (data.type === "token") {
+                // Advance to "Generating response" step on first token
+                if (!streamStarted) {
+                  streamStarted = true;
+                  updateJob(job.id, (j) => {
+                    let updated = advanceJobStep(j, "Analyzed request");
+                    updated = updateJobStatus(updated, "streaming");
+                    return updated;
+                  });
+                }
                 accumulated += data.text;
                 updateLastAssistantMessage(convId, accumulated);
               } else if (data.type === "done") {
@@ -239,6 +313,18 @@ export default function Chat() {
                 }
                 if (data.pendingAction) {
                   setPendingAction(data.pendingAction);
+                  // Add confirming step to job
+                  updateJob(job.id, (j) => {
+                    let updated = advanceJobStep(j);
+                    updated = addJobStep(updated, "Waiting for confirmation", "running");
+                    updated = updateJobStatus(updated, "confirming");
+                    return updated;
+                  });
+                } else {
+                  // Simple chat response — complete the job
+                  updateJob(job.id, (j) =>
+                    completeJob(j, { message: "Response generated" })
+                  );
                 }
               } else if (data.type === "error") {
                 throw new Error(data.error || "Stream error");
@@ -250,46 +336,100 @@ export default function Chat() {
             }
           }
         }
+
+        // If stream ended without a "done" event, complete the job
+        updateJob(job.id, (j) =>
+          isJobActive(j) ? completeJob(j, { message: "Response generated" }) : j
+        );
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Something went wrong";
         updateLastAssistantMessage(
           convId,
           `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
         );
+        // Fail the job
+        updateJob(job.id, (j) => failJob(j, errorMsg));
       } finally {
         setIsStreaming(false);
         setStreamingMessageId(null);
+        currentJobRef.current = null;
       }
     },
-    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage]
+    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, conversations, selectedPageId, selectedModel, setJobs, updateJob]
   );
 
   const handleCancelStream = useCallback(() => {
     setIsStreaming(false);
     setStreamingMessageId(null);
-  }, []);
+    // Cancel the current job
+    if (currentJobRef.current) {
+      updateJob(currentJobRef.current, (j) => cancelJobFn(j));
+      currentJobRef.current = null;
+    }
+  }, [updateJob]);
 
   // --- Actions ---
   const handleConfirmAction = useCallback(
     (action: PendingAction) => {
       setPendingAction(null);
-      if (currentConversationId) {
-        const resultMsg: ChatMessage = {
-          id: generateId(),
-          role: "assistant",
-          content: "Action completed successfully.",
-          timestamp: new Date().toISOString(),
-          actionResult: { success: true, result: { link: previewUrl || "#" } },
-        };
-        addMessage(currentConversationId, resultMsg);
+
+      // Update the job to executing
+      const activeJobs = jobs.filter((j) => j.status === "confirming");
+      if (activeJobs.length > 0) {
+        const jobId = activeJobs[0].id;
+        updateJob(jobId, (j) => {
+          let updated = advanceJobStep(j, "User confirmed");
+          updated = addJobStep(updated, `Executing: ${action.summary}`, "running");
+          updated = updateJobStatus(updated, "executing");
+          return updated;
+        });
+
+        // Simulate action completion
+        if (currentConversationId) {
+          const resultMsg: ChatMessage = {
+            id: generateId(),
+            role: "assistant",
+            content: "Action completed successfully.",
+            timestamp: new Date().toISOString(),
+            actionResult: { success: true, result: { link: previewUrl || "#" } },
+          };
+          addMessage(currentConversationId, resultMsg);
+        }
+
+        // Complete the job
+        updateJob(jobId, (j) =>
+          completeJob(j, {
+            message: "Action executed successfully",
+            pageUrl: previewUrl || undefined,
+          })
+        );
+      } else {
+        if (currentConversationId) {
+          const resultMsg: ChatMessage = {
+            id: generateId(),
+            role: "assistant",
+            content: "Action completed successfully.",
+            timestamp: new Date().toISOString(),
+            actionResult: { success: true, result: { link: previewUrl || "#" } },
+          };
+          addMessage(currentConversationId, resultMsg);
+        }
       }
     },
-    [currentConversationId, addMessage, previewUrl]
+    [currentConversationId, addMessage, previewUrl, jobs, updateJob]
   );
 
-  const handleCancelAction = useCallback((_actionId: string) => {
-    setPendingAction(null);
-  }, []);
+  const handleCancelAction = useCallback(
+    (_actionId: string) => {
+      setPendingAction(null);
+      // Cancel any confirming jobs
+      const confirmingJobs = jobs.filter((j) => j.status === "confirming");
+      if (confirmingJobs.length > 0) {
+        updateJob(confirmingJobs[0].id, (j) => cancelJobFn(j));
+      }
+    },
+    [jobs, updateJob]
+  );
 
   // --- Quick actions ---
   const handleQuickAction = useCallback(
@@ -311,14 +451,17 @@ export default function Chat() {
       "mod+n": () => createConversation(),
       "mod+p": () => setShowPreview((v) => !v),
       "mod+b": () => setShowSidebar((v) => !v),
+      "mod+j": () => setShowJobsPanel((v) => !v),
       escape: () => {
-        if (showWorkflows) setShowWorkflows(false);
+        if (showJobsPanel) setShowJobsPanel(false);
+        else if (showSettings) setShowSettings(false);
+        else if (showWorkflows) setShowWorkflows(false);
         else if (showShortcuts) setShowShortcuts(false);
         else if (showPreview) setShowPreview(false);
         else if (isStreaming) handleCancelStream();
       },
     }),
-    [createConversation, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
+    [createConversation, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
   );
 
   useKeyboardShortcuts(shortcutHandlers);
@@ -337,13 +480,14 @@ export default function Chat() {
         pages={pages}
         onQuickAction={handleQuickAction}
         onOpenShortcuts={() => setShowShortcuts(true)}
-        onOpenSettings={() => {
-          /* Settings modal placeholder */
-        }}
+        onOpenSettings={() => setShowSettings(true)}
         showSidebar={showSidebar}
         onCloseSidebar={() => setShowSidebar(false)}
         onOpenWorkflows={() => { setInitialWorkflowId(null); setShowWorkflows(true); }}
         onRunWorkflow={(workflowId: string) => { setInitialWorkflowId(workflowId); setShowWorkflows(true); }}
+        user={session?.user}
+        activeJobCount={jobs.filter(isJobActive).length}
+        onOpenJobs={() => setShowJobsPanel(true)}
       />
 
       {/* Main chat area */}
@@ -359,7 +503,16 @@ export default function Chat() {
           <h1 className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate flex-1">
             {currentConversation?.title || "Z-Health AI"}
           </h1>
+          <JobIndicator jobs={jobs} onClick={() => setShowJobsPanel(true)} />
         </div>
+
+        {/* Desktop job indicator (top-right) */}
+        <div className="hidden md:flex items-center justify-end px-4 py-2">
+          <JobIndicator jobs={jobs} onClick={() => setShowJobsPanel(true)} />
+        </div>
+
+        {/* Active jobs bar */}
+        <ActiveJobsBar jobs={jobs} onOpenPanel={() => setShowJobsPanel(true)} />
 
         {/* Messages */}
         <MessageList
@@ -382,6 +535,7 @@ export default function Chat() {
           onSend={handleSend}
           isStreaming={isStreaming}
           onCancelStream={handleCancelStream}
+          modelName={selectedModel}
         />
       </div>
 
@@ -393,7 +547,22 @@ export default function Chat() {
         onClose={() => setShowPreview(false)}
       />
 
+      {/* Jobs panel (slide-over) */}
+      <JobsPanel
+        jobs={jobs}
+        show={showJobsPanel}
+        onClose={() => setShowJobsPanel(false)}
+        onCancelJob={handleCancelJob}
+        onClearHistory={handleClearJobHistory}
+      />
+
       {/* Modals */}
+      <SettingsPanel
+        show={showSettings}
+        onClose={() => setShowSettings(false)}
+        selectedModel={selectedModel}
+        onModelChange={setSelectedModel}
+      />
       <KeyboardShortcuts show={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <Onboarding onComplete={() => setShowOnboarding(false)} />
       <WorkflowPanel
@@ -405,4 +574,3 @@ export default function Chat() {
     </div>
   );
 }
-

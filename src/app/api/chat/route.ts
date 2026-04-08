@@ -1,18 +1,23 @@
 import { NextRequest } from "next/server";
-import { streamChat, buildSystemPrompt } from "@/lib/claude";
+import { buildSystemPrompt } from "@/lib/claude";
+import { streamAIChat, isValidModel, type AIModel } from "@/lib/ai-router";
 import { parseActions } from "@/lib/actions";
 import { getWordPressClient } from "@/lib/wordpress";
+import { requireAuth } from "@/lib/auth";
+import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
     const body = await request.json();
-    const { messages, pageContextId, conversationId } = body as {
+    const { messages, pageContextId, conversationId, model: requestedModel } = body as {
       messages: Array<{ role: string; content: string }>;
       pageContextId?: number;
       conversationId?: string;
+      model?: string;
     };
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -21,6 +26,12 @@ export async function POST(request: NextRequest) {
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
+
+    // Determine which model to use
+    const model: AIModel =
+      requestedModel && isValidModel(requestedModel)
+        ? requestedModel
+        : "claude-sonnet-4-6";
 
     // Build context for system prompt
     let pages: Array<{
@@ -32,16 +43,22 @@ export async function POST(request: NextRequest) {
     let currentPage:
       | { id: number; title: string; content: string }
       | undefined;
+    let pluginContextStr = "";
 
     try {
       const wp = getWordPressClient();
-      const wpPages = await wp.listPages({ per_page: 50 });
+      const [wpPages, plugins] = await Promise.all([
+        wp.listPages({ per_page: 50 }),
+        discoverPlugins(),
+      ]);
       pages = wpPages.map((p) => ({
         id: p.id,
         title: p.title.rendered,
         status: p.status,
         url: p.link,
       }));
+
+      pluginContextStr = buildPluginContext(plugins);
 
       if (pageContextId) {
         const page = await wp.getPage(pageContextId, "edit");
@@ -59,13 +76,15 @@ export async function POST(request: NextRequest) {
     const systemPrompt = buildSystemPrompt({
       pages,
       currentPage,
+      pluginContext: pluginContextStr,
     });
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const result = await streamChat(
+          const result = await streamAIChat(
+            model,
             messages,
             systemPrompt,
             (text: string) => {
@@ -80,6 +99,7 @@ export async function POST(request: NextRequest) {
             type: "done",
             message,
             pendingAction,
+            model,
             usage: {
               inputTokens: result.inputTokens,
               outputTokens: result.outputTokens,

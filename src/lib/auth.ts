@@ -45,7 +45,14 @@ export async function getServerSession() {
 export async function requireAuth() {
   const session = await getServerSession();
   if (!session) {
-    throw new Error("Unauthorized");
+    throw new AuthError("Unauthorized");
   }
   return session;
+}
+
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthError";
+  }
 }

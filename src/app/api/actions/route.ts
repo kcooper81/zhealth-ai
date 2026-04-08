@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeAction } from "@/lib/actions";
 import type { PendingAction } from "@/lib/types";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
     const body = await request.json();
     const { actionId, action } = body as {
       actionId: string;

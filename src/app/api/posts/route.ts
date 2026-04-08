@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth();
     const { searchParams } = new URL(request.url);
     const wp = getWordPressClient();
 

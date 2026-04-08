@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
+import { requireAuth } from "@/lib/auth";
+import { discoverPlugins } from "@/lib/plugin-discovery";
 
 export async function GET() {
   try {
+    await requireAuth();
     const wp = getWordPressClient();
-    const [siteInfo, postTypes] = await Promise.all([
+    const [siteInfo, postTypes, plugins] = await Promise.all([
       wp.getSiteInfo(),
       wp.getPostTypes(),
+      discoverPlugins(),
     ]);
 
     const capabilities = [
@@ -28,6 +32,7 @@ export async function GET() {
       },
       postTypes: Object.keys(postTypes),
       capabilities,
+      plugins,
     });
   } catch (error) {
     const errorMessage =

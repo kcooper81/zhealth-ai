@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listWorkflows, saveWorkflow } from "@/lib/workflows";
 import type { Workflow } from "@/lib/workflows";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET() {
   try {
+    await requireAuth();
     const workflows = await listWorkflows();
     return NextResponse.json(workflows);
   } catch (error) {
@@ -15,6 +17,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
     const body = await request.json();
     const workflow = body as Workflow;
 

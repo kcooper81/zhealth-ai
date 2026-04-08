@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const pageId = parseInt(params.id, 10);
     if (isNaN(pageId)) {
       return NextResponse.json({ error: "Invalid page ID" }, { status: 400 });

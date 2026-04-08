@@ -4,13 +4,22 @@ import React, { useRef, useState, useCallback } from "react";
 import { useAutoResize } from "@/lib/hooks";
 import { Send, Paperclip, X } from "./icons";
 
+const MODEL_DISPLAY_NAMES: Record<string, string> = {
+  "claude-sonnet-4-6": "Sonnet 4.6",
+  "claude-opus-4-6": "Opus 4.6",
+  "claude-haiku-4-5": "Haiku 4.5",
+  "gemini-2.0-flash": "Gemini Flash",
+  "gemini-2.5-pro": "Gemini Pro",
+};
+
 interface InputAreaProps {
   onSend: (text: string, file?: File | null) => void;
   isStreaming: boolean;
   onCancelStream?: () => void;
+  modelName?: string;
 }
 
-export default function InputArea({ onSend, isStreaming, onCancelStream }: InputAreaProps) {
+export default function InputArea({ onSend, isStreaming, onCancelStream, modelName }: InputAreaProps) {
   const [value, setValue] = useState("");
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -144,7 +153,7 @@ export default function InputArea({ onSend, isStreaming, onCancelStream }: Input
         {/* Bottom bar */}
         <div className="flex items-center justify-between mt-2 px-1">
           <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-            Sonnet 4.6
+            {MODEL_DISPLAY_NAMES[modelName || "claude-sonnet-4-6"] || modelName || "Sonnet 4.6"}
           </span>
           <span className="text-[11px] text-gray-400 dark:text-gray-500">
             Enter to send, Shift+Enter for new line

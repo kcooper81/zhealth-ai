@@ -242,3 +242,18 @@ export const CircleIcon = icon(
 export const Square = icon(
   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
 );
+
+export const FileText = icon(
+  <>
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+  </>
+);
+
+export const Layers = icon(
+  <>
+    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+    <polyline points="2 17 12 22 22 17" />
+    <polyline points="2 12 12 17 22 12" />
+  </>
+);

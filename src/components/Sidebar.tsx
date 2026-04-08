@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import type { Conversation } from "@/lib/types";
-import { Plus, Search, Settings, Keyboard, X, MessageSquare, Workflow, ChevronRight } from "./icons";
+import { Plus, Search, Settings, Keyboard, X, MessageSquare, Workflow, ChevronRight, Activity, Layers } from "./icons";
 import PageSelector from "./PageSelector";
 
 interface SidebarProps {
@@ -32,7 +32,11 @@ interface SidebarProps {
     email?: string | null;
     image?: string | null;
   } | null;
+  activeJobCount?: number;
+  onOpenJobs?: () => void;
 }
+
+type SidebarTab = "pages" | "chat";
 
 function groupConversations(conversations: Conversation[]) {
   const now = new Date();
@@ -79,7 +83,10 @@ export default function Sidebar({
   onOpenWorkflows,
   onRunWorkflow,
   user,
+  activeJobCount = 0,
+  onOpenJobs,
 }: SidebarProps) {
+  const [activeTab, setActiveTab] = useState<SidebarTab>("chat");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarWorkflows, setSidebarWorkflows] = useState<Array<{ id: string; name: string; icon: string }>>([]);
 
@@ -126,7 +133,7 @@ export default function Sidebar({
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+        <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -153,23 +160,152 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Working on — prominent bar at top */}
-        <div className="px-3 pb-3">
-          <div className="bg-gray-50 dark:bg-[#2c2c2e] rounded-xl p-3">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-              Working on
-            </p>
-            <PageSelector
-              pages={pages}
-              selectedPageId={selectedPageId}
-              onSelect={onSelectPage}
-              compact
+        {/* Tab bar -- iOS-style segmented control */}
+        <div className="px-3 pb-3 flex-shrink-0">
+          <div className="relative flex bg-gray-100 dark:bg-[#2c2c2e] rounded-lg p-0.5">
+            {/* Sliding pill background */}
+            <div
+              className="absolute top-0.5 bottom-0.5 rounded-md bg-white dark:bg-[#3a3a3c] shadow-sm transition-all duration-300 ease-out"
+              style={{
+                left: activeTab === "pages" ? "2px" : "calc(50% + 0px)",
+                width: "calc(50% - 2px)",
+              }}
             />
+            <button
+              onClick={() => setActiveTab("pages")}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[13px] font-semibold rounded-md transition-colors duration-200 ${
+                activeTab === "pages"
+                  ? "text-gray-900 dark:text-white"
+                  : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <Layers size={14} />
+              Pages
+            </button>
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[13px] font-semibold rounded-md transition-colors duration-200 ${
+                activeTab === "chat"
+                  ? "text-gray-900 dark:text-white"
+                  : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <MessageSquare size={14} />
+              Chat
+            </button>
           </div>
         </div>
 
-        {/* Quick actions */}
-        <div className="px-3 pb-3">
+        {/* Tab content */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {activeTab === "pages" ? (
+            /* =================== PAGES TAB =================== */
+            <PageSelector
+              pages={pages}
+              selectedPageId={selectedPageId}
+              onSelect={(pageId) => {
+                onSelectPage(pageId);
+              }}
+              mode="list"
+            />
+          ) : (
+            /* =================== CHAT TAB =================== */
+            <>
+              {/* Workflows section */}
+              <div className="px-3 pb-3 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Workflow size={13} className="text-gray-400 dark:text-gray-500" />
+                    <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                      Workflows
+                    </p>
+                  </div>
+                  <button
+                    onClick={onOpenWorkflows}
+                    className="text-[11px] font-medium text-brand-blue hover:text-brand-blue/80 transition-colors"
+                  >
+                    View all
+                  </button>
+                </div>
+                <div className="space-y-0.5">
+                  {sidebarWorkflows.map((wf) => (
+                    <button
+                      key={wf.id}
+                      onClick={() => {
+                        onRunWorkflow(wf.id);
+                        onCloseSidebar();
+                      }}
+                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors group"
+                    >
+                      <span className="truncate">{wf.name}</span>
+                      <ChevronRight size={12} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 flex-shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-100 dark:border-gray-800 mx-3 flex-shrink-0" />
+
+              {/* Search conversations */}
+              <div className="px-3 pt-3 pb-2 flex-shrink-0">
+                <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
+                  <Search size={14} className="text-gray-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search conversations..."
+                    className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Conversation list */}
+              <div className="flex-1 overflow-y-auto px-2">
+                {groups.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 px-4">
+                    <MessageSquare size={24} className="text-gray-300 dark:text-gray-600 mb-2" />
+                    <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
+                      No conversations yet. Start by asking me to build something.
+                    </p>
+                  </div>
+                )}
+
+                {groups.map((group) => (
+                  <div key={group.label} className="mb-3">
+                    <div className="px-2 py-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                      {group.label}
+                    </div>
+                    {group.items.map((conv) => (
+                      <ConversationItem
+                        key={conv.id}
+                        conversation={conv}
+                        isActive={conv.id === currentConversationId}
+                        onSelect={() => {
+                          onSelectConversation(conv.id);
+                          onCloseSidebar();
+                        }}
+                        onDelete={() => onDeleteConversation(conv.id)}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Quick actions pills */}
+        <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
           <div className="flex flex-wrap gap-1.5">
             {quickActions.map((action) => (
               <button
@@ -183,90 +319,8 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Workflows section */}
-        <div className="px-3 pb-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <Workflow size={13} className="text-gray-400 dark:text-gray-500" />
-              <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                Workflows
-              </p>
-            </div>
-            <button
-              onClick={onOpenWorkflows}
-              className="text-[11px] font-medium text-brand-blue hover:text-brand-blue/80 transition-colors"
-            >
-              View all
-            </button>
-          </div>
-          <div className="space-y-0.5">
-            {sidebarWorkflows.map((wf) => (
-              <button
-                key={wf.id}
-                onClick={() => {
-                  onRunWorkflow(wf.id);
-                  onCloseSidebar();
-                }}
-                className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors group"
-              >
-                <span className="truncate">{wf.name}</span>
-                <ChevronRight size={12} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 flex-shrink-0" />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-gray-100 dark:border-gray-800 mx-3" />
-
-        {/* Search conversations */}
-        <div className="px-3 pt-3 pb-2">
-          <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
-            <Search size={14} className="text-gray-400 flex-shrink-0" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search conversations..."
-              className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto px-2">
-          {groups.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 px-4">
-              <MessageSquare size={24} className="text-gray-300 dark:text-gray-600 mb-2" />
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
-                No conversations yet. Start by asking me to build something.
-              </p>
-            </div>
-          )}
-
-          {groups.map((group) => (
-            <div key={group.label} className="mb-3">
-              <div className="px-2 py-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                {group.label}
-              </div>
-              {group.items.map((conv) => (
-                <ConversationItem
-                  key={conv.id}
-                  conversation={conv}
-                  isActive={conv.id === currentConversationId}
-                  onSelect={() => {
-                    onSelectConversation(conv.id);
-                    onCloseSidebar();
-                  }}
-                  onDelete={() => onDeleteConversation(conv.id)}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-
         {/* Bottom bar */}
-        <div className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
           {user && (
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {user.image ? (
@@ -287,6 +341,20 @@ export default function Sidebar({
             </div>
           )}
           <div className="flex items-center gap-1 flex-shrink-0">
+            {onOpenJobs && (
+              <button
+                onClick={onOpenJobs}
+                className="relative w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                title="Activity"
+              >
+                <Activity size={16} />
+                {activeJobCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-brand-blue text-white text-[10px] font-bold flex items-center justify-center animate-scale-in">
+                    {activeJobCount}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               onClick={onOpenSettings}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"

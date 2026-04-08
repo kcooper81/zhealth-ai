@@ -7,10 +7,11 @@ import { X } from "./icons";
 interface SettingsPanelProps {
   show: boolean;
   onClose: () => void;
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
 }
 
 type ThemeMode = "light" | "dark" | "auto";
-type AIModel = "claude-sonnet-4-6" | "claude-opus-4-6" | "claude-haiku-4-5";
 
 interface BrandGuide {
   primaryColor: string;
@@ -20,10 +21,20 @@ interface BrandGuide {
   bodyFont: string;
 }
 
-const AI_MODELS: { value: AIModel; label: string; description: string }[] = [
-  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", description: "Recommended" },
-  { value: "claude-opus-4-6", label: "Claude Opus 4.6", description: "Most capable" },
-  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5", description: "Fastest" },
+interface AIModelOption {
+  value: string;
+  label: string;
+  description: string;
+  provider: "claude" | "gemini";
+  envKey: string;
+}
+
+const AI_MODELS: AIModelOption[] = [
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", description: "Best balance of speed and intelligence", provider: "claude", envKey: "ANTHROPIC_API_KEY" },
+  { value: "claude-opus-4-6", label: "Claude Opus 4.6", description: "Most capable, best for complex tasks", provider: "claude", envKey: "ANTHROPIC_API_KEY" },
+  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5", description: "Fastest responses, great for simple tasks", provider: "claude", envKey: "ANTHROPIC_API_KEY" },
+  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", description: "Free tier, fast responses", provider: "gemini", envKey: "GEMINI_API_KEY" },
+  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", description: "Capable reasoning model", provider: "gemini", envKey: "GEMINI_API_KEY" },
 ];
 
 function SectionHeader({ title }: { title: string }) {
@@ -38,11 +49,12 @@ function Divider() {
   return <div className="border-t border-gray-100 dark:border-gray-800 my-5" />;
 }
 
-export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
+export default function SettingsPanel({ show, onClose, selectedModel: externalModel, onModelChange }: SettingsPanelProps) {
   const { data: session } = useSession();
 
-  // AI Model
-  const [aiModel, setAiModel] = useState<AIModel>("claude-sonnet-4-6");
+  // AI Model -- use external state if provided, otherwise local
+  const [localModel, setLocalModel] = useState<string>("claude-sonnet-4-6");
+  const aiModel = externalModel || localModel;
 
   // Theme
   const [theme, setTheme] = useState<ThemeMode>("light");
@@ -51,6 +63,9 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
   const [wpStatus, setWpStatus] = useState<"idle" | "loading" | "connected" | "disconnected">("idle");
   const [wpSiteName, setWpSiteName] = useState<string>("");
   const [wpSiteUrl, setWpSiteUrl] = useState<string>("");
+
+  // API key availability (checked via site-info endpoint)
+  const [configuredProviders, setConfiguredProviders] = useState<{ claude: boolean; gemini: boolean }>({ claude: false, gemini: false });
 
   // Brand Guide
   const [brandGuide, setBrandGuide] = useState<BrandGuide>({
@@ -69,7 +84,7 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
   useEffect(() => {
     try {
       const savedModel = localStorage.getItem("zhealth-ai-model");
-      if (savedModel) setAiModel(savedModel as AIModel);
+      if (savedModel) setLocalModel(savedModel);
 
       const savedTheme = localStorage.getItem("zhealth-theme");
       if (savedTheme) setTheme(savedTheme as ThemeMode);
@@ -81,6 +96,46 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
       // Ignore localStorage errors
     }
   }, []);
+
+  // Check which API keys are configured
+  useEffect(() => {
+    if (!show) return;
+    fetch("/api/site-info")
+      .then((res) => {
+        if (res.ok) {
+          setConfiguredProviders((prev) => ({ ...prev, claude: true }));
+        }
+        return res.json();
+      })
+      .catch(() => {});
+
+    // Check Gemini availability by attempting a lightweight probe
+    // We infer configuration from env -- the chat route will fail gracefully if not set
+    // For now, mark as potentially configured and let runtime errors surface
+    fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [],
+        model: "gemini-2.0-flash",
+      }),
+    })
+      .then((res) => {
+        // 400 means the route handled it (API key might be present)
+        // 500 with specific message means no key
+        if (res.status === 400) {
+          // Messages required error -- endpoint is reachable, key might be present
+          setConfiguredProviders((prev) => ({ ...prev, gemini: true }));
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.error?.includes("GEMINI_API_KEY")) {
+          setConfiguredProviders((prev) => ({ ...prev, gemini: false }));
+        }
+      })
+      .catch(() => {});
+  }, [show]);
 
   // Theme application
   const applyTheme = useCallback((mode: ThemeMode) => {
@@ -103,10 +158,13 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
   }, []);
 
   // AI Model save
-  const handleModelChange = useCallback((model: AIModel) => {
-    setAiModel(model);
+  const handleModelChange = useCallback((model: string) => {
+    setLocalModel(model);
     localStorage.setItem("zhealth-ai-model", model);
-  }, []);
+    if (onModelChange) {
+      onModelChange(model);
+    }
+  }, [onModelChange]);
 
   // Brand guide save
   const handleBrandChange = useCallback(
@@ -130,6 +188,7 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
       setWpSiteName(data.site?.name || "Unknown");
       setWpSiteUrl(data.site?.url || "");
       setWpStatus("connected");
+      setConfiguredProviders((prev) => ({ ...prev, claude: true }));
     } catch {
       setWpStatus("disconnected");
       setWpSiteName("");
@@ -168,6 +227,10 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [show, onClose]);
+
+  const isProviderConfigured = (provider: "claude" | "gemini") => {
+    return provider === "claude" ? configuredProviders.claude : configuredProviders.gemini;
+  };
 
   return (
     <>
@@ -234,40 +297,59 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
           {/* AI Model */}
           <SectionHeader title="AI Model" />
           <div className="space-y-2">
-            {AI_MODELS.map((model) => (
-              <label
-                key={model.value}
-                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                  aiModel === model.value
-                    ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
-                    : "bg-gray-50 dark:bg-[#2c2c2e] border border-transparent hover:bg-gray-100 dark:hover:bg-[#3a3a3c]"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="ai-model"
-                  value={model.value}
-                  checked={aiModel === model.value}
-                  onChange={() => handleModelChange(model.value)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+            {AI_MODELS.map((model) => {
+              const configured = isProviderConfigured(model.provider);
+              return (
+                <label
+                  key={model.value}
+                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
                     aiModel === model.value
-                      ? "border-blue-500"
-                      : "border-gray-300 dark:border-gray-600"
+                      ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                      : "bg-gray-50 dark:bg-[#2c2c2e] border border-transparent hover:bg-gray-100 dark:hover:bg-[#3a3a3c]"
                   }`}
                 >
-                  {aiModel === model.value && (
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{model.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{model.description}</p>
-                </div>
-              </label>
-            ))}
+                  <input
+                    type="radio"
+                    name="ai-model"
+                    value={model.value}
+                    checked={aiModel === model.value}
+                    onChange={() => handleModelChange(model.value)}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                      aiModel === model.value
+                        ? "border-blue-500"
+                        : "border-gray-300 dark:border-gray-600"
+                    }`}
+                  >
+                    {aiModel === model.value && (
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{model.label}</p>
+                      {/* Configuration status dot */}
+                      <div
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          configured ? "bg-emerald-400" : "bg-gray-300 dark:bg-gray-600"
+                        }`}
+                        title={configured ? "API key configured" : "Not configured"}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {model.description}
+                      {!configured && (
+                        <span className="text-amber-500 dark:text-amber-400 ml-1">
+                          -- Not configured
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </label>
+              );
+            })}
           </div>
 
           <Divider />
@@ -444,7 +526,7 @@ export default function SettingsPanel({ show, onClose }: SettingsPanelProps) {
               Z-Health AI <span className="text-gray-400 dark:text-gray-500">v1.0.0</span>
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              Built with Claude AI
+              Built with Claude AI + Gemini
             </p>
           </div>
 

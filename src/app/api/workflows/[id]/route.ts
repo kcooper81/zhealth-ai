@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWorkflow, saveWorkflow, deleteWorkflow } from "@/lib/workflows";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const workflow = await getWorkflow(params.id);
     if (!workflow) {
       return NextResponse.json(
@@ -26,6 +28,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const existing = await getWorkflow(params.id);
     if (!existing) {
       return NextResponse.json(
@@ -50,6 +53,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const deleted = await deleteWorkflow(params.id);
     if (!deleted) {
       return NextResponse.json(

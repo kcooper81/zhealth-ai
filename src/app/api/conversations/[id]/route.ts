@@ -4,12 +4,14 @@ import {
   updateConversation,
   deleteConversation,
 } from "@/lib/conversations";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const conversation = await getConversation(params.id);
     if (!conversation) {
       return NextResponse.json(
@@ -32,6 +34,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const body = await request.json();
     const { title, messages, pageContextId } = body as {
       title?: string;
@@ -72,6 +75,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireAuth();
     const deleted = await deleteConversation(params.id);
     if (!deleted) {
       return NextResponse.json(
