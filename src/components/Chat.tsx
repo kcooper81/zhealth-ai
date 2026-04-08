@@ -55,6 +55,7 @@ export default function Chat() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
   const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("zhealth-sidebar-collapsed", false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showWorkflows, setShowWorkflows] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -515,6 +516,8 @@ export default function Chat() {
         onOpenJobs={() => setShowJobsPanel(true)}
         showSidebar={showSidebar}
         onCloseSidebar={() => setShowSidebar(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
         onOpenWorkflows={() => { setInitialWorkflowId(null); setShowWorkflows(true); }}
         onRunWorkflow={(workflowId: string) => { setInitialWorkflowId(workflowId); setShowWorkflows(true); }}
       />

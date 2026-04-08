@@ -11,6 +11,7 @@ import {
   Workflow,
   ChevronRight,
   Activity,
+  PanelLeft,
 } from "./icons";
 import WorkspaceSelector from "./WorkspaceSelector";
 import UserProfile from "./UserProfile";
@@ -31,6 +32,8 @@ interface SidebarProps {
   onCloseSidebar: () => void;
   onOpenWorkflows?: () => void;
   onRunWorkflow?: (workflowId: string) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 function groupConversations(conversations: Conversation[]) {
@@ -77,6 +80,8 @@ export default function Sidebar({
   onCloseSidebar,
   onOpenWorkflows,
   onRunWorkflow,
+  collapsed,
+  onToggleCollapse,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarWorkflows, setSidebarWorkflows] = useState<
@@ -127,14 +132,26 @@ export default function Sidebar({
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:relative z-50 md:z-auto top-0 left-0 h-full w-[280px] bg-[#1a1b2e] flex flex-col transition-transform duration-300 ease-out flex-shrink-0 ${
+        className={`fixed md:relative z-50 md:z-auto top-0 left-0 h-full bg-[#1a1b2e] flex flex-col transition-all duration-300 ease-out flex-shrink-0 ${
+          collapsed ? "w-[60px]" : "w-[280px]"
+        } ${
           showSidebar
             ? "translate-x-0"
             : "-translate-x-full md:translate-x-0"
         }`}
       >
-        {/* Header: Logo */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
+        {/* Header: Logo + collapse toggle */}
+        <div className={`flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-4"} pt-4 pb-3 flex-shrink-0`}>
+          {collapsed ? (
+            <button
+              onClick={onToggleCollapse}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              title="Expand sidebar"
+            >
+              <ChevronRight size={18} />
+            </button>
+          ) : (
+          <>
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -146,13 +163,38 @@ export default function Sidebar({
               AI
             </span>
           </div>
-          <button
-            onClick={onCloseSidebar}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-white/10 transition-colors md:hidden"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onToggleCollapse}
+              className="w-8 h-8 rounded-lg items-center justify-center text-gray-400 hover:bg-white/10 transition-colors hidden md:flex"
+              title="Collapse sidebar"
+            >
+              <PanelLeft size={16} />
+            </button>
+            <button
+              onClick={onCloseSidebar}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-white/10 transition-colors md:hidden"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          </>
+          )}
         </div>
+
+        {/* Rest of sidebar hidden when collapsed */}
+        {collapsed ? (
+          <div className="flex-1 flex flex-col items-center gap-2 pt-4">
+            <button
+              onClick={onNewConversation}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              title="New chat"
+            >
+              <Plus size={18} />
+            </button>
+          </div>
+        ) : (
+        <>
 
         {/* Workspace selector */}
         <div className="px-3 pb-3 flex-shrink-0">
@@ -297,6 +339,8 @@ export default function Sidebar({
             )}
           </button>
         </div>
+        </>
+        )}
       </aside>
     </>
   );

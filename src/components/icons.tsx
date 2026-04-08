@@ -332,13 +332,17 @@ export const UserCircle = icon(
   </>
 );
 
-// AI brain/neural icon for assistant avatar
+// Brain icon for AI assistant avatar
 export const AIBrain = ({ size = 20, className = "" }: { size?: number; className?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
-    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="currentColor" opacity="0.15" />
-    <path d="M12 6v2M12 16v2M8 12H6M18 12h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M14.5 9.5L17 7M9.5 14.5L7 17M14.5 14.5L17 17M9.5 9.5L7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M9.5 2a2.5 2.5 0 0 1 2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5h0A2.5 2.5 0 0 1 7 4.5v0A2.5 2.5 0 0 1 9.5 2z" />
+    <path d="M14.5 2a2.5 2.5 0 0 1 2.5 2.5v0a2.5 2.5 0 0 1-2.5 2.5" />
+    <path d="M7 7a3 3 0 0 0-3 3v0a3 3 0 0 0 3 3" />
+    <path d="M17 7a3 3 0 0 1 3 3v0a3 3 0 0 1-3 3" />
+    <path d="M8 13a3 3 0 0 0-2 2.83v0A3 3 0 0 0 8.17 19H9" />
+    <path d="M16 13a3 3 0 0 1 2 2.83v0A3 3 0 0 1 15.83 19H15" />
+    <path d="M9 19a3 3 0 0 0 3 3v0a3 3 0 0 0 3-3" />
+    <path d="M12 7v15" />
   </svg>
 );
 
