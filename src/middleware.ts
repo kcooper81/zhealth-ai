@@ -1,13 +1,13 @@
-// Auth middleware disabled. See GOOGLE-AUTH-SETUP.md to enable.
-// This file intentionally left as a no-op.
+import { withAuth } from "next-auth/middleware";
 
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-
-export function middleware(_request: NextRequest) {
-  return NextResponse.next();
-}
+export default withAuth({
+  pages: {
+    signIn: "/login",
+  },
+});
 
 export const config = {
-  matcher: [],
+  matcher: [
+    "/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|robots\\.txt|.*\\.).*)",
+  ],
 };

@@ -43,14 +43,11 @@ export async function getServerSession() {
 }
 
 export async function requireAuth() {
-  // Auth temporarily disabled for testing.
-  // Uncomment below when Google OAuth is configured.
-  // const session = await getServerSession();
-  // if (!session) {
-  //   throw new AuthError("Unauthorized");
-  // }
-  // return session;
-  return null;
+  const session = await getServerSession();
+  if (!session) {
+    throw new AuthError("Unauthorized");
+  }
+  return session;
 }
 
 export class AuthError extends Error {
