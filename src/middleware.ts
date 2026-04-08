@@ -1,20 +1,13 @@
-// Auth middleware — disabled temporarily for testing.
-// To enable Google OAuth login, uncomment the code below
-// and set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, NEXTAUTH_SECRET,
-// NEXTAUTH_URL, and ALLOWED_EMAIL_DOMAIN in your environment variables.
+// Auth middleware disabled. See GOOGLE-AUTH-SETUP.md to enable.
+// This file intentionally left as a no-op.
 
-// import { withAuth } from "next-auth/middleware";
-//
-// export default withAuth({
-//   pages: {
-//     signIn: "/login",
-//   },
-// });
-//
-// export const config = {
-//   matcher: [
-//     "/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|robots\\.txt|.*\\.).*)",
-//   ],
-// };
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export {};
+export function middleware(_request: NextRequest) {
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [],
+};
