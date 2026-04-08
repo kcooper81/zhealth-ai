@@ -108,7 +108,7 @@ export default function Sidebar({
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -135,8 +135,41 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Search */}
-        <div className="px-3 pb-2">
+        {/* Working on — prominent bar at top */}
+        <div className="px-3 pb-3">
+          <div className="bg-gray-50 dark:bg-[#2c2c2e] rounded-xl p-3">
+            <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+              Working on
+            </p>
+            <PageSelector
+              pages={pages}
+              selectedPageId={selectedPageId}
+              onSelect={onSelectPage}
+              compact
+            />
+          </div>
+        </div>
+
+        {/* Quick actions */}
+        <div className="px-3 pb-3">
+          <div className="flex flex-wrap gap-1.5">
+            {quickActions.map((action) => (
+              <button
+                key={action}
+                onClick={() => onQuickAction(action)}
+                className="px-2.5 py-1 text-[12px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                {action}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-gray-100 dark:border-gray-800 mx-3" />
+
+        {/* Search conversations */}
+        <div className="px-3 pt-3 pb-2">
           <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
             <Search size={14} className="text-gray-400 flex-shrink-0" />
             <input
@@ -181,39 +214,8 @@ export default function Sidebar({
           ))}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-gray-100 dark:border-gray-800 mx-3" />
-
-        {/* Page selector */}
-        <div className="px-3 py-3">
-          <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5 px-1">
-            Working on
-          </p>
-          <PageSelector
-            pages={pages}
-            selectedPageId={selectedPageId}
-            onSelect={onSelectPage}
-            compact
-          />
-        </div>
-
-        {/* Quick actions */}
-        <div className="px-3 pb-3">
-          <div className="flex flex-wrap gap-1.5">
-            {quickActions.map((action) => (
-              <button
-                key={action}
-                onClick={() => onQuickAction(action)}
-                className="px-2.5 py-1 text-[12px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              >
-                {action}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Bottom bar */}
-        <div className="flex items-center gap-1 px-3 pb-3">
+        <div className="flex items-center gap-1 px-3 py-3 border-t border-gray-100 dark:border-gray-800">
           <button
             onClick={onOpenSettings}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
