@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import type { ChatMessage, PendingAction, ActionResult } from "@/lib/types";
 import { renderMarkdown } from "@/lib/markdown";
-import { Edit, ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink } from "./icons";
+import { Edit, ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy } from "./icons";
 
 interface MessageProps {
   message: ChatMessage;
@@ -32,8 +32,8 @@ export default function Message({
       <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} max-w-[85%]`}>
         {/* Avatar */}
         {!isUser && (
-          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center mt-1">
-            <span className="text-white text-xs font-semibold">AI</span>
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center mt-1 shadow-sm">
+            <AIBrain size={18} className="text-white" />
           </div>
         )}
 

@@ -331,3 +331,31 @@ export const UserCircle = icon(
     <path d="M7 20.662V19a2 2 0 012-2h6a2 2 0 012 2v1.662" />
   </>
 );
+
+// AI brain/neural icon for assistant avatar
+export const AIBrain = ({ size = 20, className = "" }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className}>
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="currentColor" opacity="0.15" />
+    <path d="M12 6v2M12 16v2M8 12H6M18 12h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M14.5 9.5L17 7M9.5 14.5L7 17M14.5 14.5L17 17M9.5 9.5L7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const StopCircle = icon(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" />
+  </>
+);
+
+export const Slash = icon(
+  <path d="M7 20L17 4" />
+);
+
+export const AtSign = icon(
+  <>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
+  </>
+);

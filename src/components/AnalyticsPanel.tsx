@@ -105,8 +105,7 @@ export default function AnalyticsPanel({
                 >
                   <Icon
                     size={15}
-                    className="transition-colors"
-                    style={{ color: accentColor } as React.CSSProperties}
+                    className="text-purple-500 transition-colors"
                   />
                 </span>
                 <span className="flex-1 text-[13px] font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
