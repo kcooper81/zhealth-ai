@@ -83,6 +83,7 @@ export default function Chat() {
   const [jobs, setJobs] = useLocalStorage<Job[]>("zhealth-jobs", []);
   const [showJobsPanel, setShowJobsPanel] = useState(false);
   const currentJobRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Trim job history to 50 items on change
   useEffect(() => {
@@ -266,9 +267,13 @@ export default function Chat() {
           .map((m) => ({ role: m.role, content: m.content }));
         const apiMessages = [...existingMessages, { role: "user", content: text }];
 
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             messages: apiMessages,
             pageContextId: selectedPageId || undefined,
@@ -331,14 +336,20 @@ export default function Chat() {
         }
 
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Something went wrong";
-        updateLastAssistantMessage(
-          convId,
-          `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
-        );
+        // Don't show error if user cancelled
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // User cancelled — just leave the partial response
+        } else {
+          const errorMsg = err instanceof Error ? err.message : "Something went wrong";
+          updateLastAssistantMessage(
+            convId,
+            `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
+          );
+        }
       } finally {
         setIsStreaming(false);
         setStreamingMessageId(null);
+        abortControllerRef.current = null;
         currentJobRef.current = null;
       }
     },
@@ -346,14 +357,14 @@ export default function Chat() {
   );
 
   const handleCancelStream = useCallback(() => {
+    // Abort the fetch request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setIsStreaming(false);
     setStreamingMessageId(null);
-    // Cancel the current job
-    if (currentJobRef.current) {
-      updateJob(currentJobRef.current, (j) => cancelJobFn(j));
-      currentJobRef.current = null;
-    }
-  }, [updateJob]);
+  }, []);
 
   // --- Actions ---
   const handleConfirmAction = useCallback(
