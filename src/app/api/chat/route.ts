@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/claude";
-import { streamAIChat, isValidModel, type AIModel } from "@/lib/ai-router";
+import { streamAIChat, isValidModel, getAvailableModels, getDefaultModel, type AIModel } from "@/lib/ai-router";
 import { parseActions } from "@/lib/actions";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
@@ -27,11 +27,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine which model to use
+    // Determine which model to use — only allow models with configured keys
+    const available = getAvailableModels();
+    if (available.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No AI models configured. Add ANTHROPIC_API_KEY or GEMINI_API_KEY to environment variables." }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
     const model: AIModel =
-      requestedModel && isValidModel(requestedModel)
-        ? requestedModel
-        : "claude-sonnet-4-6";
+      requestedModel && isValidModel(requestedModel) && available.includes(requestedModel as AIModel)
+        ? (requestedModel as AIModel)
+        : getDefaultModel();
 
     // Build context for system prompt
     let pages: Array<{

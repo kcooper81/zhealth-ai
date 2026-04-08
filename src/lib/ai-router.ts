@@ -62,8 +62,34 @@ export function getAllModels(): Array<AIModel & string> {
   return Object.keys(MODEL_INFO) as Array<AIModel & string>;
 }
 
+/**
+ * Returns only models whose provider has an API key configured.
+ */
+export function getAvailableModels(): AIModel[] {
+  const hasClaude = !!process.env.ANTHROPIC_API_KEY;
+  const hasGemini = !!process.env.GEMINI_API_KEY;
+
+  return (Object.keys(MODEL_INFO) as AIModel[]).filter((model) => {
+    const info = MODEL_INFO[model];
+    if (info.provider === "claude") return hasClaude;
+    if (info.provider === "gemini") return hasGemini;
+    return false;
+  });
+}
+
 export function isValidModel(model: string): model is AIModel {
   return model in MODEL_INFO;
+}
+
+/**
+ * Pick the best available default model.
+ */
+export function getDefaultModel(): AIModel {
+  const available = getAvailableModels();
+  // Prefer Gemini Flash (free), then Sonnet, then whatever is available
+  if (available.includes("gemini-2.0-flash")) return "gemini-2.0-flash";
+  if (available.includes("claude-sonnet-4-6")) return "claude-sonnet-4-6";
+  return available[0] || "gemini-2.0-flash";
 }
 
 export async function streamAIChat(
