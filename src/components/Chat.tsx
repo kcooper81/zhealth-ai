@@ -356,7 +356,9 @@ export default function Chat() {
               if (data.type === "token") {
                 streamStarted = true;
                 accumulated += data.text;
-                updateLastAssistantMessage(convId, accumulated);
+                // Strip <action> blocks from display — only show the plain language part
+                const displayText = accumulated.replace(/<action>[\s\S]*?<\/action>/g, "").replace(/<action>[\s\S]*/g, "").trim();
+                updateLastAssistantMessage(convId, displayText || "Working on it...");
               } else if (data.type === "done") {
                 if (data.message) {
                   updateLastAssistantMessage(convId, data.message);
@@ -655,7 +657,10 @@ export default function Chat() {
       {/* Left Sidebar - 280px */}
       <Sidebar
         workspace={workspace}
-        onWorkspaceChange={setWorkspace}
+        onWorkspaceChange={(ws) => {
+          setWorkspace(ws);
+          setCurrentConversationId(null); // deselect current conversation when switching workspace
+        }}
         conversations={conversations}
         currentConversationId={currentConversationId}
         onSelectConversation={setCurrentConversationId}
