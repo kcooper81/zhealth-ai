@@ -109,9 +109,15 @@ export default function Sidebar({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <h1 className="text-lg font-semibold bg-gradient-to-r from-brand-blue to-blue-400 bg-clip-text text-transparent">
-            Z-Health AI
-          </h1>
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://zhealtheducation.com/wp-content/uploads/2024/02/logo.svg"
+              alt="Z-Health"
+              className="h-5 w-auto dark:invert"
+            />
+            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">AI</span>
+          </div>
           <div className="flex items-center gap-1">
             <button
               onClick={onNewConversation}
