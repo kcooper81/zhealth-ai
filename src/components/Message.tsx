@@ -55,9 +55,13 @@ export default function Message({
               />
             )}
 
-            {/* Streaming cursor */}
-            {isStreaming && !isUser && (
-              <span className="inline-block w-0.5 h-4 bg-gray-400 dark:bg-gray-500 animate-blink ml-0.5 align-middle" />
+            {/* Typing indicator — 3 dots while thinking, nothing once text is streaming */}
+            {isStreaming && !isUser && !message.content && (
+              <div className="flex items-center gap-1 py-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
             )}
           </div>
 

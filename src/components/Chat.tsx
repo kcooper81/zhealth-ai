@@ -253,16 +253,7 @@ export default function Chat() {
       setIsStreaming(true);
       setStreamingMessageId(assistantId);
 
-      // Create a job to track this request
-      const job = createJob("chat", "Processing request...", [
-        { label: "Thinking", status: "running" },
-        { label: "Generating response", status: "pending" },
-      ]);
-      job.description = text.slice(0, 80) + (text.length > 80 ? "..." : "");
-      currentJobRef.current = job.id;
-      setJobs((prev) => [job, ...prev]);
-
-      // Stream from the real Claude API
+      // Stream from the real Claude API (no job for regular chat — only for actions)
       let streamStarted = false;
       try {
         // Build messages array for the API.
@@ -318,15 +309,7 @@ export default function Chat() {
               const data = JSON.parse(jsonStr);
 
               if (data.type === "token") {
-                // Advance to "Generating response" step on first token
-                if (!streamStarted) {
-                  streamStarted = true;
-                  updateJob(job.id, (j) => {
-                    let updated = advanceJobStep(j, "Analyzed request");
-                    updated = updateJobStatus(updated, "streaming");
-                    return updated;
-                  });
-                }
+                streamStarted = true;
                 accumulated += data.text;
                 updateLastAssistantMessage(convId, accumulated);
               } else if (data.type === "done") {
@@ -335,18 +318,6 @@ export default function Chat() {
                 }
                 if (data.pendingAction) {
                   setPendingAction(data.pendingAction);
-                  // Add confirming step to job
-                  updateJob(job.id, (j) => {
-                    let updated = advanceJobStep(j);
-                    updated = addJobStep(updated, "Waiting for confirmation", "running");
-                    updated = updateJobStatus(updated, "confirming");
-                    return updated;
-                  });
-                } else {
-                  // Simple chat response — complete the job
-                  updateJob(job.id, (j) =>
-                    completeJob(j, { message: "Response generated" })
-                  );
                 }
               } else if (data.type === "error") {
                 throw new Error(data.error || "Stream error");
@@ -359,18 +330,12 @@ export default function Chat() {
           }
         }
 
-        // If stream ended without a "done" event, complete the job
-        updateJob(job.id, (j) =>
-          isJobActive(j) ? completeJob(j, { message: "Response generated" }) : j
-        );
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Something went wrong";
         updateLastAssistantMessage(
           convId,
           `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
         );
-        // Fail the job
-        updateJob(job.id, (j) => failJob(j, errorMsg));
       } finally {
         setIsStreaming(false);
         setStreamingMessageId(null);

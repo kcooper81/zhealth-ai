@@ -59,29 +59,37 @@ export async function POST(request: NextRequest) {
 
     try {
       const wp = getWordPressClient();
-      const [wpPages, plugins] = await Promise.all([
-        wp.listPages({ per_page: 50 }),
-        discoverPlugins(),
-      ]);
-      pages = wpPages.map((p) => ({
+      // Fetch everything in parallel for speed
+      const promises: Promise<unknown>[] = [
+        wp.listPages({ per_page: 50 }).catch(() => []),
+        discoverPlugins().catch(() => []),
+      ];
+      if (pageContextId) {
+        promises.push(wp.getPage(pageContextId, "edit").catch(() => null));
+      }
+
+      const results = await Promise.all(promises);
+      const wpPages = results[0] as Array<{ id: number; title: { rendered: string }; status: string; link: string }>;
+      const plugins = results[1] as Array<{ slug: string; name: string; capabilities: string[] }>;
+      const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string } } | null | undefined;
+
+      pages = (wpPages || []).map((p) => ({
         id: p.id,
         title: p.title.rendered,
         status: p.status,
         url: p.link,
       }));
 
-      pluginContextStr = buildPluginContext(plugins);
+      pluginContextStr = buildPluginContext(plugins || []);
 
-      if (pageContextId) {
-        const page = await wp.getPage(pageContextId, "edit");
+      if (pageData) {
         currentPage = {
-          id: page.id,
-          title: page.title.raw || page.title.rendered,
-          content: page.content.raw || page.content.rendered,
+          id: pageData.id,
+          title: pageData.title.raw || pageData.title.rendered,
+          content: pageData.content.raw || pageData.content.rendered,
         };
       }
     } catch (error) {
-      // WordPress may not be reachable; proceed without context
       console.error("Failed to fetch WordPress context:", error);
     }
 

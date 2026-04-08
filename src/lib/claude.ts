@@ -60,7 +60,18 @@ export function buildSystemPrompt(context: {
       : "";
 
   const currentPageSection = context.currentPage
-    ? `\n\nCurrently viewing page [${context.currentPage.id}] "${context.currentPage.title}":\n${context.currentPage.content}`
+    ? `\n\n--- CURRENTLY SELECTED PAGE ---
+Page ID: ${context.currentPage.id}
+Title: "${context.currentPage.title}"
+The user has selected this page as context. When they ask you to edit, update, or modify content, they mean THIS page unless they specify otherwise.
+Any changes should target page ID ${context.currentPage.id}.
+
+Current page content (HTML):
+\`\`\`html
+${context.currentPage.content.slice(0, 12000)}
+\`\`\`
+${context.currentPage.content.length > 12000 ? `\n(Content truncated — showing first 12,000 of ${context.currentPage.content.length} characters)` : ""}
+--- END SELECTED PAGE ---`
     : "";
 
   const pluginSection = context.pluginContext || "";
