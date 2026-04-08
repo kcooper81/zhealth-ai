@@ -212,7 +212,7 @@ export default function CRMPanel({
                 contact.id === selectedContactId
                   ? {
                       backgroundColor: `${accentColor}0d`,
-                      ringColor: accentColor,
+                      boxShadow: `inset 0 0 0 1px ${accentColor}40`,
                     }
                   : undefined
               }
