@@ -14,8 +14,10 @@ function getApiKey(): string {
 }
 
 function headers(): Record<string, string> {
+  const key = getApiKey();
   return {
-    "X-Keap-API-Key": getApiKey(),
+    "X-Keap-API-Key": key,
+    "Authorization": `Bearer ${key}`,
     "Content-Type": "application/json",
     Accept: "application/json",
   };
