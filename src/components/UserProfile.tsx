@@ -60,7 +60,7 @@ export default function UserProfile({
       {/* Avatar trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-left"
       >
         {user?.image ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -77,7 +77,7 @@ export default function UserProfile({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate">
+          <p className="text-[13px] font-medium text-gray-300 truncate">
             {user?.name || "User"}
           </p>
         </div>

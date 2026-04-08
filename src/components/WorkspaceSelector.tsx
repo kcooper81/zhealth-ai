@@ -59,7 +59,7 @@ export default function WorkspaceSelector({
       {/* Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700/60 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all duration-200 group"
       >
         <span
           className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -70,16 +70,16 @@ export default function WorkspaceSelector({
           </span>
         </span>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 truncate">
+          <p className="text-[13px] font-semibold text-gray-200 truncate">
             {current.name}
           </p>
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
+          <p className="text-[11px] text-gray-500 truncate">
             {current.description}
           </p>
         </div>
         <ChevronDown
           size={14}
-          className={`text-gray-400 dark:text-gray-500 transition-transform duration-200 flex-shrink-0 ${
+          className={`text-gray-500 transition-transform duration-200 flex-shrink-0 ${
             isOpen ? "rotate-180" : ""
           }`}
         />
@@ -87,7 +87,7 @@ export default function WorkspaceSelector({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg shadow-black/8 dark:shadow-black/30 z-50 overflow-hidden animate-scale-in">
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#242538] border border-white/10 rounded-xl shadow-lg shadow-black/30 z-50 overflow-hidden animate-scale-in">
           <div className="py-1">
             {WORKSPACES.map((ws, idx) => (
               <WorkspaceOption
@@ -126,10 +126,10 @@ function WorkspaceOption({
       onClick={onClick}
       className={`w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors ${
         isFocused
-          ? "bg-gray-100 dark:bg-gray-700/50"
+          ? "bg-white/10"
           : isSelected
-          ? "bg-gray-50 dark:bg-gray-800/30"
-          : "hover:bg-gray-50 dark:hover:bg-gray-700/30"
+          ? "bg-white/5"
+          : "hover:bg-white/5"
       }`}
     >
       <span
@@ -141,15 +141,15 @@ function WorkspaceOption({
         </span>
       </span>
       <div className="flex-1 min-w-0 text-left">
-        <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
+        <p className="text-[13px] font-medium text-gray-200">
           {config.name}
         </p>
-        <p className="text-[11px] text-gray-400 dark:text-gray-500">
+        <p className="text-[11px] text-gray-500">
           {config.description}
         </p>
       </div>
       {isSelected && (
-        <Check size={14} className="text-gray-400 dark:text-gray-500 flex-shrink-0" />
+        <Check size={14} className="text-gray-400 flex-shrink-0" />
       )}
     </button>
   );

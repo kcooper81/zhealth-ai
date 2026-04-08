@@ -17,6 +17,7 @@ import {
 } from "@/lib/jobs";
 import { useLocalStorage, useKeyboardShortcuts } from "@/lib/hooks";
 import Sidebar from "./Sidebar";
+import WorkspacePanel from "./WorkspacePanel";
 import MessageList from "./MessageList";
 import InputArea from "./InputArea";
 import PreviewPanel from "./PreviewPanel";
@@ -62,6 +63,20 @@ export default function Chat() {
   const [pages, setPages] = useState<SidebarPage[]>([]);
   const [selectedModel, setSelectedModel] = useLocalStorage<string>("zhealth-ai-model", "claude-sonnet-4-6");
   const [workspace, setWorkspace] = useLocalStorage<Workspace>("zhealth-workspace", "all");
+
+  // --- Workspace panel state ---
+  const [showWorkspacePanel, setShowWorkspacePanel] = useState(() => workspace !== "all");
+  const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
+  const [dateRange, setDateRange] = useState("7d");
+
+  // When workspace changes, show/hide workspace panel
+  useEffect(() => {
+    if (workspace === "all") {
+      setShowWorkspacePanel(false);
+    } else {
+      setShowWorkspacePanel(true);
+    }
+  }, [workspace]);
 
   // --- Jobs state ---
   const [jobs, setJobs] = useLocalStorage<Job[]>("zhealth-jobs", []);
@@ -442,6 +457,14 @@ export default function Chat() {
     [handleSend]
   );
 
+  // --- Contact selection ---
+  const handleSelectContact = useCallback(
+    (contact: { id: number; name: string; email: string }) => {
+      setSelectedContactId(contact.id === 0 ? null : contact.id);
+    },
+    []
+  );
+
   // --- Preview ---
   const handleViewPage = useCallback((url: string) => {
     setPreviewUrl(url);
@@ -455,6 +478,9 @@ export default function Chat() {
       "mod+p": () => setShowPreview((v) => !v),
       "mod+b": () => setShowSidebar((v) => !v),
       "mod+j": () => setShowJobsPanel((v) => !v),
+      "mod+e": () => {
+        if (workspace !== "all") setShowWorkspacePanel((v) => !v);
+      },
       escape: () => {
         if (showJobsPanel) setShowJobsPanel(false);
         else if (showSettings) setShowSettings(false);
@@ -464,35 +490,45 @@ export default function Chat() {
         else if (isStreaming) handleCancelStream();
       },
     }),
-    [createConversation, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
+    [createConversation, workspace, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
   );
 
   useKeyboardShortcuts(shortcutHandlers);
 
   return (
     <div className="h-screen flex bg-white dark:bg-[#1c1c1e]">
-      {/* Sidebar */}
+      {/* Left Sidebar - 280px */}
       <Sidebar
+        workspace={workspace}
+        onWorkspaceChange={setWorkspace}
         conversations={conversations}
         currentConversationId={currentConversationId}
         onSelectConversation={setCurrentConversationId}
         onNewConversation={() => createConversation()}
         onDeleteConversation={deleteConversation}
-        selectedPageId={selectedPageId}
-        onSelectPage={setSelectedPageId}
-        pages={pages}
-        onQuickAction={handleQuickAction}
-        onOpenShortcuts={() => setShowShortcuts(true)}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenShortcuts={() => setShowShortcuts(true)}
+        activeJobCount={jobs.filter(isJobActive).length}
+        onOpenJobs={() => setShowJobsPanel(true)}
         showSidebar={showSidebar}
         onCloseSidebar={() => setShowSidebar(false)}
         onOpenWorkflows={() => { setInitialWorkflowId(null); setShowWorkflows(true); }}
         onRunWorkflow={(workflowId: string) => { setInitialWorkflowId(workflowId); setShowWorkflows(true); }}
-        user={session?.user}
-        activeJobCount={jobs.filter(isJobActive).length}
-        onOpenJobs={() => setShowJobsPanel(true)}
+      />
+
+      {/* Right Panel - 300px (workspace content) */}
+      <WorkspacePanel
         workspace={workspace}
-        onWorkspaceChange={setWorkspace}
+        show={showWorkspacePanel}
+        onClose={() => setShowWorkspacePanel(false)}
+        pages={pages}
+        selectedPageId={selectedPageId}
+        onSelectPage={setSelectedPageId}
+        selectedContactId={selectedContactId}
+        onSelectContact={handleSelectContact}
+        onQuickAction={handleQuickAction}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
       />
 
       {/* Main chat area */}
