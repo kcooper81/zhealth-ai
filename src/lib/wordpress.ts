@@ -280,7 +280,7 @@ class WordPressClient {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Type": mimeType,
       },
-      body: file,
+      body: new Uint8Array(file),
     });
 
     if (!response.ok) {
