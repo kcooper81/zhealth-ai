@@ -70,15 +70,22 @@ export function useLocalStorage<T>(
   key: string,
   defaultValue: T
 ): [T, (value: T | ((prev: T) => T)) => void] {
-  const [state, setState] = useState<T>(() => {
-    if (typeof window === "undefined") return defaultValue;
+  // Always start with defaultValue to avoid hydration mismatch.
+  // Hydrate from localStorage in useEffect (client-only).
+  const [state, setState] = useState<T>(defaultValue);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
     try {
       const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : defaultValue;
+      if (stored) {
+        setState(JSON.parse(stored));
+      }
     } catch {
-      return defaultValue;
+      // localStorage unavailable
     }
-  });
+    setHydrated(true);
+  }, [key]);
 
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
