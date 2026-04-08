@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import type { ChatMessage, PendingAction, Workspace } from "@/lib/types";
-import { useScrollToBottom } from "@/lib/hooks";
+// useScrollToBottom removed — we handle auto-scroll manually to respect user scrolling
 import { getQuickActions } from "@/lib/workspaces";
 import Message, { SystemMessage } from "./Message";
 import { MessageSquare, ChevronDown } from "./icons";
@@ -32,7 +32,17 @@ export default function MessageList({
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  useScrollToBottom(scrollRef, [messages, messages.length > 0 ? messages[messages.length - 1].content : ""]);
+  const isAtBottomRef = useRef(true);
+
+  // Only auto-scroll if user is already at the bottom — don't fight manual scrolling
+  useEffect(() => {
+    if (!isAtBottomRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [messages, messages.length > 0 ? messages[messages.length - 1]?.content : ""]);
 
   // Track scroll position
   const handleScroll = useCallback(() => {
@@ -41,6 +51,7 @@ export default function MessageList({
     const threshold = 80;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
     setIsAtBottom(atBottom);
+    isAtBottomRef.current = atBottom;
   }, []);
 
   useEffect(() => {
