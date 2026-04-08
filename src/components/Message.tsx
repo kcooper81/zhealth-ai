@@ -1,0 +1,205 @@
+"use client";
+
+import React, { useState } from "react";
+import type { ChatMessage, PendingAction, ActionResult } from "@/lib/types";
+import { renderMarkdown } from "@/lib/markdown";
+import { Edit, ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink } from "./icons";
+
+interface MessageProps {
+  message: ChatMessage;
+  isStreaming?: boolean;
+  onConfirmAction?: (action: PendingAction) => void;
+  onCancelAction?: (actionId: string) => void;
+  onViewPage?: (url: string) => void;
+}
+
+export default function Message({
+  message,
+  isStreaming,
+  onConfirmAction,
+  onCancelAction,
+  onViewPage,
+}: MessageProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const isUser = message.role === "user";
+
+  return (
+    <div
+      className={`flex ${isUser ? "justify-end" : "justify-start"} animate-fade-in`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} max-w-[85%]`}>
+        {/* Avatar */}
+        {!isUser && (
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center mt-1">
+            <span className="text-white text-xs font-semibold">AI</span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1">
+          {/* Bubble */}
+          <div
+            className={
+              isUser
+                ? "bg-brand-blue text-white px-4 py-2.5 rounded-[20px] rounded-br-[4px] shadow-sm"
+                : "bg-white dark:bg-[#2c2c2e] text-gray-800 dark:text-gray-100 px-4 py-2.5 rounded-[20px] rounded-bl-[4px] border border-gray-100 dark:border-gray-700/50 shadow-sm"
+            }
+          >
+            {isUser ? (
+              <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
+            ) : (
+              <div
+                className="markdown-body text-[15px] leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+              />
+            )}
+
+            {/* Streaming cursor */}
+            {isStreaming && !isUser && (
+              <span className="inline-block w-0.5 h-4 bg-gray-400 dark:bg-gray-500 animate-blink ml-0.5 align-middle" />
+            )}
+          </div>
+
+          {/* Pending action card */}
+          {message.pendingAction && !message.actionResult && (
+            <ActionCard
+              action={message.pendingAction}
+              onConfirm={onConfirmAction}
+              onCancel={onCancelAction}
+            />
+          )}
+
+          {/* Action result */}
+          {message.actionResult && (
+            <ResultCard result={message.actionResult} onViewPage={onViewPage} />
+          )}
+
+          {/* Hover controls */}
+          <div
+            className={`flex items-center gap-2 transition-opacity duration-200 ${
+              isHovered ? "opacity-100" : "opacity-0"
+            } ${isUser ? "justify-end" : "justify-start"}`}
+          >
+            {isUser && (
+              <button className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                <Edit size={14} />
+              </button>
+            )}
+            {!isUser && (
+              <>
+                <button className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                  <ThumbsUp size={14} />
+                </button>
+                <button className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                  <ThumbsDown size={14} />
+                </button>
+              </>
+            )}
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+              {formatTimestamp(message.timestamp)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({
+  action,
+  onConfirm,
+  onCancel,
+}: {
+  action: PendingAction;
+  onConfirm?: (action: PendingAction) => void;
+  onCancel?: (actionId: string) => void;
+}) {
+  return (
+    <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl p-3 border-l-4 border-l-amber-400 animate-slide-up">
+      <div className="flex items-start gap-2.5">
+        <Document size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-700 dark:text-gray-200 font-medium">{action.summary}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 capitalize">{action.type.replace(/_/g, " ")}</p>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => onConfirm?.(action)}
+          className="px-3.5 py-1.5 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-blue-600 active:scale-[0.97] transition-all duration-200"
+        >
+          Confirm
+        </button>
+        <button
+          onClick={() => onCancel?.(action.id)}
+          className="px-3.5 py-1.5 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-[0.97] transition-all duration-200"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ResultCard({
+  result,
+  onViewPage,
+}: {
+  result: ActionResult;
+  onViewPage?: (url: string) => void;
+}) {
+  if (result.success) {
+    const pageUrl = (result.result as { link?: string })?.link;
+    return (
+      <div className="mt-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/40 rounded-xl p-3 border-l-4 border-l-emerald-400 animate-slide-up">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-800/50 flex items-center justify-center">
+            <Check size={12} className="text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">Action completed</span>
+        </div>
+        {pageUrl && (
+          <button
+            onClick={() => onViewPage?.(pageUrl)}
+            className="mt-2 flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
+          >
+            <ExternalLink size={14} />
+            View page
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 rounded-xl p-3 border-l-4 border-l-red-400 animate-slide-up">
+      <div className="flex items-center gap-2">
+        <AlertCircle size={16} className="text-red-500 dark:text-red-400" />
+        <span className="text-sm text-red-700 dark:text-red-300">{result.error || "Something went wrong"}</span>
+      </div>
+      <button className="mt-2 text-sm text-red-600 dark:text-red-400 hover:underline font-medium">
+        Retry
+      </button>
+    </div>
+  );
+}
+
+export function SystemMessage({ content }: { content: string }) {
+  return (
+    <div className="flex justify-center py-2 animate-fade-in">
+      <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 px-3 py-1 rounded-full">
+        {content}
+      </span>
+    </div>
+  );
+}
+
+function formatTimestamp(ts: string): string {
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}

@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getWordPressClient } from "@/lib/wordpress";
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const wp = getWordPressClient();
+
+    const pages = await wp.listPages({
+      search: searchParams.get("search") || undefined,
+      status: searchParams.get("status") || undefined,
+      per_page: Number(searchParams.get("per_page")) || 20,
+      page: Number(searchParams.get("page")) || 1,
+    });
+
+    const simplified = pages.map((p) => ({
+      id: p.id,
+      title: p.title.rendered,
+      status: p.status,
+      url: p.link,
+      modified: p.modified,
+      template: p.template,
+      slug: p.slug,
+    }));
+
+    return NextResponse.json(simplified);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to fetch pages";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}

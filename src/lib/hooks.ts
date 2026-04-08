@@ -1,0 +1,119 @@
+"use client";
+
+import { useEffect, useRef, useCallback, useState } from "react";
+
+/**
+ * Auto-resize a textarea to fit its content.
+ */
+export function useAutoResize(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  value: string,
+  maxRows = 6
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const lineHeight = parseInt(getComputedStyle(el).lineHeight) || 24;
+    const maxHeight = lineHeight * maxRows;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [ref, value, maxRows]);
+}
+
+/**
+ * Auto-scroll a container to the bottom when dependencies change.
+ */
+export function useScrollToBottom(
+  ref: React.RefObject<HTMLElement | null>,
+  deps: unknown[]
+) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+/**
+ * Register global keyboard shortcuts.
+ */
+export function useKeyboardShortcuts(
+  handlers: Record<string, (e: KeyboardEvent) => void>
+) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      let key = "";
+      if (meta) key += "mod+";
+      if (e.shiftKey) key += "shift+";
+      key += e.key.toLowerCase();
+
+      if (handlers[key]) {
+        e.preventDefault();
+        handlers[key](e);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handlers]);
+}
+
+/**
+ * Persistent state via localStorage.
+ */
+export function useLocalStorage<T>(
+  key: string,
+  defaultValue: T
+): [T, (value: T | ((prev: T) => T)) => void] {
+  const [state, setState] = useState<T>(() => {
+    if (typeof window === "undefined") return defaultValue;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+
+  const setValue = useCallback(
+    (value: T | ((prev: T) => T)) => {
+      setState((prev) => {
+        const next = typeof value === "function" ? (value as (prev: T) => T)(prev) : value;
+        try {
+          localStorage.setItem(key, JSON.stringify(next));
+        } catch {
+          // Storage full or unavailable
+        }
+        return next;
+      });
+    },
+    [key]
+  );
+
+  return [state, setValue];
+}
+
+/**
+ * Detect clicks outside a ref element.
+ */
+export function useClickOutside(
+  ref: React.RefObject<HTMLElement | null>,
+  handler: () => void
+) {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
+  useEffect(() => {
+    const listener = (e: MouseEvent) => {
+      if (!ref.current || ref.current.contains(e.target as Node)) return;
+      handlerRef.current();
+    };
+    document.addEventListener("mousedown", listener);
+    return () => document.removeEventListener("mousedown", listener);
+  }, [ref]);
+}
