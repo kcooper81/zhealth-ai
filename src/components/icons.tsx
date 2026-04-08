@@ -172,3 +172,73 @@ export const Globe = icon(
     <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
   </>
 );
+
+export const Play = icon(
+  <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" />
+);
+
+export const Pause = icon(
+  <>
+    <rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none" />
+    <rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none" />
+  </>
+);
+
+export const RotateCcw = icon(
+  <>
+    <path d="M1 4v6h6" />
+    <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+  </>
+);
+
+export const GripVertical = icon(
+  <>
+    <circle cx="9" cy="5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="9" cy="19" r="1" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="19" r="1" fill="currentColor" stroke="none" />
+  </>
+);
+
+export const Workflow = icon(
+  <>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <path d="M14 17.5h7M17.5 14v7" />
+  </>
+);
+
+export const ArrowRight = icon(<path d="M5 12h14M12 5l7 7-7 7" />);
+
+export const Loader = icon(
+  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+);
+
+export const Activity = icon(
+  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+);
+
+export const CircleCheck = icon(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9 12l2 2 4-4" />
+  </>
+);
+
+export const CircleX = icon(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M15 9l-6 6M9 9l6 6" />
+  </>
+);
+
+export const CircleIcon = icon(
+  <circle cx="12" cy="12" r="10" />
+);
+
+export const Square = icon(
+  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+);

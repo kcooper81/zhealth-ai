@@ -10,17 +10,16 @@ import PreviewPanel from "./PreviewPanel";
 import ActionConfirmation from "./ActionConfirmation";
 import Onboarding from "./Onboarding";
 import KeyboardShortcuts from "./KeyboardShortcuts";
+import WorkflowPanel from "./WorkflowPanel";
 import { Menu } from "./icons";
 
-// Demo data for initial state
-const DEMO_PAGES = [
-  { id: 1, title: "Home", status: "publish" as const, type: "page" as const, modified: "2026-04-05T10:00:00Z" },
-  { id: 2, title: "About Z-Health", status: "publish" as const, type: "page" as const, modified: "2026-04-04T09:00:00Z" },
-  { id: 3, title: "Courses", status: "publish" as const, type: "page" as const, modified: "2026-04-03T14:30:00Z" },
-  { id: 4, title: "Contact", status: "draft" as const, type: "page" as const, modified: "2026-04-01T08:00:00Z" },
-  { id: 5, title: "Pain & Performance", status: "publish" as const, type: "post" as const, modified: "2026-03-28T16:00:00Z" },
-  { id: 6, title: "Vision Training Guide", status: "draft" as const, type: "post" as const, modified: "2026-03-25T11:00:00Z" },
-];
+type SidebarPage = {
+  id: number;
+  title: string;
+  status: "publish" | "draft" | "pending" | "private" | "trash";
+  type: "page" | "post";
+  modified?: string;
+};
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -38,7 +37,42 @@ export default function Chat() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [showSidebar, setShowSidebar] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showWorkflows, setShowWorkflows] = useState(false);
+  const [initialWorkflowId, setInitialWorkflowId] = useState<string | null>(null);
   const [, setShowOnboarding] = useState(true);
+  const [pages, setPages] = useState<SidebarPage[]>([]);
+
+  // Fetch real pages from WordPress on mount
+  useEffect(() => {
+    async function fetchPages() {
+      try {
+        const [pagesRes, postsRes] = await Promise.all([
+          fetch("/api/pages?per_page=100").then((r) => r.ok ? r.json() : []),
+          fetch("/api/posts?per_page=100").then((r) => r.ok ? r.json() : []),
+        ]);
+        const allPages: SidebarPage[] = [
+          ...(Array.isArray(pagesRes) ? pagesRes : []).map((p: any) => ({
+            id: p.id,
+            title: p.title?.rendered || p.title || "Untitled",
+            status: p.status || "publish",
+            type: "page" as const,
+            modified: p.modified,
+          })),
+          ...(Array.isArray(postsRes) ? postsRes : []).map((p: any) => ({
+            id: p.id,
+            title: p.title?.rendered || p.title || "Untitled",
+            status: p.status || "publish",
+            type: "post" as const,
+            modified: p.modified,
+          })),
+        ];
+        setPages(allPages);
+      } catch {
+        // WordPress not reachable — leave empty
+      }
+    }
+    fetchPages();
+  }, []);
 
   // --- Derived ---
   const currentConversation = useMemo(
@@ -278,12 +312,13 @@ export default function Chat() {
       "mod+p": () => setShowPreview((v) => !v),
       "mod+b": () => setShowSidebar((v) => !v),
       escape: () => {
-        if (showShortcuts) setShowShortcuts(false);
+        if (showWorkflows) setShowWorkflows(false);
+        else if (showShortcuts) setShowShortcuts(false);
         else if (showPreview) setShowPreview(false);
         else if (isStreaming) handleCancelStream();
       },
     }),
-    [createConversation, showShortcuts, showPreview, isStreaming, handleCancelStream]
+    [createConversation, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
   );
 
   useKeyboardShortcuts(shortcutHandlers);
@@ -299,7 +334,7 @@ export default function Chat() {
         onDeleteConversation={deleteConversation}
         selectedPageId={selectedPageId}
         onSelectPage={setSelectedPageId}
-        pages={DEMO_PAGES}
+        pages={pages}
         onQuickAction={handleQuickAction}
         onOpenShortcuts={() => setShowShortcuts(true)}
         onOpenSettings={() => {
@@ -307,6 +342,8 @@ export default function Chat() {
         }}
         showSidebar={showSidebar}
         onCloseSidebar={() => setShowSidebar(false)}
+        onOpenWorkflows={() => { setInitialWorkflowId(null); setShowWorkflows(true); }}
+        onRunWorkflow={(workflowId: string) => { setInitialWorkflowId(workflowId); setShowWorkflows(true); }}
       />
 
       {/* Main chat area */}
@@ -351,7 +388,7 @@ export default function Chat() {
       {/* Preview panel */}
       <PreviewPanel
         url={previewUrl}
-        title={DEMO_PAGES.find((p) => p.id === selectedPageId)?.title}
+        title={pages.find((p) => p.id === selectedPageId)?.title}
         show={showPreview}
         onClose={() => setShowPreview(false)}
       />
@@ -359,6 +396,12 @@ export default function Chat() {
       {/* Modals */}
       <KeyboardShortcuts show={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <Onboarding onComplete={() => setShowOnboarding(false)} />
+      <WorkflowPanel
+        show={showWorkflows}
+        onClose={() => { setShowWorkflows(false); setInitialWorkflowId(null); }}
+        selectedPageId={selectedPageId}
+        initialWorkflowId={initialWorkflowId}
+      />
     </div>
   );
 }

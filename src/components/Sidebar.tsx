@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import type { Conversation } from "@/lib/types";
-import { Plus, Search, Settings, Keyboard, X, MessageSquare } from "./icons";
+import { Plus, Search, Settings, Keyboard, X, MessageSquare, Workflow, ChevronRight } from "./icons";
 import PageSelector from "./PageSelector";
 
 interface SidebarProps {
@@ -25,6 +25,13 @@ interface SidebarProps {
   onOpenSettings: () => void;
   showSidebar: boolean;
   onCloseSidebar: () => void;
+  onOpenWorkflows: () => void;
+  onRunWorkflow: (workflowId: string) => void;
+  user?: {
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+  } | null;
 }
 
 function groupConversations(conversations: Conversation[]) {
@@ -69,8 +76,19 @@ export default function Sidebar({
   onOpenSettings,
   showSidebar,
   onCloseSidebar,
+  onOpenWorkflows,
+  onRunWorkflow,
+  user,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [sidebarWorkflows, setSidebarWorkflows] = useState<Array<{ id: string; name: string; icon: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/workflows")
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: Array<{ id: string; name: string; icon: string }>) => setSidebarWorkflows(data.slice(0, 4)))
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
@@ -165,6 +183,39 @@ export default function Sidebar({
           </div>
         </div>
 
+        {/* Workflows section */}
+        <div className="px-3 pb-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Workflow size={13} className="text-gray-400 dark:text-gray-500" />
+              <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                Workflows
+              </p>
+            </div>
+            <button
+              onClick={onOpenWorkflows}
+              className="text-[11px] font-medium text-brand-blue hover:text-brand-blue/80 transition-colors"
+            >
+              View all
+            </button>
+          </div>
+          <div className="space-y-0.5">
+            {sidebarWorkflows.map((wf) => (
+              <button
+                key={wf.id}
+                onClick={() => {
+                  onRunWorkflow(wf.id);
+                  onCloseSidebar();
+                }}
+                className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors group"
+              >
+                <span className="truncate">{wf.name}</span>
+                <ChevronRight size={12} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Divider */}
         <div className="border-t border-gray-100 dark:border-gray-800 mx-3" />
 
@@ -215,21 +266,42 @@ export default function Sidebar({
         </div>
 
         {/* Bottom bar */}
-        <div className="flex items-center gap-1 px-3 py-3 border-t border-gray-100 dark:border-gray-800">
-          <button
-            onClick={onOpenSettings}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            title="Settings"
-          >
-            <Settings size={16} />
-          </button>
-          <button
-            onClick={onOpenShortcuts}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            title="Keyboard shortcuts"
-          >
-            <Keyboard size={16} />
-          </button>
+        <div className="flex items-center gap-2 px-3 py-3 border-t border-gray-100 dark:border-gray-800">
+          {user && (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {user.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.image}
+                  alt=""
+                  className="w-7 h-7 rounded-full flex-shrink-0"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 text-xs font-medium flex-shrink-0">
+                  {user.name?.charAt(0) || "?"}
+                </div>
+              )}
+              <span className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                {user.name || user.email || ""}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={onOpenSettings}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              title="Settings"
+            >
+              <Settings size={16} />
+            </button>
+            <button
+              onClick={onOpenShortcuts}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              title="Keyboard shortcuts"
+            >
+              <Keyboard size={16} />
+            </button>
+          </div>
         </div>
       </aside>
     </>
