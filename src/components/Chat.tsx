@@ -264,12 +264,15 @@ export default function Chat() {
       // Stream from the real Claude API
       let streamStarted = false;
       try {
-        // Build messages array for the API (all messages in this conversation)
+        // Build messages array for the API.
+        // Read from current state + append the new user message (since setState is async
+        // and conversations may not have updated yet).
         const conv = conversations.find((c) => c.id === convId);
-        const apiMessages = (conv?.messages || [])
+        const existingMessages = (conv?.messages || [])
           .filter((m) => m.role === "user" || m.role === "assistant")
           .filter((m) => m.content.trim() !== "")
           .map((m) => ({ role: m.role, content: m.content }));
+        const apiMessages = [...existingMessages, { role: "user", content: text }];
 
         const response = await fetch("/api/chat", {
           method: "POST",
