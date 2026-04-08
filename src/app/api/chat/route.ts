@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
       const results = await Promise.all(promises);
       const wpPages = results[0] as Array<{ id: number; title: { rendered: string }; status: string; link: string }>;
-      const plugins = results[1] as Array<{ slug: string; name: string; capabilities: string[] }>;
+      const plugins = results[1] as Awaited<ReturnType<typeof discoverPlugins>>;
       const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string } } | null | undefined;
 
       pages = (wpPages || []).map((p) => ({
