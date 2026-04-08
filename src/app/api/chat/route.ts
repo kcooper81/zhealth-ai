@@ -53,44 +53,51 @@ export async function POST(request: NextRequest) {
       url: string;
     }> = [];
     let currentPage:
-      | { id: number; title: string; content: string }
+      | { id: number; title: string; content: string; template?: string }
       | undefined;
     let pluginContextStr = "";
 
+    // Only fetch WordPress context for website/all workspaces — not for CRM/analytics
+    const needsWpContext = workspace === "all" || workspace === "website";
+
     try {
-      const wp = getWordPressClient();
-      // Fetch everything in parallel for speed
       const promises: Promise<unknown>[] = [
-        wp.listPages({ per_page: 50 }).catch(() => []),
         discoverPlugins().catch(() => []),
       ];
-      if (pageContextId) {
-        promises.push(wp.getPage(pageContextId, "edit").catch(() => null));
+
+      if (needsWpContext) {
+        const wp = getWordPressClient();
+        promises.push(wp.listPages({ per_page: 50 }).catch(() => []));
+        if (pageContextId) {
+          promises.push(wp.getPage(pageContextId, "edit").catch(() => null));
+        }
       }
 
       const results = await Promise.all(promises);
-      const wpPages = results[0] as Array<{ id: number; title: { rendered: string }; status: string; link: string }>;
-      const plugins = results[1] as Awaited<ReturnType<typeof discoverPlugins>>;
-      const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string } } | null | undefined;
-
-      pages = (wpPages || []).map((p) => ({
-        id: p.id,
-        title: p.title.rendered,
-        status: p.status,
-        url: p.link,
-      }));
-
+      const plugins = results[0] as Awaited<ReturnType<typeof discoverPlugins>>;
       pluginContextStr = buildPluginContext(plugins || []);
 
-      if (pageData) {
-        currentPage = {
-          id: pageData.id,
-          title: pageData.title.raw || pageData.title.rendered,
-          content: pageData.content.raw || pageData.content.rendered,
-        };
+      if (needsWpContext) {
+        const wpPages = (results[1] || []) as Array<{ id: number; title: { rendered: string }; status: string; link: string }>;
+        pages = wpPages.map((p) => ({
+          id: p.id,
+          title: p.title.rendered,
+          status: p.status,
+          url: p.link,
+        }));
+
+        const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string }; template?: string } | null | undefined;
+        if (pageData) {
+          currentPage = {
+            id: pageData.id,
+            title: pageData.title.raw || pageData.title.rendered,
+            content: pageData.content.raw || pageData.content.rendered,
+            template: pageData.template || "",
+          };
+        }
       }
     } catch (error) {
-      console.error("Failed to fetch WordPress context:", error);
+      console.error("Failed to fetch context:", error);
     }
 
     const systemPrompt = buildSystemPrompt({

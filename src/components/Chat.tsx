@@ -659,7 +659,9 @@ export default function Chat() {
         workspace={workspace}
         onWorkspaceChange={(ws) => {
           setWorkspace(ws);
-          setCurrentConversationId(null); // deselect current conversation when switching workspace
+          setCurrentConversationId(null);
+          setSelectedPageId(null); // clear page context
+          setSelectedContactId(null); // clear contact context
         }}
         conversations={conversations}
         currentConversationId={currentConversationId}

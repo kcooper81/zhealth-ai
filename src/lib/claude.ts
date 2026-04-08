@@ -49,7 +49,7 @@ export function buildSystemPrompt(context: {
     status: string;
     url: string;
   }>;
-  currentPage?: { id: number; title: string; content: string };
+  currentPage?: { id: number; title: string; content: string; template?: string };
   capabilities?: string[];
   brandGuide?: Record<string, unknown>;
   pluginContext?: string;
@@ -59,18 +59,26 @@ export function buildSystemPrompt(context: {
       ? `\n\nCurrently published pages:\n${context.pages.map((p) => `- [${p.id}] "${p.title}" (${p.status}) ${p.url}`).join("\n")}`
       : "";
 
+  const pageTemplate = context.currentPage?.template || "";
+  const isElementor = pageTemplate.includes("elementor");
+  const editorNote = isElementor
+    ? "This page uses Elementor. When editing, be aware that Elementor stores its own layout data. For simple text/content changes, updating post_content works. For layout changes, Elementor data may need updating."
+    : "This page uses the standard WordPress editor.";
+
   const currentPageSection = context.currentPage
     ? `\n\n--- CURRENTLY SELECTED PAGE ---
 Page ID: ${context.currentPage.id}
 Title: "${context.currentPage.title}"
+Template: ${pageTemplate || "default"}
+Editor: ${isElementor ? "Elementor" : "WordPress Block Editor"}
+${editorNote}
+
 The user has selected this page as context. When they ask you to edit, update, or modify content, they mean THIS page unless they specify otherwise.
 Any changes should target page ID ${context.currentPage.id}.
 
 Current page content (HTML):
-\`\`\`html
 ${context.currentPage.content.slice(0, 12000)}
-\`\`\`
-${context.currentPage.content.length > 12000 ? `\n(Content truncated — showing first 12,000 of ${context.currentPage.content.length} characters)` : ""}
+${context.currentPage.content.length > 12000 ? "\n(Content truncated)" : ""}
 --- END SELECTED PAGE ---`
     : "";
 
