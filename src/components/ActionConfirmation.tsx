@@ -10,7 +10,7 @@ interface ActionConfirmationProps {
   onCancel: (actionId: string) => void;
 }
 
-const TIMEOUT_SECONDS = 30;
+const TIMEOUT_SECONDS = 60;
 
 export default function ActionConfirmation({
   action,
@@ -90,7 +90,10 @@ export default function ActionConfirmation({
               </button>
             </div>
 
-            {/* Countdown ring */}
+            {/* Countdown label and ring */}
+            <span className="flex-shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 whitespace-nowrap">
+              Auto-cancels in {countdown}s
+            </span>
             <div className="flex-shrink-0 w-6 h-6 relative">
               <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
                 <circle

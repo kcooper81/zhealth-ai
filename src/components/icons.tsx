@@ -363,3 +363,11 @@ export const AtSign = icon(
     <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
   </>
 );
+
+export const LogOut = icon(
+  <>
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </>
+);

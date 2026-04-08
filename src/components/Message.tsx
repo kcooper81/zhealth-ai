@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import type { ChatMessage, PendingAction, ActionResult } from "@/lib/types";
 import { renderMarkdown } from "@/lib/markdown";
-import { Edit, ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy } from "./icons";
+import { ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy } from "./icons";
 
 interface MessageProps {
   message: ChatMessage;
@@ -21,7 +21,26 @@ export default function Message({
   onViewPage,
 }: MessageProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  const [showFeedbackTooltip, setShowFeedbackTooltip] = useState(false);
   const isUser = message.role === "user";
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API not available
+    }
+  };
+
+  const handleFeedback = (type: "up" | "down") => {
+    setFeedback((prev) => (prev === type ? null : type));
+    setShowFeedbackTooltip(true);
+    setTimeout(() => setShowFeedbackTooltip(false), 2000);
+  };
 
   return (
     <div
@@ -85,20 +104,58 @@ export default function Message({
               isHovered ? "opacity-100" : "opacity-0"
             } ${isUser ? "justify-end" : "justify-start"}`}
           >
-            {isUser && (
-              <button className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
-                <Edit size={14} />
-              </button>
-            )}
+            {/* C2: Edit button removed from user messages */}
             {!isUser && (
-              <>
-                <button className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+              <div className="relative flex items-center gap-2">
+                {/* C1: Copy button */}
+                <button
+                  onClick={handleCopy}
+                  className={`p-1 rounded-md transition-colors ${
+                    copied
+                      ? "text-emerald-500"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                  }`}
+                  title={copied ? "Copied!" : "Copy message"}
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+                {copied && (
+                  <span className="absolute -top-7 left-0 text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-md whitespace-nowrap">
+                    Copied!
+                  </span>
+                )}
+
+                {/* C3: ThumbsUp/ThumbsDown with toggle state */}
+                <button
+                  onClick={() => handleFeedback("up")}
+                  className={`p-1 rounded-md transition-colors ${
+                    feedback === "up"
+                      ? "text-brand-blue bg-brand-blue/10"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                  }`}
+                  title="Helpful"
+                >
                   <ThumbsUp size={14} />
                 </button>
-                <button className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                <button
+                  onClick={() => handleFeedback("down")}
+                  className={`p-1 rounded-md transition-colors ${
+                    feedback === "down"
+                      ? "text-red-500 bg-red-500/10"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                  }`}
+                  title="Not helpful"
+                >
                   <ThumbsDown size={14} />
                 </button>
-              </>
+
+                {/* Feedback tooltip */}
+                {showFeedbackTooltip && feedback && (
+                  <span className="absolute -top-7 left-8 text-[11px] text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-md whitespace-nowrap">
+                    Thanks for your feedback
+                  </span>
+                )}
+              </div>
             )}
             <span className="text-[11px] text-gray-400 dark:text-gray-500">
               {formatTimestamp(message.timestamp)}
@@ -176,15 +233,16 @@ function ResultCard({
     );
   }
 
+  // C4: Error card without Retry button, replaced with text suggestion
   return (
     <div className="mt-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/40 rounded-xl p-3 border-l-4 border-l-red-400 animate-slide-up">
       <div className="flex items-center gap-2">
         <AlertCircle size={16} className="text-red-500 dark:text-red-400" />
         <span className="text-sm text-red-700 dark:text-red-300">{result.error || "Something went wrong"}</span>
       </div>
-      <button className="mt-2 text-sm text-red-600 dark:text-red-400 hover:underline font-medium">
-        Retry
-      </button>
+      <p className="mt-2 text-xs text-red-600/70 dark:text-red-400/70">
+        Try sending your request again.
+      </p>
     </div>
   );
 }

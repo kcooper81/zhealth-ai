@@ -41,6 +41,7 @@ export function renderMarkdown(text: string): string {
   let codeBlockLang = "";
   let codeBlockLines: string[] = [];
   let inList = false;
+  let inOrderedList = false;
   let inTable = false;
   let tableRows: string[][] = [];
   let tableAligns: string[] = [];
@@ -49,6 +50,13 @@ export function renderMarkdown(text: string): string {
     if (inList) {
       result.push("</ul>");
       inList = false;
+    }
+  };
+
+  const flushOrderedList = () => {
+    if (inOrderedList) {
+      result.push("</ol>");
+      inOrderedList = false;
     }
   };
 
@@ -84,6 +92,7 @@ export function renderMarkdown(text: string): string {
     if (line.startsWith("```")) {
       if (!inCodeBlock) {
         flushList();
+        flushOrderedList();
         flushTable();
         inCodeBlock = true;
         codeBlockLang = line.slice(3).trim();
@@ -113,6 +122,7 @@ export function renderMarkdown(text: string): string {
     // Horizontal rule
     if (/^---+$/.test(line.trim()) || /^\*\*\*+$/.test(line.trim())) {
       flushList();
+      flushOrderedList();
       flushTable();
       result.push('<hr class="md-hr" />');
       continue;
@@ -138,6 +148,7 @@ export function renderMarkdown(text: string): string {
 
       if (!inTable) {
         flushList();
+        flushOrderedList();
         inTable = true;
         tableRows = [];
       }
@@ -151,6 +162,7 @@ export function renderMarkdown(text: string): string {
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
       flushList();
+      flushOrderedList();
       const level = headingMatch[1].length;
       result.push(
         `<h${level} class="md-h${level}">${renderInline(headingMatch[2])}</h${level}>`
@@ -161,6 +173,7 @@ export function renderMarkdown(text: string): string {
     // Blockquote
     if (line.startsWith("&gt; ") || line === "&gt;") {
       flushList();
+      flushOrderedList();
       const content = line.replace(/^&gt;\s?/, "");
       result.push(
         `<blockquote class="md-blockquote">${renderInline(content)}</blockquote>`
@@ -170,6 +183,7 @@ export function renderMarkdown(text: string): string {
 
     // Unordered list
     if (/^[-*]\s+/.test(line)) {
+      flushOrderedList();
       if (!inList) {
         flushTable();
         inList = true;
@@ -184,17 +198,23 @@ export function renderMarkdown(text: string): string {
 
     // Ordered list
     if (/^\d+\.\s+/.test(line)) {
-      flushTable();
+      flushList();
+      if (!inOrderedList) {
+        flushTable();
+        inOrderedList = true;
+        result.push('<ol class="md-list md-ol">');
+      }
       const content = line.replace(/^\d+\.\s+/, "");
-      result.push(
-        `<ol class="md-list md-ol"><li>${renderInline(content)}</li></ol>`
-      );
+      result.push(`<li>${renderInline(content)}</li>`);
       continue;
+    } else {
+      flushOrderedList();
     }
 
     // Empty line
     if (line.trim() === "") {
       flushList();
+      flushOrderedList();
       flushTable();
       continue;
     }
@@ -210,6 +230,7 @@ export function renderMarkdown(text: string): string {
     );
   }
   flushList();
+  flushOrderedList();
   flushTable();
 
   return result.join("\n");

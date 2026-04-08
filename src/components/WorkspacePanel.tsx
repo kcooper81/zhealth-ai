@@ -3,7 +3,7 @@
 import React from "react";
 import type { Workspace } from "@/lib/types";
 import { getWorkspace } from "@/lib/workspaces";
-import { X } from "./icons";
+import { X, Loader } from "./icons";
 import PageSelector from "./PageSelector";
 import CRMPanel from "./CRMPanel";
 import AnalyticsPanel from "./AnalyticsPanel";
@@ -20,6 +20,8 @@ interface WorkspacePanelProps {
   workspace: Workspace;
   show: boolean;
   onClose: () => void;
+  sidebarCollapsed?: boolean;
+  pagesLoading?: boolean;
   // Website
   pages: SidebarPage[];
   selectedPageId: number | null;
@@ -37,6 +39,8 @@ export default function WorkspacePanel({
   workspace,
   show,
   onClose,
+  sidebarCollapsed,
+  pagesLoading,
   pages,
   selectedPageId,
   onSelectPage,
@@ -64,7 +68,7 @@ export default function WorkspacePanel({
       {/* Panel */}
       <div
         className={`
-          fixed md:relative z-40 md:z-auto top-0 left-[280px] md:left-0 h-full
+          fixed md:relative z-40 md:z-auto top-0 ${sidebarCollapsed ? "left-[60px]" : "left-[280px]"} md:left-0 h-full
           bg-white dark:bg-[#242538] border-r border-gray-200 dark:border-gray-700/60
           flex flex-col
           transition-all duration-250 ease-out
@@ -95,12 +99,18 @@ export default function WorkspacePanel({
           {/* Content */}
           <div className="flex-1 overflow-hidden pt-2">
             {workspace === "website" && (
-              <PageSelector
-                pages={pages}
-                selectedPageId={selectedPageId}
-                onSelect={onSelectPage}
-                mode="list"
-              />
+              pagesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader size={20} className="text-gray-400 animate-spin" />
+                </div>
+              ) : (
+                <PageSelector
+                  pages={pages}
+                  selectedPageId={selectedPageId}
+                  onSelect={onSelectPage}
+                  mode="list"
+                />
+              )
             )}
 
             {workspace === "crm" && (

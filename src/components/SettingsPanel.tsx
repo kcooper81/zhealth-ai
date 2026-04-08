@@ -9,6 +9,8 @@ interface SettingsPanelProps {
   onClose: () => void;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
+  theme?: "light" | "dark" | "auto";
+  onThemeChange?: (theme: "light" | "dark" | "auto") => void;
 }
 
 type ThemeMode = "light" | "dark" | "auto";
@@ -49,23 +51,23 @@ function Divider() {
   return <div className="border-t border-gray-100 dark:border-gray-800 my-5" />;
 }
 
-export default function SettingsPanel({ show, onClose, selectedModel: externalModel, onModelChange }: SettingsPanelProps) {
+export default function SettingsPanel({ show, onClose, selectedModel: externalModel, onModelChange, theme: externalTheme, onThemeChange }: SettingsPanelProps) {
   const { data: session } = useSession();
 
   // AI Model -- use external state if provided, otherwise local
   const [localModel, setLocalModel] = useState<string>("claude-sonnet-4-6");
   const aiModel = externalModel || localModel;
 
-  // Theme
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  // Theme - use external state if provided, otherwise local
+  const [localTheme, setLocalTheme] = useState<ThemeMode>("light");
+  const theme = externalTheme || localTheme;
 
   // WordPress connection
   const [wpStatus, setWpStatus] = useState<"idle" | "loading" | "connected" | "disconnected">("idle");
   const [wpSiteName, setWpSiteName] = useState<string>("");
   const [wpSiteUrl, setWpSiteUrl] = useState<string>("");
 
-  // API key availability (checked via site-info endpoint)
-  const [configuredProviders, setConfiguredProviders] = useState<{ claude: boolean; gemini: boolean }>({ claude: false, gemini: false });
+  // No longer probe for API keys at runtime
 
   // Brand Guide
   const [brandGuide, setBrandGuide] = useState<BrandGuide>({
@@ -86,10 +88,6 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
       const savedModel = localStorage.getItem("zhealth-ai-model");
       if (savedModel) setLocalModel(savedModel);
 
-      const savedTheme = localStorage.getItem("zhealth-theme");
-      if (savedTheme) setTheme(savedTheme as ThemeMode);
-      else if (document.documentElement.classList.contains("dark")) setTheme("dark");
-
       const savedBrand = localStorage.getItem("zhealth-brand-guide");
       if (savedBrand) setBrandGuide(JSON.parse(savedBrand));
     } catch {
@@ -97,65 +95,29 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
     }
   }, []);
 
-  // Check which API keys are configured
-  useEffect(() => {
-    if (!show) return;
-    fetch("/api/site-info")
-      .then((res) => {
-        if (res.ok) {
-          setConfiguredProviders((prev) => ({ ...prev, claude: true }));
-        }
-        return res.json();
-      })
-      .catch(() => {});
+  // No API probing -- models are listed statically
 
-    // Check Gemini availability by attempting a lightweight probe
-    // We infer configuration from env -- the chat route will fail gracefully if not set
-    // For now, mark as potentially configured and let runtime errors surface
-    fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [],
-        model: "gemini-2.0-flash",
-      }),
-    })
-      .then((res) => {
-        // 400 means the route handled it (API key might be present)
-        // 500 with specific message means no key
-        if (res.status === 400) {
-          // Messages required error -- endpoint is reachable, key might be present
-          setConfiguredProviders((prev) => ({ ...prev, gemini: true }));
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data?.error?.includes("GEMINI_API_KEY")) {
-          setConfiguredProviders((prev) => ({ ...prev, gemini: false }));
-        }
-      })
-      .catch(() => {});
-  }, [show]);
-
-  // Theme application
+  // Theme application -- delegate to parent if available, otherwise local
   const applyTheme = useCallback((mode: ThemeMode) => {
-    setTheme(mode);
-    localStorage.setItem("zhealth-theme", mode);
-
-    if (mode === "dark") {
-      document.documentElement.classList.add("dark");
-    } else if (mode === "light") {
-      document.documentElement.classList.remove("dark");
+    if (onThemeChange) {
+      onThemeChange(mode);
     } else {
-      // Auto: follow system preference
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (prefersDark) {
+      setLocalTheme(mode);
+      localStorage.setItem("zhealth-theme", mode);
+      if (mode === "dark") {
         document.documentElement.classList.add("dark");
-      } else {
+      } else if (mode === "light") {
         document.documentElement.classList.remove("dark");
+      } else {
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (prefersDark) {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
       }
     }
-  }, []);
+  }, [onThemeChange]);
 
   // AI Model save
   const handleModelChange = useCallback((model: string) => {
@@ -188,7 +150,6 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
       setWpSiteName(data.site?.name || "Unknown");
       setWpSiteUrl(data.site?.url || "");
       setWpStatus("connected");
-      setConfiguredProviders((prev) => ({ ...prev, claude: true }));
     } catch {
       setWpStatus("disconnected");
       setWpSiteName("");
@@ -227,10 +188,6 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [show, onClose]);
-
-  const isProviderConfigured = (provider: "claude" | "gemini") => {
-    return provider === "claude" ? configuredProviders.claude : configuredProviders.gemini;
-  };
 
   return (
     <>
@@ -297,60 +254,46 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
           {/* AI Model */}
           <SectionHeader title="AI Model" />
           <div className="space-y-2">
-            {AI_MODELS.map((model) => {
-              const configured = isProviderConfigured(model.provider);
-              return (
-                <label
-                  key={model.value}
-                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+            {AI_MODELS.map((model) => (
+              <label
+                key={model.value}
+                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                  aiModel === model.value
+                    ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                    : "bg-gray-50 dark:bg-[#2c2c2e] border border-transparent hover:bg-gray-100 dark:hover:bg-[#3a3a3c]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="ai-model"
+                  value={model.value}
+                  checked={aiModel === model.value}
+                  onChange={() => handleModelChange(model.value)}
+                  className="sr-only"
+                />
+                <div
+                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                     aiModel === model.value
-                      ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
-                      : "bg-gray-50 dark:bg-[#2c2c2e] border border-transparent hover:bg-gray-100 dark:hover:bg-[#3a3a3c]"
+                      ? "border-blue-500"
+                      : "border-gray-300 dark:border-gray-600"
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="ai-model"
-                    value={model.value}
-                    checked={aiModel === model.value}
-                    onChange={() => handleModelChange(model.value)}
-                    className="sr-only"
-                  />
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                      aiModel === model.value
-                        ? "border-blue-500"
-                        : "border-gray-300 dark:border-gray-600"
-                    }`}
-                  >
-                    {aiModel === model.value && (
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{model.label}</p>
-                      {/* Configuration status dot */}
-                      <div
-                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          configured ? "bg-emerald-400" : "bg-gray-300 dark:bg-gray-600"
-                        }`}
-                        title={configured ? "API key configured" : "Not configured"}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {model.description}
-                      {!configured && (
-                        <span className="text-amber-500 dark:text-amber-400 ml-1">
-                          -- Not configured
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </label>
-              );
-            })}
+                  {aiModel === model.value && (
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{model.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {model.description}
+                  </p>
+                </div>
+              </label>
+            ))}
           </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+            Configure API keys in Vercel environment variables.
+          </p>
 
           <Divider />
 

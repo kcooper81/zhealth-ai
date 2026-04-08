@@ -16,7 +16,7 @@ interface Tag {
   count: number;
 }
 
-type FilterType = "all" | "tagged" | "recent" | "pipeline";
+type FilterType = "all" | "tagged" | "recent";
 
 interface CRMPanelProps {
   onSelectContact: (contact: { id: number; name: string; email: string }) => void;
@@ -108,9 +108,6 @@ export default function CRMPanel({
       case "recent":
         result = result.slice(0, 10);
         break;
-      case "pipeline":
-        // Pipeline filter - show all for now, could be refined with real pipeline data
-        break;
     }
     return result;
   }, [contacts, search, filter]);
@@ -119,7 +116,6 @@ export default function CRMPanel({
     { label: "All", value: "all" },
     { label: "Tagged", value: "tagged" },
     { label: "Recent", value: "recent" },
-    { label: "Pipeline", value: "pipeline" },
   ];
 
   const handleClearSelection = useCallback(() => {

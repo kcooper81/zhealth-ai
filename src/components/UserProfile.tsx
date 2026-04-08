@@ -8,20 +8,21 @@ import { Settings, Keyboard, X, Moon, Sun, Monitor } from "./icons";
 interface UserProfileProps {
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
+  theme?: "light" | "dark" | "auto";
+  onThemeChange?: (theme: "light" | "dark" | "auto") => void;
 }
 
-type Theme = "light" | "dark" | "system";
+type Theme = "light" | "dark" | "auto";
 
 export default function UserProfile({
   onOpenSettings,
   onOpenShortcuts,
+  theme: externalTheme,
+  onThemeChange,
 }: UserProfileProps) {
   const { data: session } = useSession();
   const [isOpen, setIsOpen] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "system";
-    return (localStorage.getItem("zhealth-theme") as Theme) || "system";
-  });
+  const theme = externalTheme || "auto";
   const ref = useRef<HTMLDivElement>(null);
 
   useClickOutside(ref, () => setIsOpen(false));
@@ -37,21 +38,8 @@ export default function UserProfile({
     : "?";
 
   function applyTheme(newTheme: Theme) {
-    setTheme(newTheme);
-    localStorage.setItem("zhealth-theme", newTheme);
-
-    const root = document.documentElement;
-    if (newTheme === "dark") {
-      root.classList.add("dark");
-    } else if (newTheme === "light") {
-      root.classList.remove("dark");
-    } else {
-      // System preference
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
+    if (onThemeChange) {
+      onThemeChange(newTheme);
     }
   }
 
@@ -143,9 +131,9 @@ export default function UserProfile({
                 Dark
               </button>
               <button
-                onClick={() => applyTheme("system")}
+                onClick={() => applyTheme("auto")}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  theme === "system"
+                  theme === "auto"
                     ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm"
                     : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 }`}

@@ -51,11 +51,22 @@ export default function PreviewPanel({ url, title, show, onClose }: PreviewPanel
     };
   }, [isResizing]);
 
+  // On mobile (below md breakpoint), open in new tab instead of showing panel
+  useEffect(() => {
+    if (show && url && typeof window !== "undefined") {
+      const mq = window.matchMedia("(max-width: 767px)");
+      if (mq.matches) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        onClose();
+      }
+    }
+  }, [show, url, onClose]);
+
   if (!show) return null;
 
   return (
     <div
-      className="relative flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] animate-slide-in-right hidden lg:flex flex-col"
+      className="relative flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] animate-slide-in-right hidden md:flex flex-col"
       style={{ width: `${panelWidth}%` }}
     >
       {/* Resize handle */}

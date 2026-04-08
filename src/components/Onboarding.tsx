@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { useLocalStorage } from "@/lib/hooks";
 import { Document, Globe, BarChart, Zap } from "./icons";
 
@@ -33,14 +33,11 @@ const capabilities = [
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [seen, setSeen] = useLocalStorage("zhealth-onboarding-seen", false);
-  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   if (seen) return null;
 
   const handleGetStarted = () => {
-    if (dontShowAgain) {
-      setSeen(true);
-    }
+    setSeen(true);
     onComplete();
   };
 
@@ -92,17 +89,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           >
             Get Started
           </button>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={dontShowAgain}
-              onChange={(e) => setDontShowAgain(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-brand-blue focus:ring-brand-blue/30 bg-transparent"
-            />
-            <span className="text-xs text-gray-400 dark:text-gray-500">
-              Don&apos;t show this again
-            </span>
-          </label>
         </div>
       </div>
     </div>

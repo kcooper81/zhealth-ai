@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import type { Conversation, Workspace } from "@/lib/types";
 import { getWorkspace } from "@/lib/workspaces";
 import {
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Activity,
   PanelLeft,
+  Trash,
 } from "./icons";
 import WorkspaceSelector from "./WorkspaceSelector";
 import UserProfile from "./UserProfile";
@@ -24,6 +25,7 @@ interface SidebarProps {
   onSelectConversation: (id: string) => void;
   onNewConversation: () => void;
   onDeleteConversation: (id: string) => void;
+  onRenameConversation?: (id: string, title: string) => void;
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   activeJobCount: number;
@@ -34,6 +36,8 @@ interface SidebarProps {
   onRunWorkflow?: (workflowId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  theme?: "light" | "dark" | "auto";
+  onThemeChange?: (theme: "light" | "dark" | "auto") => void;
 }
 
 function groupConversations(conversations: Conversation[]) {
@@ -72,6 +76,7 @@ export default function Sidebar({
   onSelectConversation,
   onNewConversation,
   onDeleteConversation,
+  onRenameConversation,
   onOpenSettings,
   onOpenShortcuts,
   activeJobCount,
@@ -82,6 +87,8 @@ export default function Sidebar({
   onRunWorkflow,
   collapsed,
   onToggleCollapse,
+  theme,
+  onThemeChange,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarWorkflows, setSidebarWorkflows] = useState<
@@ -311,6 +318,7 @@ export default function Sidebar({
                       onCloseSidebar();
                     }}
                     onDelete={() => onDeleteConversation(conv.id)}
+                    onRename={(title: string) => onRenameConversation?.(conv.id, title)}
                   />
                 ))}
               </div>
@@ -324,6 +332,8 @@ export default function Sidebar({
             <UserProfile
               onOpenSettings={onOpenSettings}
               onOpenShortcuts={onOpenShortcuts}
+              theme={theme}
+              onThemeChange={onThemeChange}
             />
           </div>
           <button
@@ -352,23 +362,104 @@ function ConversationItem({
   accentColor,
   onSelect,
   onDelete,
+  onRename,
 }: {
   conversation: Conversation;
   isActive: boolean;
   accentColor: string;
   onSelect: () => void;
   onDelete: () => void;
+  onRename: (title: string) => void;
 }) {
-  const [showDelete, setShowDelete] = useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(conversation.title);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMsg = conversation.messages[conversation.messages.length - 1];
   const preview = lastMsg ? lastMsg.content.slice(0, 60) : "";
   const convWorkspace = getWorkspace(conversation.workspace || "all");
 
+  // Auto-cancel delete confirmation after 5 seconds
+  React.useEffect(() => {
+    if (confirmingDelete) {
+      confirmTimerRef.current = setTimeout(() => {
+        setConfirmingDelete(false);
+      }, 5000);
+    }
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, [confirmingDelete]);
+
+  // Focus input when editing starts
+  React.useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditValue(conversation.title);
+    setIsEditing(true);
+  };
+
+  const handleRenameSubmit = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== conversation.title) {
+      onRename(trimmed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsEditing(false);
+    }
+  };
+
+  // Delete confirmation view
+  if (confirmingDelete) {
+    return (
+      <div className="w-full flex items-center gap-2 px-2.5 py-2.5 rounded-xl bg-red-900/20 border border-red-800/30">
+        <p className="text-xs text-red-300 flex-1 truncate">Delete this conversation?</p>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirmingDelete(false);
+            onDelete();
+          }}
+          className="px-2 py-1 text-[11px] font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+        >
+          Delete
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirmingDelete(false);
+          }}
+          className="px-2 py-1 text-[11px] font-medium text-gray-300 bg-white/10 rounded-md hover:bg-white/15 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
   return (
     <button
       onClick={onSelect}
-      onMouseEnter={() => setShowDelete(true)}
-      onMouseLeave={() => setShowDelete(false)}
+      onDoubleClick={handleDoubleClick}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
       className={`w-full flex items-start gap-2 px-2.5 py-2.5 rounded-xl text-left transition-all duration-200 group relative ${
         isActive
           ? "border-l-2 bg-white/[0.08]"
@@ -386,14 +477,27 @@ function ConversationItem({
         style={{ backgroundColor: convWorkspace.color }}
       />
       <div className="flex-1 min-w-0">
-        <p
-          className={`text-sm font-medium truncate ${
-            isActive ? "text-white" : "text-gray-300"
-          }`}
-        >
-          {conversation.title || "New conversation"}
-        </p>
-        {preview && (
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleRenameSubmit}
+            onKeyDown={handleRenameKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full text-sm font-medium text-white bg-white/10 border border-white/20 rounded px-1.5 py-0.5 outline-none focus:border-blue-400 transition-colors"
+          />
+        ) : (
+          <p
+            className={`text-sm font-medium truncate ${
+              isActive ? "text-white" : "text-gray-300"
+            }`}
+          >
+            {conversation.title || "New conversation"}
+          </p>
+        )}
+        {preview && !isEditing && (
           <p className="text-[12px] text-gray-500 truncate mt-0.5">
             {preview}
           </p>
@@ -403,15 +507,16 @@ function ConversationItem({
         <span className="text-[11px] text-gray-500">
           {formatRelativeTime(conversation.updatedAt)}
         </span>
-        {showDelete && (
+        {showActions && !isEditing && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDelete();
+              setConfirmingDelete(true);
             }}
             className="w-5 h-5 rounded flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+            title="Delete conversation"
           >
-            <X size={12} />
+            <Trash size={12} />
           </button>
         )}
       </div>

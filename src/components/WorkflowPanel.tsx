@@ -137,6 +137,9 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [showStepDropdown, setShowStepDropdown] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load workflows
@@ -158,14 +161,17 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
 
   const loadWorkflows = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch("/api/workflows");
       if (res.ok) {
         const data = await res.json();
         setWorkflows(data);
+      } else {
+        setLoadError("Could not load workflows.");
       }
     } catch {
-      // silently fail
+      setLoadError("Could not load workflows.");
     } finally {
       setLoading(false);
     }
@@ -176,6 +182,7 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
     const method = isNew ? "POST" : "PUT";
     const url = isNew ? "/api/workflows" : `/api/workflows/${workflow.id}`;
 
+    setSaveError(null);
     try {
       const res = await fetch(url, {
         method,
@@ -186,18 +193,25 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
         await loadWorkflows();
         setView("list");
         setEditingWorkflow(null);
+      } else {
+        setSaveError("Failed to save workflow. Please try again.");
       }
     } catch {
-      // silently fail
+      setSaveError("Failed to save workflow. Please try again.");
     }
   };
 
   const handleDeleteWorkflow = async (id: string) => {
+    setDeleteError(null);
     try {
-      await fetch(`/api/workflows/${id}`, { method: "DELETE" });
-      await loadWorkflows();
+      const res = await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setDeleteError("Failed to delete workflow.");
+      } else {
+        await loadWorkflows();
+      }
     } catch {
-      // silently fail
+      setDeleteError("Failed to delete workflow.");
     }
   };
 
@@ -253,6 +267,11 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
 
       if (!res.ok || !res.body) {
         setRunStatus("failed");
+        setStepResults((prev) =>
+          prev.map((r, i) =>
+            i === 0 ? { ...r, status: "failed", error: "Workflow run failed. The server returned an error." } : r
+          )
+        );
         return;
       }
 
@@ -377,6 +396,8 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
             <WorkflowList
               workflows={workflows}
               loading={loading}
+              loadError={loadError}
+              deleteError={deleteError}
               onRun={openRunner}
               onEdit={openEditor}
               onDelete={handleDeleteWorkflow}
@@ -391,6 +412,7 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
               onCancel={() => { setView("list"); setEditingWorkflow(null); }}
               showStepDropdown={showStepDropdown}
               setShowStepDropdown={setShowStepDropdown}
+              saveError={saveError}
             />
           )}
           {view === "runner" && runningWorkflow && (
@@ -417,6 +439,8 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
 function WorkflowList({
   workflows,
   loading,
+  loadError,
+  deleteError,
   onRun,
   onEdit,
   onDelete,
@@ -424,6 +448,8 @@ function WorkflowList({
 }: {
   workflows: Workflow[];
   loading: boolean;
+  loadError: string | null;
+  deleteError: string | null;
   onRun: (w: Workflow) => void;
   onEdit: (w?: Workflow) => void;
   onDelete: (id: string) => void;
@@ -439,6 +465,16 @@ function WorkflowList({
 
   return (
     <div className="p-6">
+      {loadError && (
+        <div className="mb-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl">
+          <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+        </div>
+      )}
+      {deleteError && (
+        <div className="mb-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl">
+          <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {workflows.map((wf) => (
           <WorkflowCard
@@ -555,6 +591,7 @@ function WorkflowEditor({
   onCancel,
   showStepDropdown,
   setShowStepDropdown,
+  saveError,
 }: {
   workflow: Workflow;
   onChange: (w: Workflow) => void;
@@ -562,6 +599,7 @@ function WorkflowEditor({
   onCancel: () => void;
   showStepDropdown: boolean;
   setShowStepDropdown: (v: boolean) => void;
+  saveError: string | null;
 }) {
   const updateField = (field: string, value: any) => {
     onChange({ ...workflow, [field]: value });
@@ -685,20 +723,25 @@ function WorkflowEditor({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-        <button
-          onClick={onSave}
-          disabled={!workflow.name.trim() || workflow.steps.length === 0}
-          className="px-5 py-2.5 text-sm font-medium text-white bg-brand-blue rounded-xl hover:bg-brand-blue/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          Save Workflow
-        </button>
-        <button
-          onClick={onCancel}
-          className="px-5 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
-        >
-          Cancel
-        </button>
+      <div className="flex flex-col gap-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+        {saveError && (
+          <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+        )}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onSave}
+            disabled={!workflow.name.trim() || workflow.steps.length === 0}
+            className="px-5 py-2.5 text-sm font-medium text-white bg-brand-blue rounded-xl hover:bg-brand-blue/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Save Workflow
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

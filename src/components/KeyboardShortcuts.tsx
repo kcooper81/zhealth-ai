@@ -14,8 +14,9 @@ const shortcuts = [
   { keys: ["Shift", "Enter"], description: "New line" },
   { keys: ["Cmd", "N"], description: "New conversation" },
   { keys: ["Cmd", "P"], description: "Toggle preview panel" },
-  { keys: ["Cmd", "K"], description: "Focus page selector" },
   { keys: ["Cmd", "B"], description: "Toggle sidebar" },
+  { keys: ["Cmd", "J"], description: "Toggle jobs panel" },
+  { keys: ["Cmd", "E"], description: "Toggle workspace panel" },
   { keys: ["Esc"], description: "Cancel / Close" },
   { keys: ["?"], description: "Show this help" },
 ];
