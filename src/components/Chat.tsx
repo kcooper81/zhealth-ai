@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import type { ChatMessage, Conversation, PendingAction } from "@/lib/types";
+import type { ChatMessage, Conversation, PendingAction, Workspace } from "@/lib/types";
 import type { Job } from "@/lib/jobs";
 import {
   createJob,
@@ -61,6 +61,7 @@ export default function Chat() {
   const [, setShowOnboarding] = useState(true);
   const [pages, setPages] = useState<SidebarPage[]>([]);
   const [selectedModel, setSelectedModel] = useLocalStorage<string>("zhealth-ai-model", "claude-sonnet-4-6");
+  const [workspace, setWorkspace] = useLocalStorage<Workspace>("zhealth-workspace", "all");
 
   // --- Jobs state ---
   const [jobs, setJobs] = useLocalStorage<Job[]>("zhealth-jobs", []);
@@ -146,6 +147,7 @@ export default function Chat() {
         title: firstMessage ? firstMessage.slice(0, 50) : "New conversation",
         messages: [],
         pageContextId: selectedPageId ?? undefined,
+        workspace,
         createdAt: now,
         updatedAt: now,
       };
@@ -153,7 +155,7 @@ export default function Chat() {
       setCurrentConversationId(id);
       return id;
     },
-    [selectedPageId, setConversations, setCurrentConversationId]
+    [selectedPageId, workspace, setConversations, setCurrentConversationId]
   );
 
   const addMessage = useCallback(
@@ -262,6 +264,7 @@ export default function Chat() {
             pageContextId: selectedPageId || undefined,
             conversationId: convId,
             model: selectedModel,
+            workspace,
           }),
         });
 
@@ -355,7 +358,7 @@ export default function Chat() {
         currentJobRef.current = null;
       }
     },
-    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, conversations, selectedPageId, selectedModel, setJobs, updateJob]
+    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, conversations, selectedPageId, selectedModel, workspace, setJobs, updateJob]
   );
 
   const handleCancelStream = useCallback(() => {
@@ -488,6 +491,8 @@ export default function Chat() {
         user={session?.user}
         activeJobCount={jobs.filter(isJobActive).length}
         onOpenJobs={() => setShowJobsPanel(true)}
+        workspace={workspace}
+        onWorkspaceChange={setWorkspace}
       />
 
       {/* Main chat area */}

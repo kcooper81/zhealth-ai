@@ -67,6 +67,7 @@ export async function createConversation(
     title: title || "New conversation",
     messages: [],
     pageContextId,
+    workspace: "all",
     createdAt: now,
     updatedAt: now,
   };

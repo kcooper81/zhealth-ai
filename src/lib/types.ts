@@ -95,11 +95,22 @@ export interface ChatMessage {
   actionResult?: ActionResult | null;
 }
 
+export type Workspace = 'all' | 'website' | 'crm' | 'analytics';
+
+export interface WorkspaceConfig {
+  id: Workspace;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
 export interface Conversation {
   id: string;
   title: string;
   messages: ChatMessage[];
   pageContextId?: number;
+  workspace: Workspace;
   createdAt: string;
   updatedAt: string;
 }

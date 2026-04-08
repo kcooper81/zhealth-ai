@@ -1,9 +1,22 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import type { Conversation } from "@/lib/types";
-import { Plus, Search, Settings, Keyboard, X, MessageSquare, Workflow, ChevronRight, Activity, Layers } from "./icons";
+import type { Conversation, Workspace } from "@/lib/types";
+import { getWorkspace, getQuickActions } from "@/lib/workspaces";
+import {
+  Plus,
+  Search,
+  Settings,
+  Keyboard,
+  X,
+  MessageSquare,
+  Workflow,
+  ChevronRight,
+  Activity,
+  Calendar,
+} from "./icons";
 import PageSelector from "./PageSelector";
+import WorkspaceSelector from "./WorkspaceSelector";
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -34,9 +47,9 @@ interface SidebarProps {
   } | null;
   activeJobCount?: number;
   onOpenJobs?: () => void;
+  workspace: Workspace;
+  onWorkspaceChange: (workspace: Workspace) => void;
 }
-
-type SidebarTab = "pages" | "chat";
 
 function groupConversations(conversations: Conversation[]) {
   const now = new Date();
@@ -66,6 +79,13 @@ function groupConversations(conversations: Conversation[]) {
   return groups.filter((g) => g.items.length > 0);
 }
 
+const DATE_RANGE_PRESETS = [
+  { label: "Today", value: "today" },
+  { label: "7 days", value: "7d" },
+  { label: "30 days", value: "30d" },
+  { label: "90 days", value: "90d" },
+];
+
 export default function Sidebar({
   conversations,
   currentConversationId,
@@ -85,36 +105,48 @@ export default function Sidebar({
   user,
   activeJobCount = 0,
   onOpenJobs,
+  workspace,
+  onWorkspaceChange,
 }: SidebarProps) {
-  const [activeTab, setActiveTab] = useState<SidebarTab>("chat");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sidebarWorkflows, setSidebarWorkflows] = useState<Array<{ id: string; name: string; icon: string }>>([]);
+  const [dateRange, setDateRange] = useState("7d");
+  const [sidebarWorkflows, setSidebarWorkflows] = useState<
+    Array<{ id: string; name: string; icon: string }>
+  >([]);
 
   useEffect(() => {
     fetch("/api/workflows")
-      .then((res) => res.ok ? res.json() : [])
-      .then((data: Array<{ id: string; name: string; icon: string }>) => setSidebarWorkflows(data.slice(0, 4)))
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: Array<{ id: string; name: string; icon: string }>) =>
+        setSidebarWorkflows(data.slice(0, 4))
+      )
       .catch(() => {});
   }, []);
 
+  // Filter conversations to current workspace
+  const workspaceConversations = useMemo(() => {
+    return conversations.filter((c) => {
+      // For backwards compat: conversations without a workspace field show in 'all'
+      const convWorkspace = c.workspace || "all";
+      if (workspace === "all") return true;
+      return convWorkspace === workspace;
+    });
+  }, [conversations, workspace]);
+
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return conversations;
+    if (!searchQuery.trim()) return workspaceConversations;
     const q = searchQuery.toLowerCase();
-    return conversations.filter(
+    return workspaceConversations.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
         c.messages.some((m) => m.content.toLowerCase().includes(q))
     );
-  }, [conversations, searchQuery]);
+  }, [workspaceConversations, searchQuery]);
 
   const groups = useMemo(() => groupConversations(filtered), [filtered]);
 
-  const quickActions = [
-    "What can I do?",
-    "List pages",
-    "New page",
-    "SEO check",
-  ];
+  const quickActions = getQuickActions(workspace);
+  const workspaceConfig = getWorkspace(workspace);
 
   return (
     <>
@@ -129,10 +161,12 @@ export default function Sidebar({
       {/* Sidebar */}
       <aside
         className={`fixed md:relative z-50 md:z-auto top-0 left-0 h-full w-[300px] bg-white dark:bg-[#1c1c1e] border-r border-gray-200 dark:border-gray-800 flex flex-col transition-transform duration-300 ease-out ${
-          showSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          showSidebar
+            ? "translate-x-0"
+            : "-translate-x-full md:translate-x-0"
         }`}
       >
-        {/* Header */}
+        {/* Header: Logo */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-shrink-0">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,167 +175,222 @@ export default function Sidebar({
               alt="Z-Health"
               className="h-5 w-auto dark:invert"
             />
-            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">AI</span>
+            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+              AI
+            </span>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onNewConversation}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title="New chat"
-            >
-              <Plus size={18} />
-            </button>
-            <button
-              onClick={onCloseSidebar}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors md:hidden"
-            >
-              <X size={18} />
-            </button>
-          </div>
+          <button
+            onClick={onCloseSidebar}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors md:hidden"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Tab bar -- iOS-style segmented control */}
+        {/* Workspace selector */}
         <div className="px-3 pb-3 flex-shrink-0">
-          <div className="relative flex bg-gray-100 dark:bg-[#2c2c2e] rounded-lg p-0.5">
-            {/* Sliding pill background */}
-            <div
-              className="absolute top-0.5 bottom-0.5 rounded-md bg-white dark:bg-[#3a3a3c] shadow-sm transition-all duration-300 ease-out"
-              style={{
-                left: activeTab === "pages" ? "2px" : "calc(50% + 0px)",
-                width: "calc(50% - 2px)",
-              }}
-            />
-            <button
-              onClick={() => setActiveTab("pages")}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[13px] font-semibold rounded-md transition-colors duration-200 ${
-                activeTab === "pages"
-                  ? "text-gray-900 dark:text-white"
-                  : "text-gray-500 dark:text-gray-400"
-              }`}
-            >
-              <Layers size={14} />
-              Pages
-            </button>
-            <button
-              onClick={() => setActiveTab("chat")}
-              className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[13px] font-semibold rounded-md transition-colors duration-200 ${
-                activeTab === "chat"
-                  ? "text-gray-900 dark:text-white"
-                  : "text-gray-500 dark:text-gray-400"
-              }`}
-            >
-              <MessageSquare size={14} />
-              Chat
-            </button>
-          </div>
+          <WorkspaceSelector
+            workspace={workspace}
+            onWorkspaceChange={onWorkspaceChange}
+          />
         </div>
 
-        {/* Tab content */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {activeTab === "pages" ? (
-            /* =================== PAGES TAB =================== */
-            <PageSelector
-              pages={pages}
-              selectedPageId={selectedPageId}
-              onSelect={(pageId) => {
-                onSelectPage(pageId);
-              }}
-              mode="list"
-            />
-          ) : (
-            /* =================== CHAT TAB =================== */
-            <>
-              {/* Workflows section */}
-              <div className="px-3 pb-3 flex-shrink-0">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Workflow size={13} className="text-gray-400 dark:text-gray-500" />
-                    <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      Workflows
-                    </p>
-                  </div>
+        {/* New Chat button */}
+        <div className="px-3 pb-3 flex-shrink-0">
+          <button
+            onClick={onNewConversation}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-[0.98]"
+            style={{ backgroundColor: workspaceConfig.color }}
+          >
+            <Plus size={16} />
+            New Chat
+          </button>
+        </div>
+
+        {/* Context picker (workspace-specific) */}
+        <div className="flex-shrink-0">
+          {workspace === "website" && (
+            <div className="border-t border-gray-100 dark:border-gray-800">
+              <div className="max-h-[200px] overflow-y-auto">
+                <PageSelector
+                  pages={pages}
+                  selectedPageId={selectedPageId}
+                  onSelect={(pageId) => {
+                    onSelectPage(pageId);
+                  }}
+                  mode="list"
+                />
+              </div>
+            </div>
+          )}
+
+          {workspace === "crm" && (
+            <div className="px-3 pb-3">
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
+                <Search size={14} className="text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search contacts or tags..."
+                  className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 px-1">
+                Use quick actions below to browse contacts, tags, and pipeline.
+              </p>
+            </div>
+          )}
+
+          {workspace === "analytics" && (
+            <div className="px-3 pb-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Calendar
+                  size={13}
+                  className="text-gray-400 dark:text-gray-500"
+                />
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  Date Range
+                </p>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {DATE_RANGE_PRESETS.map((preset) => (
                   <button
-                    onClick={onOpenWorkflows}
-                    className="text-[11px] font-medium text-brand-blue hover:text-brand-blue/80 transition-colors"
+                    key={preset.value}
+                    onClick={() => setDateRange(preset.value)}
+                    className={`px-2.5 py-1 text-[12px] font-medium rounded-full transition-colors ${
+                      dateRange === preset.value
+                        ? "text-white"
+                        : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                    }`}
+                    style={
+                      dateRange === preset.value
+                        ? { backgroundColor: workspaceConfig.color }
+                        : undefined
+                    }
                   >
-                    View all
+                    {preset.label}
                   </button>
-                </div>
-                <div className="space-y-0.5">
-                  {sidebarWorkflows.map((wf) => (
-                    <button
-                      key={wf.id}
-                      onClick={() => {
-                        onRunWorkflow(wf.id);
-                        onCloseSidebar();
-                      }}
-                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors group"
-                    >
-                      <span className="truncate">{wf.name}</span>
-                      <ChevronRight size={12} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 flex-shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-gray-100 dark:border-gray-800 mx-3 flex-shrink-0" />
-
-              {/* Search conversations */}
-              <div className="px-3 pt-3 pb-2 flex-shrink-0">
-                <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
-                  <Search size={14} className="text-gray-400 flex-shrink-0" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search conversations..."
-                    className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Conversation list */}
-              <div className="flex-1 overflow-y-auto px-2">
-                {groups.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-12 px-4">
-                    <MessageSquare size={24} className="text-gray-300 dark:text-gray-600 mb-2" />
-                    <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
-                      No conversations yet. Start by asking me to build something.
-                    </p>
-                  </div>
-                )}
-
-                {groups.map((group) => (
-                  <div key={group.label} className="mb-3">
-                    <div className="px-2 py-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                      {group.label}
-                    </div>
-                    {group.items.map((conv) => (
-                      <ConversationItem
-                        key={conv.id}
-                        conversation={conv}
-                        isActive={conv.id === currentConversationId}
-                        onSelect={() => {
-                          onSelectConversation(conv.id);
-                          onCloseSidebar();
-                        }}
-                        onDelete={() => onDeleteConversation(conv.id)}
-                      />
-                    ))}
-                  </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
+
+          {workspace === "all" && (
+            <div className="px-3 pb-3">
+              <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
+                <Search size={14} className="text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search across all services..."
+                  className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-gray-100 dark:border-gray-800 mx-3 flex-shrink-0" />
+
+        {/* Conversation list section */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Workflows section */}
+          {sidebarWorkflows.length > 0 && (
+            <div className="px-3 pt-3 pb-2 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Workflow
+                    size={13}
+                    className="text-gray-400 dark:text-gray-500"
+                  />
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    Workflows
+                  </p>
+                </div>
+                <button
+                  onClick={onOpenWorkflows}
+                  className="text-[11px] font-medium text-brand-blue hover:text-brand-blue/80 transition-colors"
+                >
+                  View all
+                </button>
+              </div>
+              <div className="space-y-0.5">
+                {sidebarWorkflows.map((wf) => (
+                  <button
+                    key={wf.id}
+                    onClick={() => {
+                      onRunWorkflow(wf.id);
+                      onCloseSidebar();
+                    }}
+                    className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-gray-200 transition-colors group"
+                  >
+                    <span className="truncate">{wf.name}</span>
+                    <ChevronRight
+                      size={12}
+                      className="text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 flex-shrink-0"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Search conversations */}
+          <div className="px-3 pt-2 pb-2 flex-shrink-0">
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">
+              <Search size={14} className="text-gray-400 flex-shrink-0" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search conversations..."
+                className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Conversation list */}
+          <div className="flex-1 overflow-y-auto px-2">
+            {groups.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <MessageSquare
+                  size={24}
+                  className="text-gray-300 dark:text-gray-600 mb-2"
+                />
+                <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
+                  No conversations yet. Start by asking me to build something.
+                </p>
+              </div>
+            )}
+
+            {groups.map((group) => (
+              <div key={group.label} className="mb-3">
+                <div className="px-2 py-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  {group.label}
+                </div>
+                {group.items.map((conv) => (
+                  <ConversationItem
+                    key={conv.id}
+                    conversation={conv}
+                    isActive={conv.id === currentConversationId}
+                    accentColor={workspaceConfig.color}
+                    onSelect={() => {
+                      onSelectConversation(conv.id);
+                      onCloseSidebar();
+                    }}
+                    onDelete={() => onDeleteConversation(conv.id)}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Quick actions pills */}
@@ -311,7 +400,23 @@ export default function Sidebar({
               <button
                 key={action}
                 onClick={() => onQuickAction(action)}
-                className="px-2.5 py-1 text-[12px] font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                className="px-2.5 py-1 text-[12px] font-medium rounded-full transition-colors hover:text-white"
+                style={
+                  {
+                    backgroundColor: `${workspaceConfig.color}10`,
+                    color: workspaceConfig.color,
+                    "--hover-bg": workspaceConfig.color,
+                  } as React.CSSProperties
+                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    workspaceConfig.color;
+                  e.currentTarget.style.color = "#ffffff";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = `${workspaceConfig.color}10`;
+                  e.currentTarget.style.color = workspaceConfig.color;
+                }}
               >
                 {action}
               </button>
@@ -379,17 +484,20 @@ export default function Sidebar({
 function ConversationItem({
   conversation,
   isActive,
+  accentColor,
   onSelect,
   onDelete,
 }: {
   conversation: Conversation;
   isActive: boolean;
+  accentColor: string;
   onSelect: () => void;
   onDelete: () => void;
 }) {
   const [showDelete, setShowDelete] = useState(false);
   const lastMsg = conversation.messages[conversation.messages.length - 1];
   const preview = lastMsg ? lastMsg.content.slice(0, 60) : "";
+  const convWorkspace = getWorkspace(conversation.workspace || "all");
 
   return (
     <button
@@ -398,17 +506,29 @@ function ConversationItem({
       onMouseLeave={() => setShowDelete(false)}
       className={`w-full flex items-start gap-2 px-2.5 py-2.5 rounded-xl text-left transition-all duration-200 group relative ${
         isActive
-          ? "bg-brand-blue/[0.08] border-l-2 border-brand-blue"
+          ? "border-l-2"
           : "hover:bg-gray-50 dark:hover:bg-gray-800/50 border-l-2 border-transparent"
       }`}
+      style={
+        isActive
+          ? {
+              backgroundColor: `${accentColor}0d`,
+              borderLeftColor: accentColor,
+            }
+          : undefined
+      }
     >
+      {/* Workspace color dot */}
+      <span
+        className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
+        style={{ backgroundColor: convWorkspace.color }}
+      />
       <div className="flex-1 min-w-0">
         <p
           className={`text-sm font-medium truncate ${
-            isActive
-              ? "text-brand-blue"
-              : "text-gray-800 dark:text-gray-200"
+            isActive ? "" : "text-gray-800 dark:text-gray-200"
           }`}
+          style={isActive ? { color: accentColor } : undefined}
         >
           {conversation.title || "New conversation"}
         </p>

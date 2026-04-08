@@ -5,6 +5,8 @@ import { parseActions } from "@/lib/actions";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
+import { getSystemPromptAddendum } from "@/lib/workspaces";
+import type { Workspace } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,12 +15,15 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth();
     const body = await request.json();
-    const { messages, pageContextId, conversationId, model: requestedModel } = body as {
+    const { messages, pageContextId, conversationId, model: requestedModel, workspace: requestedWorkspace } = body as {
       messages: Array<{ role: string; content: string }>;
       pageContextId?: number;
       conversationId?: string;
       model?: string;
+      workspace?: Workspace;
     };
+
+    const workspace: Workspace = requestedWorkspace || "all";
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -84,7 +89,7 @@ export async function POST(request: NextRequest) {
       pages,
       currentPage,
       pluginContext: pluginContextStr,
-    });
+    }) + getSystemPromptAddendum(workspace);
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
