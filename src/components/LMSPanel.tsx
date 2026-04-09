@@ -246,7 +246,7 @@ export default function LMSPanel({
             <button
               key={action}
               onClick={() => onQuickAction?.(action)}
-              className="flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
+              className="flex items-center gap-2 px-2.5 py-2 text-[12px] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 active:bg-gray-100 dark:active:bg-gray-700 rounded-lg transition-colors text-left touch-target"
             >
               <TrendingUp size={12} className="flex-shrink-0 text-pink-500" />
               {action}

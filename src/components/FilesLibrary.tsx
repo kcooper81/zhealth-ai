@@ -237,7 +237,7 @@ export default function FilesLibrary({ show, onClose }: FilesLibraryProps) {
       {/* Panel */}
       <div
         ref={panelRef}
-        className="fixed top-0 right-0 h-full w-full max-w-[400px] bg-white dark:bg-[#1c1c1e] border-l border-gray-200 dark:border-gray-800 z-50 flex flex-col animate-slide-in-right shadow-2xl"
+        className="fixed top-0 right-0 h-full w-full sm:max-w-[400px] bg-white dark:bg-[#1c1c1e] border-l border-gray-200 dark:border-gray-800 z-50 flex flex-col animate-slide-in-right shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
@@ -247,9 +247,9 @@ export default function FilesLibrary({ show, onClose }: FilesLibraryProps) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-11 h-11 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors touch-target"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
@@ -490,14 +490,14 @@ function ReportLibraryCard({
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
-          {hovered && (
+          {(hovered || true) && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete();
               }}
               disabled={isDeleting}
-              className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+              className="w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/30 transition-colors disabled:opacity-50 touch-target"
               title="Delete report"
             >
               {isDeleting ? (

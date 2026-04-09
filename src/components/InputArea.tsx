@@ -3,6 +3,7 @@
 import React, { useRef, useState, useCallback } from "react";
 import { useAutoResize } from "@/lib/hooks";
 import type { FileAttachment } from "@/lib/types";
+import { notify } from "@/lib/notifications";
 import FilePreview from "./FilePreview";
 import { Send, StopCircle, Paperclip, Upload } from "./icons";
 
@@ -137,6 +138,7 @@ export default function InputArea({
 
       if (newFiles.length > 0) {
         setFiles((prev) => [...prev, ...newFiles].slice(0, MAX_FILES));
+        notify("info", newFiles.length === 1 ? "File attached" : `${newFiles.length} files attached`);
       }
     },
     [files.length, processFile]

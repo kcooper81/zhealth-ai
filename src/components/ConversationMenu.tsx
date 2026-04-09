@@ -29,10 +29,10 @@ function MenuItem({ icon: Icon, label, onClick, danger }: MenuItemProps) {
         e.stopPropagation();
         onClick();
       }}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors ${
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] font-medium transition-colors touch-target ${
         danger
-          ? "text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-          : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"
+          ? "text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/30"
+          : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:bg-gray-100 dark:active:bg-white/10"
       }`}
     >
       <Icon size={14} className={danger ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-gray-500"} />

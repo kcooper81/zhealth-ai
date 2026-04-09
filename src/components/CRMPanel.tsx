@@ -310,7 +310,7 @@ export default function CRMPanel({
                 <button
                   key={report.id}
                   onClick={() => onQuickAction(report.prompt)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 group"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-left transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700/50 group touch-target"
                 >
                   <span
                     className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"

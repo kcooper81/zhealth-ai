@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useNotifications, dismissNotification } from "@/lib/notifications";
 import type { Notification, NotificationType } from "@/lib/notifications";
-import { X, Check, AlertCircle, CircleCheck, CircleX } from "./icons";
+import { X, AlertCircle, CircleCheck, CircleX } from "./icons";
 
 const borderColors: Record<NotificationType, string> = {
   success: "border-l-green-500",
@@ -90,7 +90,7 @@ function ToastItem({ notification }: { notification: Notification }) {
       </div>
       <button
         onClick={handleDismiss}
-        className="absolute top-2.5 right-2.5 w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        className="absolute top-2 right-2 w-8 h-8 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600 transition-colors touch-target"
       >
         <X size={12} />
       </button>

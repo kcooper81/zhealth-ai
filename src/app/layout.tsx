@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Providers from "@/components/Providers";
 import "./globals.css";
 
@@ -6,6 +6,14 @@ export const metadata: Metadata = {
   title: "Z-Health AI",
   description:
     "AI-powered management dashboard for Z-Health Education WordPress site",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

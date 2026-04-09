@@ -153,7 +153,7 @@ export default function PinQuickAction({
         <button
           onClick={handleSave}
           disabled={saving || !label.trim() || !prompt.trim()}
-          className="w-full py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          className="w-full py-2.5 text-xs font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 active:bg-blue-700 disabled:opacity-50 transition-colors touch-target min-h-[36px]"
         >
           {saving ? "Saving..." : "Save"}
         </button>
