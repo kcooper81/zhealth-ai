@@ -177,44 +177,7 @@ export default function AnalyticsPanel({
         </div>
       </div>
 
-      {/* Quick reports */}
-      <div className="px-3 pb-2">
-        <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-          Quick Reports
-        </p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2">
-        <div className="space-y-1">
-          {QUICK_REPORTS.map((report) => {
-            const Icon = report.icon;
-            return (
-              <button
-                key={report.id}
-                onClick={() => onQuickAction(report.prompt)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700/50 group touch-target"
-              >
-                <span
-                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
-                  style={{ backgroundColor: `${accentColor}12` }}
-                >
-                  <Icon
-                    size={15}
-                    className="text-purple-500 transition-colors"
-                  />
-                </span>
-                <span className="flex-1 text-[13px] font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
-                  {report.label}
-                </span>
-                <ChevronRight
-                  size={13}
-                  className="text-gray-300 dark:text-gray-600 group-hover:text-gray-400 dark:group-hover:text-gray-500 flex-shrink-0 transition-colors"
-                />
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Quick reports moved to right bar CommandPanel */}
     </div>
   );
 }

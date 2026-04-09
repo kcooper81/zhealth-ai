@@ -232,28 +232,7 @@ export default function LMSPanel({
         ))}
       </div>
 
-      {/* Quick reports */}
-      <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-3">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-          Quick Reports
-        </p>
-        <div className="flex flex-col gap-1">
-          {[
-            "Show all courses and enrollment counts",
-            "Show LMS overview stats",
-            "Show recent enrollments",
-          ].map((action) => (
-            <button
-              key={action}
-              onClick={() => onQuickAction?.(action)}
-              className="flex items-center gap-2 px-2.5 py-2 text-[12px] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 active:bg-gray-100 dark:active:bg-gray-700 rounded-lg transition-colors text-left touch-target"
-            >
-              <TrendingUp size={12} className="flex-shrink-0 text-pink-500" />
-              {action}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Quick reports moved to right bar CommandPanel */}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Search, X, Users, ChevronRight, BarChart, Activity, Loader } from "./icons";
+import { Search, X, Users, Loader } from "./icons";
 
 interface Contact {
   id: number;
@@ -17,39 +17,6 @@ interface Tag {
 }
 
 type FilterType = "all" | "tagged" | "recent";
-
-const CRM_QUICK_REPORTS = [
-  {
-    id: "contact-growth",
-    label: "Contact Overview",
-    icon: Users,
-    prompt: "Show a contact overview report with names, emails, tags, and creation dates",
-  },
-  {
-    id: "tag-breakdown",
-    label: "Tag Breakdown",
-    icon: BarChart,
-    prompt: "Show a tag breakdown report with all tags and their categories",
-  },
-  {
-    id: "revenue",
-    label: "Revenue Report",
-    icon: Activity,
-    prompt: "Show a revenue report for the last 30 days with orders and totals",
-  },
-  {
-    id: "pipeline",
-    label: "Pipeline Status",
-    icon: BarChart,
-    prompt: "Show the current pipeline status with all opportunities and projected revenue",
-  },
-  {
-    id: "emails",
-    label: "Email Activity",
-    icon: Activity,
-    prompt: "Show email send activity for the last 30 days with subjects and recipients",
-  },
-];
 
 interface CRMPanelProps {
   onSelectContact: (contact: { id: number; name: string; email: string }) => void;
@@ -388,38 +355,6 @@ export default function CRMPanel({
           </div>
         )}
       </div>
-
-      {/* Quick reports */}
-      {onQuickAction && (
-        <div className="px-3 pt-2 pb-2 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">
-            Quick Reports
-          </p>
-          <div className="space-y-0.5">
-            {CRM_QUICK_REPORTS.map((report) => {
-              const Icon = report.icon;
-              return (
-                <button
-                  key={report.id}
-                  onClick={() => onQuickAction(report.prompt)}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-left transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700/50 group touch-target"
-                >
-                  <span
-                    className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${accentColor}12` }}
-                  >
-                    <Icon size={12} className="text-amber-500" />
-                  </span>
-                  <span className="flex-1 text-[12px] font-medium text-gray-600 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200 transition-colors">
-                    {report.label}
-                  </span>
-                  <ChevronRight size={11} className="text-gray-300 dark:text-gray-600 flex-shrink-0" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Tags section */}
       {!loading && tags.length > 0 && (
