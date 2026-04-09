@@ -525,8 +525,8 @@ export default function Sidebar({
                 )}
 
                 {groups.map((group) => (
-                  <div key={group.label} className="mb-2 mt-1">
-                    <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <div key={group.label} className="mb-1 mt-2 first:mt-0">
+                    <div className="px-2.5 py-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       {group.label === "Pinned" && (
                         <Pin size={11} className="text-gray-500" />
                       )}
@@ -798,7 +798,7 @@ function ConversationItem({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all duration-200 group relative mb-0.5 ${
+      className={`w-full flex items-center gap-2 px-2.5 py-[7px] rounded-md text-left transition-all duration-150 group relative ${
         isActive
           ? "border-l-2 bg-white/[0.08]"
           : "hover:bg-white/[0.04] active:bg-white/[0.06] border-l-2 border-transparent"
@@ -839,22 +839,21 @@ function ConversationItem({
         )}
         {/* Preview removed to keep sidebar compact */}
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <span className="text-[11px] text-gray-500">
+      <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+        <span className="text-[10px] text-gray-600 tabular-nums">
           {formatRelativeTime(conversation.updatedAt)}
         </span>
-        {/* Three-dot menu button */}
         {!isEditing && (
           <button
             onClick={handleMenuClick}
-            className={`w-7 h-7 rounded flex items-center justify-center text-gray-500 hover:text-gray-300 hover:bg-white/10 active:bg-white/20 transition-colors touch-target ${
+            className={`w-6 h-6 rounded flex items-center justify-center text-gray-500 hover:text-gray-300 hover:bg-white/10 transition-colors ${
               showActions
                 ? "opacity-100"
                 : "opacity-0 md:opacity-0 max-md:opacity-60"
             }`}
             title="More options"
           >
-            <MoreHorizontal size={14} />
+            <MoreHorizontal size={13} />
           </button>
         )}
       </div>

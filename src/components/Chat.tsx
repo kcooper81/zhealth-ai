@@ -30,6 +30,8 @@ import QuickActionsManager from "./QuickActionsManager";
 import FilesLibrary from "./FilesLibrary";
 import CommandPanel from "./CommandPanel";
 import DebugPanel from "./DebugPanel";
+import RightBar from "./RightBar";
+import ActivityPanel from "./ActivityPanel";
 import NotificationToast from "./NotificationToast";
 import { notify } from "@/lib/notifications";
 import { Menu, Loader, Document, X } from "./icons";
@@ -67,6 +69,7 @@ export default function Chat() {
   const [showFilesLibrary, setShowFilesLibrary] = useState(false);
   const [showCommandPanel, setShowCommandPanel] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [hasLogErrors, setHasLogErrors] = useState(false);
   const [initialWorkflowId, setInitialWorkflowId] = useState<string | null>(null);
   const [, setShowOnboarding] = useState(true);
@@ -1245,6 +1248,17 @@ export default function Chat() {
         />
       </div>
 
+      {/* Right icon bar */}
+      <RightBar
+        onOpenCommands={() => setShowCommandPanel(true)}
+        onOpenFiles={() => setShowFilesLibrary(true)}
+        onOpenDebug={() => setShowDebugPanel(true)}
+        onOpenActivity={() => setShowActivityPanel(true)}
+        onOpenJobs={() => setShowJobsPanel(true)}
+        hasErrors={hasLogErrors}
+        activeJobCount={jobs.filter(isJobActive).length}
+      />
+
       {/* Preview panel */}
       <PreviewPanel
         url={previewUrl}
@@ -1272,6 +1286,13 @@ export default function Chat() {
       <DebugPanel
         show={showDebugPanel}
         onClose={() => setShowDebugPanel(false)}
+      />
+
+      {/* Activity panel (slide-over) */}
+      <ActivityPanel
+        show={showActivityPanel}
+        onClose={() => setShowActivityPanel(false)}
+        workspace={workspace}
       />
 
       {/* Modals */}

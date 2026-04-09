@@ -98,12 +98,12 @@ export default function Message({
 
             {isUser ? (
               <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
-            ) : (
+            ) : message.content ? (
               <div
                 className="markdown-body text-[15px] leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
               />
-            )}
+            ) : null}
 
             {/* Report card */}
             {!isUser && message.reportData && (
