@@ -2,6 +2,7 @@ import { getWordPressClient } from "./wordpress";
 import * as keap from "./keap";
 import * as thinkific from "./thinkific";
 import type { PendingAction, ActionResult, PageSnapshot } from "./types";
+import { cacheInvalidate } from "./cache";
 
 const snapshots: Map<string, PageSnapshot> = new Map();
 
@@ -882,5 +883,57 @@ export async function executeAction(
       success: false,
       error: errorMessage,
     };
+  } finally {
+    // Invalidate relevant caches after write actions
+    invalidateCacheForAction(action.type);
+  }
+}
+
+/**
+ * Invalidate cached data when write actions modify external systems.
+ * Fire-and-forget — doesn't block the response.
+ */
+function invalidateCacheForAction(actionType: string): void {
+  switch (actionType) {
+    case "create_page":
+    case "update_page":
+    case "delete_page":
+      cacheInvalidate("wp:pages:");
+      break;
+    case "create_post":
+    case "update_post":
+    case "delete_post":
+      cacheInvalidate("wp:posts:");
+      break;
+    case "create_popup":
+    case "update_popup":
+    case "delete_popup":
+    case "update_popup_conditions":
+    case "popup_update_widget":
+      cacheInvalidate("wp:popups:");
+      break;
+    case "elementor_update_widget":
+    case "elementor_add_section":
+    case "elementor_remove_section":
+      cacheInvalidate("wp:pages:");
+      break;
+    case "keap_create_contact":
+    case "keap_update_contact":
+    case "keap_apply_tag":
+    case "keap_remove_tag":
+      cacheInvalidate("keap:");
+      break;
+    case "keap_create_tag":
+      cacheInvalidate("keap:tags");
+      break;
+    case "keap_create_opportunity":
+    case "keap_update_opportunity_stage":
+      cacheInvalidate("keap:pipeline");
+      break;
+    case "thinkific_update_course":
+    case "thinkific_create_enrollment":
+    case "thinkific_update_enrollment":
+      cacheInvalidate("thinkific:");
+      break;
   }
 }

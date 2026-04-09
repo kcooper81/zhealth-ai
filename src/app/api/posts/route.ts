@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { logError } from "@/lib/error-logger";
+import { cachedFetch, CacheKeys, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,12 +10,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const wp = getWordPressClient();
 
-    const posts = await wp.listPosts({
-      search: searchParams.get("search") || undefined,
-      status: searchParams.get("status") || undefined,
-      per_page: Number(searchParams.get("per_page")) || 20,
-      page: Number(searchParams.get("page")) || 1,
-    });
+    const search = searchParams.get("search") || undefined;
+    const status = searchParams.get("status") || undefined;
+    const perPage = Number(searchParams.get("per_page")) || 20;
+    const page = Number(searchParams.get("page")) || 1;
+
+    const useCache = !search && page === 1 && perPage >= 50;
+    const posts = useCache
+      ? await cachedFetch(CacheKeys.wpPosts(status), TTL.WP_POSTS, () => wp.listPosts({ search, status, per_page: perPage, page }))
+      : await wp.listPosts({ search, status, per_page: perPage, page });
 
     const simplified = posts.map((p) => ({
       id: p.id,

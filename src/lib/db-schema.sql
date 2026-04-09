@@ -85,3 +85,16 @@ create table saved_reports (
   workspace text,
   created_at timestamptz default now()
 );
+
+-- ============================================================
+-- API Cache
+-- Caches external API responses (WordPress, Keap, Thinkific,
+-- GA4) to reduce redundant calls and speed up page loads.
+-- ============================================================
+create table if not exists api_cache (
+  cache_key text primary key,
+  data jsonb not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz default now()
+);
+create index if not exists idx_api_cache_expires on api_cache(expires_at);

@@ -6,6 +6,7 @@ import { parseReport } from "@/lib/report-parser";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
+import { cachedFetch, CacheKeys, TTL } from "@/lib/cache";
 import { getSystemPromptAddendum } from "@/lib/workspaces";
 import { getThinkificContext, isConfigured as isThinkificConfigured, getCourse, listEnrollments } from "@/lib/thinkific";
 import { getKeapContext, isConfigured as isKeapConfigured, getContact } from "@/lib/keap";
@@ -76,16 +77,17 @@ export async function POST(request: NextRequest) {
 
     try {
       const promises: Promise<unknown>[] = [
-        discoverPlugins().catch(() => []),
+        cachedFetch(CacheKeys.wpPlugins(), TTL.WP_PLUGINS, () => discoverPlugins().catch(() => [])),
       ];
 
       if (needsWpContext) {
         const wp = getWordPressClient();
-        promises.push(wp.listPages({ per_page: 50, status: "publish,draft,pending,private" }).catch(() => []));
+        const status = "publish,draft,pending,private";
+        promises.push(cachedFetch(CacheKeys.wpPages(status), TTL.WP_PAGES, () => wp.listPages({ per_page: 50, status }).catch(() => [])));
         if (pageContextId) {
-          promises.push(wp.getPage(pageContextId, "edit").catch(() => null));
+          promises.push(wp.getPage(pageContextId, "edit").catch(() => null)); // Don't cache individual page edits
         }
-        promises.push(wp.listPopups({ per_page: 50, status: "publish,draft,pending,private" }).catch(() => []));
+        promises.push(cachedFetch(CacheKeys.wpPopups(status), TTL.WP_POPUPS, () => wp.listPopups({ per_page: 50, status }).catch(() => [])));
       }
 
       const results = await Promise.all(promises);
@@ -194,7 +196,7 @@ export async function POST(request: NextRequest) {
       try {
         const accessToken = (authSession as any)?.accessToken;
         if (accessToken) {
-          const overview = await getTrafficOverview(accessToken, "website", "7d");
+          const overview = await cachedFetch(CacheKeys.ga4Overview("website", "7d"), TTL.GA4_OVERVIEW, () => getTrafficOverview(accessToken, "website", "7d"));
           const avgMins = Math.floor(overview.avgSessionDuration / 60);
           const avgSecs = Math.round(overview.avgSessionDuration % 60);
           analyticsDataContext = `\n\nCurrent GA4 data (last 7 days):

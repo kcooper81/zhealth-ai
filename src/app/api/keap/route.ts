@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as keap from "@/lib/keap";
 import { logError } from "@/lib/error-logger";
+import { cachedFetch, CacheKeys, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -20,12 +21,11 @@ export async function GET(request: NextRequest) {
         const name = searchParams.get("name") || undefined;
         const limit = parseInt(searchParams.get("limit") || "50");
         const offset = parseInt(searchParams.get("offset") || "0");
-        const result = await keap.listContacts({
-          limit,
-          offset,
-          email,
-          given_name: name,
-        });
+        // Cache default contact list only (no search, no offset)
+        const isDefaultList = !email && !name && offset === 0;
+        const result = isDefaultList
+          ? await cachedFetch(CacheKeys.keapContacts(), TTL.KEAP_CONTACTS, () => keap.listContacts({ limit, offset }))
+          : await keap.listContacts({ limit, offset, email, given_name: name });
         return NextResponse.json(result);
       }
 
@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
       case "tags": {
         const name = searchParams.get("name") || undefined;
         const limit = parseInt(searchParams.get("limit") || "100");
-        const result = await keap.listTags({ limit, name });
+        const result = name
+          ? await keap.listTags({ limit, name })
+          : await cachedFetch(CacheKeys.keapTags(), TTL.KEAP_TAGS, () => keap.listTags({ limit }));
         return NextResponse.json(result);
       }
 
@@ -53,7 +55,9 @@ export async function GET(request: NextRequest) {
         const stageId = searchParams.get("stage_id")
           ? parseInt(searchParams.get("stage_id")!)
           : undefined;
-        const result = await keap.listOpportunities({ stage_id: stageId });
+        const result = stageId
+          ? await keap.listOpportunities({ stage_id: stageId })
+          : await cachedFetch(CacheKeys.keapPipelineStats(), TTL.KEAP_STATS, () => keap.listOpportunities({}));
         return NextResponse.json(result);
       }
 

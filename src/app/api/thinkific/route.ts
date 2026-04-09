@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as thinkific from "@/lib/thinkific";
 import { logError } from "@/lib/error-logger";
+import { cachedFetch, CacheKeys, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -18,7 +19,9 @@ export async function GET(request: NextRequest) {
       case "courses": {
         const page = parseInt(searchParams.get("page") || "1");
         const limit = parseInt(searchParams.get("limit") || "50");
-        const result = await thinkific.listCourses({ page, limit });
+        const result = page === 1
+          ? await cachedFetch(CacheKeys.thinkificCourses(), TTL.THINKIFIC_COURSES, () => thinkific.listCourses({ page, limit }))
+          : await thinkific.listCourses({ page, limit });
         return NextResponse.json(result);
       }
 
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
       }
 
       case "overview": {
-        const overview = await thinkific.getLMSOverview();
+        const overview = await cachedFetch(CacheKeys.thinkificOverview(), TTL.THINKIFIC_OVERVIEW, () => thinkific.getLMSOverview());
         return NextResponse.json(overview);
       }
 

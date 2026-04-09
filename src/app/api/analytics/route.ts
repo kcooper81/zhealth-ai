@@ -3,6 +3,7 @@ import { getServerSession } from "@/lib/auth";
 import * as ga from "@/lib/google-analytics";
 import type { GA4Property } from "@/lib/google-analytics";
 import { logError } from "@/lib/error-logger";
+import { cachedFetch, CacheKeys, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     switch (action) {
       case "overview": {
-        const data = await ga.getTrafficOverview(accessToken, property, dateRange);
+        const data = await cachedFetch(CacheKeys.ga4Overview(property, dateRange), TTL.GA4_OVERVIEW, () => ga.getTrafficOverview(accessToken, property, dateRange));
         return NextResponse.json(data);
       }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { logError } from "@/lib/error-logger";
+import { cachedFetch, CacheKeys, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,12 +10,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const wp = getWordPressClient();
 
-    const pages = await wp.listPages({
-      search: searchParams.get("search") || undefined,
-      status: searchParams.get("status") || undefined,
-      per_page: Number(searchParams.get("per_page")) || 20,
-      page: Number(searchParams.get("page")) || 1,
-    });
+    const search = searchParams.get("search") || undefined;
+    const status = searchParams.get("status") || undefined;
+    const perPage = Number(searchParams.get("per_page")) || 20;
+    const page = Number(searchParams.get("page")) || 1;
+
+    // Only cache default listing (no search, first page)
+    const useCache = !search && page === 1 && perPage >= 50;
+    const pages = useCache
+      ? await cachedFetch(CacheKeys.wpPages(status), TTL.WP_PAGES, () => wp.listPages({ search, status, per_page: perPage, page }))
+      : await wp.listPages({ search, status, per_page: perPage, page });
 
     const simplified = pages.map((p) => ({
       id: p.id,
