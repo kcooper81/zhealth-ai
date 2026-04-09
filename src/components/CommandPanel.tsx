@@ -88,35 +88,37 @@ export default function CommandPanel({
     switch (workspace) {
       case "website":
         return [
-          { label: "Pages overview", prompt: "Show me all pages with their status and last modified date as a report" },
-          { label: "SEO audit", prompt: "Run an SEO audit on the top 10 pages and generate a report" },
-          { label: "Draft review", prompt: "Show all draft pages that need attention as a report" },
+          { label: "Pages overview", prompt: "List all pages with their status" },
+          { label: "Draft review", prompt: "Show all draft pages needing review" },
+          { label: "Popups overview", prompt: "Show all popups and their status" },
         ];
       case "crm":
         return [
-          { label: "Contact growth", prompt: "Generate a contact growth report for the last 30 days" },
-          { label: "Tag breakdown", prompt: "Show me a tag breakdown report with contact counts" },
-          { label: "Revenue report", prompt: "Generate a revenue report for this month" },
-          { label: "Pipeline status", prompt: "Show the pipeline status as a report" },
+          { label: "Contact overview", prompt: "Show a contact overview report with names, emails, and tags" },
+          { label: "Tag breakdown", prompt: "Show a tag breakdown report with all tags and categories" },
+          { label: "Revenue report", prompt: "Show a revenue report for the last 30 days with orders and totals" },
+          { label: "Pipeline status", prompt: "Show the current pipeline status with opportunities and projected revenue" },
+          { label: "Email activity", prompt: "Show email send activity for the last 30 days" },
         ];
       case "lms":
         return [
-          { label: "Course completion", prompt: "Show course completion rates for all courses as a report" },
-          { label: "Enrollment trends", prompt: "Generate an enrollment trends report for the last 30 days" },
-          { label: "Revenue by course", prompt: "Show revenue breakdown by course as a report" },
+          { label: "LMS overview", prompt: "Show LMS overview stats" },
+          { label: "Course list", prompt: "Show all courses and enrollment counts" },
+          { label: "Recent enrollments", prompt: "Show recent enrollments" },
         ];
       case "analytics":
         return [
-          { label: "Traffic overview", prompt: "Generate a traffic overview report for the last 7 days" },
-          { label: "Top pages", prompt: "Show me the top 20 pages by pageviews as a report" },
-          { label: "Traffic sources", prompt: "Generate a traffic sources report for the last 7 days" },
-          { label: "Bounce rate analysis", prompt: "Generate a bounce rate analysis highlighting pages that need improvement" },
+          { label: "Traffic overview", prompt: "Show a traffic overview report" },
+          { label: "Top pages", prompt: "Show the top pages by pageviews" },
+          { label: "Traffic sources", prompt: "Show traffic sources report" },
+          { label: "High bounce pages", prompt: "Show pages with high bounce rates" },
         ];
       case "all":
       default:
         return [
-          { label: "Business overview", prompt: "Show a business overview report combining all services" },
-          { label: "Weekly summary", prompt: "Generate a weekly business summary report" },
+          { label: "Business overview", prompt: "Show a business overview report" },
+          { label: "All pages", prompt: "List all pages and their status" },
+          { label: "Newest contacts", prompt: "Show our newest contacts" },
         ];
     }
   }, [workspace]);

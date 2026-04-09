@@ -48,45 +48,41 @@ export function getQuickActions(workspace: Workspace): string[] {
       return [
         "List all pages and their status",
         "Create a new landing page",
-        "Run an SEO audit on the site",
-        "Show me all draft pages",
-        "Update pricing on a page",
-        "Duplicate a page for a new campaign",
+        "Show all draft pages needing review",
+        "Show all popups and their status",
       ];
     case "crm":
       return [
-        "Generate a contact growth report for the last 30 days",
-        "Show me a tag breakdown report with contact counts",
-        "Generate a revenue report for this month",
-        "Find all contacts tagged R-Phase",
-        "Show the pipeline status as a report",
-        "Who are our newest contacts?",
+        "Show a contact overview report",
+        "Show a tag breakdown report",
+        "Show a revenue report for this month",
+        "Show the pipeline status report",
+        "Show our newest contacts",
+        "Show email send activity this month",
       ];
     case "lms":
       return [
         "Show all courses and enrollment counts",
-        "LMS overview stats",
-        "Which courses have the best completion rates?",
+        "Show LMS overview stats",
         "Show recent enrollments",
-        "Create a 20% off coupon code",
         "How many active students do we have?",
       ];
     case "analytics":
       return [
-        "Generate a traffic overview report for the last 7 days",
-        "Show me the top 20 pages by pageviews for the last 7 days as a report",
-        "Generate a bounce rate analysis report highlighting pages that need improvement",
-        "Compare traffic this week vs last week as a report",
-        "Generate a traffic sources report showing where our visitors come from",
-        "Show a business overview report combining all services",
+        "Show a traffic overview report",
+        "Show the top pages by pageviews",
+        "Show pages with high bounce rates",
+        "Compare traffic this week vs last week",
+        "Show traffic sources report",
+        "Show a business overview report",
       ];
     case "all":
     default:
       return [
-        "Give me an overview of everything",
+        "Show a business overview report",
         "What needs attention today?",
-        "Show me a weekly business report",
-        "What campaigns are running?",
+        "List all pages and their status",
+        "Show our newest contacts",
       ];
   }
 }

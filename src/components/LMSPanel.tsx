@@ -239,9 +239,9 @@ export default function LMSPanel({
         </p>
         <div className="flex flex-col gap-1">
           {[
-            "Show course completion rates",
-            "Revenue report this month",
-            "Most popular courses",
+            "Show all courses and enrollment counts",
+            "Show LMS overview stats",
+            "Show recent enrollments",
           ].map((action) => (
             <button
               key={action}

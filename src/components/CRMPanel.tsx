@@ -21,33 +21,33 @@ type FilterType = "all" | "tagged" | "recent";
 const CRM_QUICK_REPORTS = [
   {
     id: "contact-growth",
-    label: "Contact Growth",
+    label: "Contact Overview",
     icon: Users,
-    prompt: "Generate a contact growth report for the last 30 days",
+    prompt: "Show a contact overview report with names, emails, tags, and creation dates",
   },
   {
     id: "tag-breakdown",
     label: "Tag Breakdown",
     icon: BarChart,
-    prompt: "Show me a tag breakdown report with contact counts",
+    prompt: "Show a tag breakdown report with all tags and their categories",
   },
   {
     id: "revenue",
     label: "Revenue Report",
     icon: Activity,
-    prompt: "Generate a revenue report for this month",
+    prompt: "Show a revenue report for the last 30 days with orders and totals",
   },
   {
     id: "pipeline",
     label: "Pipeline Status",
     icon: BarChart,
-    prompt: "Show the pipeline status as a report",
+    prompt: "Show the current pipeline status with all opportunities and projected revenue",
   },
   {
     id: "emails",
     label: "Email Activity",
     icon: Activity,
-    prompt: "Show me an email activity report for the last 30 days with open and click rates",
+    prompt: "Show email send activity for the last 30 days with subjects and recipients",
   },
 ];
 
