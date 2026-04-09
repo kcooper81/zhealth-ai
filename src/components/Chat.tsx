@@ -995,15 +995,29 @@ export default function Chat() {
   );
 
   const handleCancelAction = useCallback(
-    (_actionId: string) => {
+    (actionId: string) => {
       setPendingAction(null);
+      // Clear pendingAction and actionExecuting from the message
+      if (currentConversationId) {
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== currentConversationId) return c;
+            const msgs = c.messages.map((m) =>
+              m.pendingAction?.id === actionId || m.actionExecuting
+                ? { ...m, pendingAction: null, actionExecuting: undefined }
+                : m
+            );
+            return { ...c, messages: msgs };
+          })
+        );
+      }
       // Cancel any confirming jobs
       const confirmingJobs = jobs.filter((j) => j.status === "confirming");
       if (confirmingJobs.length > 0) {
         updateJob(confirmingJobs[0].id, (j) => cancelJobFn(j));
       }
     },
-    [jobs, updateJob]
+    [jobs, updateJob, currentConversationId, setConversations]
   );
 
   // --- Quick actions ---

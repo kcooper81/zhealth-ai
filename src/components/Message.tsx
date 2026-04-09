@@ -289,11 +289,30 @@ function ResultCard({
   onViewPage?: (url: string) => void;
 }) {
   if (result.success) {
-    const r = result.result as { link?: string; status?: string; id?: number; title?: string } | undefined;
-    const pageUrl = r?.link;
-    const pageStatus = r?.status;
-    const pageId = r?.id;
-    const pageTitle = r?.title;
+    const r = result.result as Record<string, unknown> | undefined;
+    const pageUrl = r?.link as string | undefined;
+    const pageStatus = r?.status as string | undefined;
+    const pageId = r?.id as number | undefined;
+    const pageTitle = (r?.title || r?.name) as string | undefined;
+    const count = r?.count as number | undefined;
+
+    // Build a summary of the result data for display
+    const resultDetails: string[] = [];
+    if (r) {
+      for (const [key, val] of Object.entries(r)) {
+        if (["link", "status", "id", "title", "name"].includes(key)) continue;
+        if (Array.isArray(val)) {
+          resultDetails.push(`${val.length} ${key}`);
+        } else if (typeof val === "number") {
+          resultDetails.push(`${key}: ${val.toLocaleString()}`);
+        } else if (typeof val === "string" && val.length < 60) {
+          resultDetails.push(`${key}: ${val}`);
+        } else if (typeof val === "boolean") {
+          resultDetails.push(`${key}: ${val ? "yes" : "no"}`);
+        }
+      }
+    }
+
     return (
       <div className="mt-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/40 rounded-xl p-3 border-l-4 border-l-emerald-400 animate-slide-up">
         <div className="flex items-center gap-2">
@@ -304,9 +323,15 @@ function ResultCard({
           {pageStatus === "draft" && (
             <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">Draft</span>
           )}
+          {count !== undefined && (
+            <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">{count} results</span>
+          )}
         </div>
         {pageTitle && (
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{pageTitle}{pageId ? ` (ID: ${pageId})` : ""}</p>
+        )}
+        {resultDetails.length > 0 && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{resultDetails.join(" | ")}</p>
         )}
         {pageUrl && pageStatus !== "draft" && (
           <button
