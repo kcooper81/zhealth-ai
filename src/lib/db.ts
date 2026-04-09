@@ -7,6 +7,7 @@ import type {
   PendingAction,
   ActionResult,
   ReportData,
+  QuickAction,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -409,4 +410,217 @@ export async function deleteSavedReport(id: string): Promise<boolean> {
     if (error) { console.error('deleteSavedReport error:', error); return false; }
     return true;
   } catch (e) { console.error('deleteSavedReport exception:', e); return false; }
+}
+
+// ---------------------------------------------------------------------------
+// Quick Actions
+// ---------------------------------------------------------------------------
+
+function mapQuickAction(row: any): QuickAction {
+  return {
+    id: row.id,
+    label: row.label,
+    prompt: row.prompt,
+    isDefault: row.is_default ?? false,
+    isHidden: row.is_hidden ?? false,
+    sortOrder: row.sort_order ?? 0,
+    workspace: row.workspace,
+  };
+}
+
+/**
+ * Ensure the quick_actions table exists. Runs once on first call.
+ * If the table already exists, Supabase returns an error we can safely ignore.
+ */
+let quickActionsTableChecked = false;
+async function ensureQuickActionsTable(): Promise<void> {
+  if (quickActionsTableChecked || !isSupabaseConfigured) return;
+  quickActionsTableChecked = true;
+  try {
+    // Try a lightweight query — if it fails the table doesn't exist
+    const { error } = await supabase
+      .from('quick_actions')
+      .select('id')
+      .limit(1);
+    if (error && error.code === '42P01') {
+      // Table doesn't exist — create it via rpc if available, otherwise log
+      console.warn('quick_actions table does not exist. Please run the migration SQL.');
+    }
+  } catch {
+    // Ignore — table may or may not exist
+  }
+}
+
+export async function getQuickActions(userId: string, workspace: string): Promise<QuickAction[]> {
+  if (!isSupabaseConfigured) return [];
+  await ensureQuickActionsTable();
+  try {
+    const { data, error } = await supabase
+      .from('quick_actions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('workspace', workspace)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) {
+      // Table might not exist — fail gracefully
+      if (error.code === '42P01') return [];
+      console.error('getQuickActions error:', error);
+      return [];
+    }
+    return (data || []).map(mapQuickAction);
+  } catch (e) { console.error('getQuickActions exception:', e); return []; }
+}
+
+export async function saveQuickAction(
+  userId: string,
+  workspace: string,
+  label: string,
+  prompt: string
+): Promise<QuickAction | null> {
+  if (!isSupabaseConfigured) return null;
+  await ensureQuickActionsTable();
+  try {
+    // Get max sort_order for this user+workspace
+    const { data: existing } = await supabase
+      .from('quick_actions')
+      .select('sort_order')
+      .eq('user_id', userId)
+      .eq('workspace', workspace)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+    const maxOrder = existing && existing.length > 0 ? (existing[0].sort_order || 0) : 0;
+
+    const { data, error } = await supabase
+      .from('quick_actions')
+      .insert({
+        user_id: userId,
+        workspace,
+        label,
+        prompt,
+        sort_order: maxOrder + 1,
+        is_default: false,
+        is_hidden: false,
+      })
+      .select()
+      .single();
+    if (error) { console.error('saveQuickAction error:', error); return null; }
+    return mapQuickAction(data);
+  } catch (e) { console.error('saveQuickAction exception:', e); return null; }
+}
+
+export async function updateQuickAction(
+  id: string,
+  data: { label?: string; prompt?: string; sort_order?: number }
+): Promise<QuickAction | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const updatePayload: Record<string, any> = {};
+    if (data.label !== undefined) updatePayload.label = data.label;
+    if (data.prompt !== undefined) updatePayload.prompt = data.prompt;
+    if (data.sort_order !== undefined) updatePayload.sort_order = data.sort_order;
+
+    const { data: row, error } = await supabase
+      .from('quick_actions')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) { console.error('updateQuickAction error:', error); return null; }
+    return mapQuickAction(row);
+  } catch (e) { console.error('updateQuickAction exception:', e); return null; }
+}
+
+export async function deleteQuickAction(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    const { error } = await supabase
+      .from('quick_actions')
+      .delete()
+      .eq('id', id);
+    if (error) { console.error('deleteQuickAction error:', error); return false; }
+    return true;
+  } catch (e) { console.error('deleteQuickAction exception:', e); return false; }
+}
+
+export async function hideDefaultAction(
+  userId: string,
+  workspace: string,
+  prompt: string
+): Promise<QuickAction | null> {
+  if (!isSupabaseConfigured) return null;
+  await ensureQuickActionsTable();
+  try {
+    // Check if there's already a record for this default action
+    const { data: existing } = await supabase
+      .from('quick_actions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('workspace', workspace)
+      .eq('prompt', prompt)
+      .eq('is_default', true)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      // Toggle hidden state
+      const { data: row, error } = await supabase
+        .from('quick_actions')
+        .update({ is_hidden: !existing[0].is_hidden })
+        .eq('id', existing[0].id)
+        .select()
+        .single();
+      if (error) { console.error('hideDefaultAction update error:', error); return null; }
+      return mapQuickAction(row);
+    }
+
+    // Create a new row marking this default as hidden
+    const { data, error } = await supabase
+      .from('quick_actions')
+      .insert({
+        user_id: userId,
+        workspace,
+        label: prompt.slice(0, 40),
+        prompt,
+        is_default: true,
+        is_hidden: true,
+        sort_order: 0,
+      })
+      .select()
+      .single();
+    if (error) { console.error('hideDefaultAction insert error:', error); return null; }
+    return mapQuickAction(data);
+  } catch (e) { console.error('hideDefaultAction exception:', e); return null; }
+}
+
+export async function reorderQuickActions(
+  userId: string,
+  workspace: string,
+  orderedIds: string[]
+): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    // Update sort_order for each ID
+    const updates = orderedIds.map((id, index) =>
+      supabase
+        .from('quick_actions')
+        .update({ sort_order: index })
+        .eq('id', id)
+        .eq('user_id', userId)
+    );
+    await Promise.all(updates);
+    return true;
+  } catch (e) { console.error('reorderQuickActions exception:', e); return false; }
+}
+
+export async function resetQuickActions(userId: string, workspace: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    const { error } = await supabase
+      .from('quick_actions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('workspace', workspace);
+    if (error) { console.error('resetQuickActions error:', error); return false; }
+    return true;
+  } catch (e) { console.error('resetQuickActions exception:', e); return false; }
 }

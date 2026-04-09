@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import type { ChatMessage, PendingAction, Workspace } from "@/lib/types";
+import type { ChatMessage, PendingAction, Workspace, QuickAction } from "@/lib/types";
 // useScrollToBottom removed — we handle auto-scroll manually to respect user scrolling
-import { getQuickActions } from "@/lib/workspaces";
+import { getQuickActions as getDefaultQuickActions } from "@/lib/workspaces";
 import Message, { SystemMessage } from "./Message";
 import { MessageSquare, ChevronDown } from "./icons";
 
@@ -17,6 +17,8 @@ interface MessageListProps {
   onQuickAction?: (action: string) => void;
   isStreaming?: boolean;
   onRegenerate?: () => void;
+  quickActions?: QuickAction[];
+  onQuickActionPinned?: () => void;
 }
 
 export default function MessageList({
@@ -29,6 +31,8 @@ export default function MessageList({
   onQuickAction,
   isStreaming,
   onRegenerate,
+  quickActions: quickActionsProp,
+  onQuickActionPinned,
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -70,14 +74,14 @@ export default function MessageList({
   if (messages.length === 0) {
     return (
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <EmptyState workspace={workspace} onQuickAction={onQuickAction} />
+        <EmptyState workspace={workspace} onQuickAction={onQuickAction} quickActions={quickActionsProp} />
       </div>
     );
   }
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 relative">
-      <div className="max-w-3xl mx-auto flex flex-col gap-4">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-8 py-4 md:py-6 relative">
+      <div className="max-w-3xl mx-auto flex flex-col gap-3 md:gap-4">
         {messages.map((msg) => {
           if (msg.role === "user" || msg.role === "assistant") {
             return (
@@ -88,6 +92,8 @@ export default function MessageList({
                 onConfirmAction={onConfirmAction}
                 onCancelAction={onCancelAction}
                 onViewPage={onViewPage}
+                workspace={workspace}
+                onQuickActionPinned={onQuickActionPinned}
               />
             );
           }
@@ -99,7 +105,7 @@ export default function MessageList({
       {!isAtBottom && (
         <button
           onClick={scrollToBottom}
-          className="sticky bottom-4 left-1/2 -translate-x-1/2 mx-auto block w-9 h-9 rounded-full bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 shadow-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:shadow-xl transition-all duration-200 animate-fade-in z-10"
+          className="sticky bottom-4 left-1/2 -translate-x-1/2 mx-auto block w-11 h-11 rounded-full bg-white dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 shadow-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:shadow-xl active:shadow-md transition-all duration-200 animate-fade-in z-10 touch-target"
           aria-label="Scroll to bottom"
         >
           <ChevronDown size={18} />
@@ -140,12 +146,18 @@ const WORKSPACE_EMPTY: Record<Workspace, { heading: string; description: string 
 function EmptyState({
   workspace,
   onQuickAction,
+  quickActions: quickActionsProp,
 }: {
   workspace: Workspace;
   onQuickAction?: (action: string) => void;
+  quickActions?: QuickAction[];
 }) {
   const info = WORKSPACE_EMPTY[workspace] || WORKSPACE_EMPTY.all;
-  const quickActions = getQuickActions(workspace);
+
+  // Use API-fetched quick actions if available, otherwise fall back to defaults
+  const chipActions: { label: string; prompt: string }[] = quickActionsProp
+    ? quickActionsProp.map((a) => ({ label: a.label, prompt: a.prompt }))
+    : getDefaultQuickActions(workspace).map((p) => ({ label: p, prompt: p }));
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center h-full px-6">
@@ -160,15 +172,15 @@ function EmptyState({
       </p>
 
       {/* Suggestion chips */}
-      {quickActions.length > 0 && (
+      {chipActions.length > 0 && (
         <div className="flex flex-wrap justify-center gap-2 max-w-md">
-          {quickActions.map((action) => (
+          {chipActions.map((action) => (
             <button
-              key={action}
-              onClick={() => onQuickAction?.(action)}
-              className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200"
+              key={action.prompt}
+              onClick={() => onQuickAction?.(action.prompt)}
+              className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 active:bg-gray-200 dark:active:bg-gray-600 transition-all duration-200 touch-target"
             >
-              {action}
+              {action.label}
             </button>
           ))}
         </div>

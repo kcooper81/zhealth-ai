@@ -59,65 +59,68 @@ export default function ActionConfirmation({
             style={{ width: `${progress}%` }}
           />
 
-          <div className="flex items-center gap-3">
-            {/* Icon */}
-            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-800/30 flex items-center justify-center">
-              {action.type.includes("delete") ? (
-                <AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />
-              ) : (
-                <Document size={16} className="text-amber-600 dark:text-amber-400" />
-              )}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              {/* Icon */}
+              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-800/30 flex items-center justify-center">
+                {action.type.includes("delete") ? (
+                  <AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />
+                ) : (
+                  <Document size={16} className="text-amber-600 dark:text-amber-400" />
+                )}
+              </div>
+
+              {/* Description */}
+              <p className="flex-1 text-sm text-gray-700 dark:text-gray-200 font-medium min-w-0 truncate sm:whitespace-normal">
+                {action.summary}
+              </p>
             </div>
 
-            {/* Description */}
-            <p className="flex-1 text-sm text-gray-700 dark:text-gray-200 font-medium">
-              {action.summary}
-            </p>
-
-            {/* Buttons */}
             <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Buttons */}
               <button
                 onClick={handleConfirm}
-                className="px-3.5 py-1.5 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-blue-600 active:scale-[0.97] transition-all duration-200"
+                className="px-4 py-2 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-blue-600 active:scale-[0.97] transition-all duration-200 touch-target min-h-[44px]"
               >
                 Confirm
               </button>
               <button
                 onClick={handleCancel}
-                className="px-3.5 py-1.5 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-[0.97] transition-all duration-200"
+                className="px-4 py-2 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-[0.97] transition-all duration-200 touch-target min-h-[44px]"
               >
                 Cancel
               </button>
-            </div>
 
-            {/* Countdown label and ring */}
-            <span className="flex-shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 whitespace-nowrap">
-              Auto-cancels in {countdown}s
-            </span>
-            <div className="flex-shrink-0 w-6 h-6 relative">
-              <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="text-amber-200 dark:text-amber-800/40"
-                />
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeDasharray={`${(progress / 100) * 62.83} 62.83`}
-                  className="text-amber-500 transition-all duration-1000 ease-linear"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-amber-600 dark:text-amber-400">
-                {countdown}
+              {/* Countdown ring */}
+              <div className="flex-shrink-0 w-6 h-6 relative">
+                <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-amber-200 dark:text-amber-800/40"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeDasharray={`${(progress / 100) * 62.83} 62.83`}
+                    className="text-amber-500 transition-all duration-1000 ease-linear"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                  {countdown}
+                </span>
+              </div>
+
+              <span className="flex-shrink-0 text-xs font-medium text-amber-600 dark:text-amber-400 whitespace-nowrap hidden sm:inline">
+                {countdown}s
               </span>
             </div>
           </div>

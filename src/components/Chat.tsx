@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import type { ChatMessage, Conversation, PendingAction, Workspace, FileAttachment } from "@/lib/types";
+import type { ChatMessage, Conversation, PendingAction, Workspace, FileAttachment, QuickAction } from "@/lib/types";
 import type { Job } from "@/lib/jobs";
 import {
   createJob,
@@ -26,6 +26,10 @@ import WorkflowPanel from "./WorkflowPanel";
 import SettingsPanel from "./SettingsPanel";
 import { ActiveJobsBar, JobsPanel } from "./JobsPanel";
 import JobIndicator from "./JobIndicator";
+import QuickActionsManager from "./QuickActionsManager";
+import FilesLibrary from "./FilesLibrary";
+import NotificationToast from "./NotificationToast";
+import { notify } from "@/lib/notifications";
 import { Menu, Loader, Document, X } from "./icons";
 import type { ReportData } from "@/lib/types";
 
@@ -58,6 +62,7 @@ export default function Chat() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showWorkflows, setShowWorkflows] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFilesLibrary, setShowFilesLibrary] = useState(false);
   const [initialWorkflowId, setInitialWorkflowId] = useState<string | null>(null);
   const [, setShowOnboarding] = useState(true);
   const [pages, setPages] = useState<SidebarPage[]>([]);
@@ -66,6 +71,10 @@ export default function Chat() {
   const [hydrated, setHydrated] = useState(false);
   const [pagesLoading, setPagesLoading] = useState(true);
   const [theme, setTheme] = useLocalStorage<"light" | "dark" | "auto">("zhealth-theme", "light");
+
+  // --- Quick actions state ---
+  const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
+  const [showQuickActionsManager, setShowQuickActionsManager] = useState(false);
 
   // --- Workspace panel state ---
   const [showWorkspacePanel, setShowWorkspacePanel] = useState(() => workspace !== "all");
@@ -81,6 +90,20 @@ export default function Chat() {
       setShowWorkspacePanel(true);
     }
   }, [workspace]);
+
+  // --- Quick actions: fetch from API on mount and workspace change ---
+  const fetchQuickActions = useCallback(() => {
+    fetch(`/api/quick-actions?workspace=${workspace}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: QuickAction[]) => {
+        if (Array.isArray(data)) setQuickActions(data);
+      })
+      .catch(() => {});
+  }, [workspace]);
+
+  useEffect(() => {
+    fetchQuickActions();
+  }, [fetchQuickActions]);
 
   // Track whether DB sync has completed
   const dbSyncedRef = useRef(false);
@@ -555,6 +578,30 @@ export default function Chat() {
                       return { ...c, messages: msgs };
                     })
                   );
+
+                  // Auto-save report to library
+                  const rd = data.reportData as ReportData;
+                  fetch("/api/reports/saved", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      title: rd.title,
+                      reportType: rd.title?.toLowerCase().includes("traffic") ? "traffic"
+                        : rd.title?.toLowerCase().includes("contact") ? "contacts"
+                        : rd.title?.toLowerCase().includes("revenue") ? "revenue"
+                        : rd.title?.toLowerCase().includes("pipeline") ? "pipeline"
+                        : rd.title?.toLowerCase().includes("enroll") ? "enrollments"
+                        : rd.title?.toLowerCase().includes("course") ? "courses"
+                        : rd.title?.toLowerCase().includes("business") ? "cross-service"
+                        : "general",
+                      reportData: rd,
+                      workspace,
+                    }),
+                  })
+                    .then((res) => {
+                      if (res && res.ok) notify("info", "Report saved to library");
+                    })
+                    .catch(() => {});
                 }
               } else if (data.type === "error") {
                 throw new Error(data.error || "Stream error");
@@ -577,6 +624,7 @@ export default function Chat() {
             convId,
             `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
           );
+          notify("error", "Connection lost. Try again.", errorMsg);
         }
       } finally {
         setIsStreaming(false);
@@ -683,6 +731,21 @@ export default function Chat() {
     persistConversationToDb(currentConversationId, { messages: [] });
   }, [currentConversationId, setConversations, persistConversationToDb]);
 
+  // Clear conversation by ID (used from sidebar context menu)
+  const clearConversationById = useCallback(
+    (id: string) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? { ...c, messages: [], updatedAt: new Date().toISOString() }
+            : c
+        )
+      );
+      persistConversationToDb(id, { messages: [] });
+    },
+    [setConversations, persistConversationToDb]
+  );
+
   // --- L10: Input focus ref and focus management ---
   const inputAreaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -774,10 +837,12 @@ export default function Chat() {
               pageUrl: pageUrl || undefined,
             })
           );
+          notify("success", action.summary || "Action completed successfully");
         } else {
           updateJob(jobId, (j) =>
             failJob(j, result.error || "Action failed")
           );
+          notify("error", "Action failed", result.error || "Unknown error");
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Network error";
@@ -798,6 +863,7 @@ export default function Chat() {
             return { ...c, messages: msgs, updatedAt: new Date().toISOString() };
           })
         );
+        notify("error", "Action failed", errorMessage);
 
         updateJob(jobId, (j) => failJob(j, errorMessage));
       }
@@ -832,6 +898,10 @@ export default function Chat() {
   const handleQuickAction = useCallback(
     (action: string) => {
       handleSend(action);
+      // Close workspace panel on mobile after quick action
+      if (typeof window !== "undefined" && window.innerWidth < 768) {
+        setShowWorkspacePanel(false);
+      }
     },
     [handleSend]
   );
@@ -857,6 +927,7 @@ export default function Chat() {
       "mod+p": () => setShowPreview((v) => !v),
       "mod+b": () => setShowSidebar((v) => !v),
       "mod+j": () => setShowJobsPanel((v) => !v),
+      "mod+shift+f": () => setShowFilesLibrary((v) => !v),
       "mod+e": () => {
         if (workspace !== "all") setShowWorkspacePanel((v) => !v);
       },
@@ -866,7 +937,9 @@ export default function Chat() {
         if (!isInput) setShowShortcuts(true);
       },
       escape: () => {
-        if (showJobsPanel) setShowJobsPanel(false);
+        if (showQuickActionsManager) setShowQuickActionsManager(false);
+        else if (showFilesLibrary) setShowFilesLibrary(false);
+        else if (showJobsPanel) setShowJobsPanel(false);
         else if (showSettings) setShowSettings(false);
         else if (showWorkflows) setShowWorkflows(false);
         else if (showShortcuts) setShowShortcuts(false);
@@ -874,14 +947,14 @@ export default function Chat() {
         else if (isStreaming) handleCancelStream();
       },
     }),
-    [createConversation, workspace, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
+    [createConversation, workspace, showQuickActionsManager, showFilesLibrary, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
   );
 
   useKeyboardShortcuts(shortcutHandlers);
 
   if (!hydrated) {
     return (
-      <div className="h-screen flex items-center justify-center bg-white dark:bg-[#1c1c1e]">
+      <div className="h-screen h-screen-safe flex items-center justify-center bg-white dark:bg-[#1c1c1e]">
         <div className="flex flex-col items-center gap-3">
           <Loader size={24} className="text-gray-400 animate-spin" />
           <p className="text-sm text-gray-400">Loading...</p>
@@ -891,7 +964,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="h-screen flex bg-white dark:bg-[#1c1c1e]">
+    <div className="h-screen h-screen-safe flex bg-white dark:bg-[#1c1c1e]">
       {/* Left Sidebar - 280px */}
       <Sidebar
         workspace={workspace}
@@ -908,6 +981,7 @@ export default function Chat() {
         onNewConversation={() => createConversation()}
         onDeleteConversation={deleteConversation}
         onRenameConversation={renameConversation}
+        onClearConversation={clearConversationById}
         onOpenSettings={() => setShowSettings(true)}
         onOpenShortcuts={() => setShowShortcuts(true)}
         theme={theme}
@@ -920,6 +994,10 @@ export default function Chat() {
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
         onOpenWorkflows={() => { setInitialWorkflowId(null); setShowWorkflows(true); }}
         onRunWorkflow={(workflowId: string) => { setInitialWorkflowId(workflowId); setShowWorkflows(true); }}
+        onOpenFiles={() => setShowFilesLibrary(true)}
+        onOpenQuickActionsManager={() => setShowQuickActionsManager(true)}
+        quickActions={quickActions}
+        onQuickAction={handleQuickAction}
       />
 
       {/* Right Panel - 300px (workspace content) */}
@@ -944,16 +1022,25 @@ export default function Chat() {
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800 md:hidden">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 md:hidden flex-shrink-0">
           <button
             onClick={() => setShowSidebar(true)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-11 h-11 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors touch-target"
           >
-            <Menu size={18} />
+            <Menu size={20} />
           </button>
           <h1 className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate flex-1">
             {currentConversation?.title || "Z-Health AI"}
           </h1>
+          {workspace !== "all" && (
+            <button
+              onClick={() => setShowWorkspacePanel((v) => !v)}
+              className="w-11 h-11 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors touch-target"
+              title="Workspace panel"
+            >
+              <Document size={18} />
+            </button>
+          )}
           <JobIndicator jobs={jobs} onClick={() => setShowJobsPanel(true)} />
         </div>
 
@@ -997,6 +1084,8 @@ export default function Chat() {
           onQuickAction={handleQuickAction}
           isStreaming={isStreaming}
           onRegenerate={handleRegenerate}
+          quickActions={quickActions}
+          onQuickActionPinned={fetchQuickActions}
         />
 
         {/* Thinking indicator (M11) */}
@@ -1051,6 +1140,12 @@ export default function Chat() {
         onClearHistory={handleClearJobHistory}
       />
 
+      {/* Files & Reports library (slide-over) */}
+      <FilesLibrary
+        show={showFilesLibrary}
+        onClose={() => setShowFilesLibrary(false)}
+      />
+
       {/* Modals */}
       <SettingsPanel
         show={showSettings}
@@ -1068,6 +1163,16 @@ export default function Chat() {
         selectedPageId={selectedPageId}
         initialWorkflowId={initialWorkflowId}
       />
+      <QuickActionsManager
+        show={showQuickActionsManager}
+        onClose={() => setShowQuickActionsManager(false)}
+        workspace={workspace}
+        quickActions={quickActions}
+        onRefresh={fetchQuickActions}
+      />
+
+      {/* Notification toasts */}
+      <NotificationToast />
     </div>
   );
 }

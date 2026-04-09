@@ -47,7 +47,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       <div className="absolute inset-0 bg-black/30 backdrop-blur-md" />
 
       {/* Card */}
-      <div className="relative bg-white dark:bg-[#2c2c2e] rounded-3xl shadow-2xl max-w-[520px] w-full p-8 animate-scale-in">
+      <div className="relative bg-white dark:bg-[#2c2c2e] rounded-3xl shadow-2xl max-w-[520px] w-full p-6 md:p-8 animate-scale-in">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-blue/20">
@@ -62,7 +62,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         </div>
 
         {/* Capability grid */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
+        <div className="grid grid-cols-2 gap-2 md:gap-3 mb-6 md:mb-8">
           {capabilities.map((cap) => (
             <div
               key={cap.title}
@@ -85,7 +85,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         <div className="flex flex-col items-center gap-4">
           <button
             onClick={handleGetStarted}
-            className="w-full py-3 bg-brand-blue text-white font-semibold rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all duration-200 shadow-sm shadow-brand-blue/20"
+            className="w-full py-3.5 bg-brand-blue text-white font-semibold rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all duration-200 shadow-sm shadow-brand-blue/20 touch-target min-h-[48px] text-base"
           >
             Get Started
           </button>

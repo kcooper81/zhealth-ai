@@ -363,7 +363,7 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative w-full max-w-3xl max-h-[85vh] mx-4 bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-3xl max-h-[95vh] md:max-h-[85vh] mx-2 md:mx-4 bg-white dark:bg-[#1c1c1e] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
@@ -383,9 +383,9 @@ export default function WorkflowPanel({ show, onClose, selectedPageId, initialWo
             )}
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="w-11 h-11 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors touch-target"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
         </div>
@@ -549,22 +549,22 @@ function WorkflowCard({
         )}
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons -- always visible on mobile, hover on desktop */}
       <div
         className={`flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-50 dark:border-gray-700/50 transition-opacity duration-150 ${
-          showActions ? "opacity-100" : "opacity-0"
+          showActions ? "opacity-100" : "max-md:opacity-100 md:opacity-0"
         }`}
       >
         <button
           onClick={onRun}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand-blue rounded-lg hover:bg-brand-blue/90 transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-brand-blue rounded-lg hover:bg-brand-blue/90 active:bg-brand-blue/80 transition-colors touch-target min-h-[36px]"
         >
           <Play size={12} />
           Run
         </button>
         <button
           onClick={onEdit}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-500 transition-colors touch-target min-h-[36px]"
         >
           <Edit size={12} />
           Edit

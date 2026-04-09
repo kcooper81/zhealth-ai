@@ -175,6 +175,16 @@ export interface ReportData {
   notes?: string[];
 }
 
+export interface QuickAction {
+  id: string;
+  label: string;
+  prompt: string;
+  isDefault: boolean;
+  isHidden: boolean;
+  sortOrder: number;
+  workspace: string;
+}
+
 export interface StreamChunk {
   type: "token" | "done" | "error";
   text?: string;

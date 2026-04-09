@@ -201,7 +201,7 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-full max-w-md bg-white dark:bg-[#1c1c1e] border-l border-gray-200 dark:border-gray-800 z-[70] transform transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full sm:max-w-md bg-white dark:bg-[#1c1c1e] border-l border-gray-200 dark:border-gray-800 z-[70] transform transition-transform duration-300 ease-out ${
           show ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -210,14 +210,14 @@ export default function SettingsPanel({ show, onClose, selectedModel: externalMo
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Settings</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="w-11 h-11 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300 transition-colors touch-target"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5" style={{ maxHeight: "calc(100vh - 65px)" }}>
+        <div className="flex-1 overflow-y-auto px-5 md:px-6 py-5 pb-[env(safe-area-inset-bottom)]" style={{ maxHeight: "calc(100vh - 65px)" }}>
           {/* Account */}
           <SectionHeader title="Account" />
           <div className="flex items-center gap-3 mb-3">

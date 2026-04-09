@@ -254,8 +254,8 @@ export default function InputArea({
     MODEL_DISPLAY_NAMES[modelName || ""] || modelName || "AI";
 
   return (
-    <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1c1c1e]">
-      <div className="max-w-3xl mx-auto px-4 md:px-6 py-3">
+    <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1c1c1e] pb-[env(safe-area-inset-bottom)]">
+      <div className="max-w-3xl mx-auto px-3 md:px-6 py-2 md:py-3">
         {/* Main input container */}
         <div
           className={`relative bg-gray-50 dark:bg-[#2c2c2e] border rounded-2xl focus-within:ring-2 focus-within:ring-brand-blue/30 focus-within:border-brand-blue/50 transition-all duration-200 ${
@@ -298,7 +298,7 @@ export default function InputArea({
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || isStreaming}
-              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors ml-1 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 active:bg-gray-200 dark:active:bg-gray-600/50 transition-colors ml-1 mb-0.5 disabled:opacity-40 disabled:cursor-not-allowed touch-target"
               title="Attach files"
             >
               <Paperclip size={18} />
@@ -324,7 +324,7 @@ export default function InputArea({
               disabled={disabled}
               placeholder={placeholder || "Message Z-Health AI..."}
               rows={1}
-              className="flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none leading-relaxed min-h-[40px]"
+              className="flex-1 resize-none bg-transparent px-2 py-2.5 text-[16px] md:text-[15px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none leading-relaxed min-h-[44px]"
               style={{ overflow: "hidden" }}
             />
 
@@ -332,23 +332,23 @@ export default function InputArea({
             {isStreaming ? (
               <button
                 onClick={onCancelStream}
-                className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all mr-1 mb-0.5"
+                className="flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/30 transition-all mr-1 mb-0.5 touch-target"
                 title="Stop generating"
               >
-                <StopCircle size={20} />
+                <StopCircle size={22} />
               </button>
             ) : (
               <button
                 onClick={handleSend}
                 disabled={!canSend}
-                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 mr-1 mb-0.5 ${
+                className={`flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 mr-1 mb-0.5 touch-target ${
                   canSend
                     ? "bg-brand-blue text-white hover:bg-blue-600 active:scale-[0.92] shadow-sm"
                     : "text-gray-300 dark:text-gray-600 cursor-not-allowed"
                 }`}
                 title="Send message"
               >
-                <Send size={16} />
+                <Send size={18} />
               </button>
             )}
           </div>

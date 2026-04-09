@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import type { ChatMessage, PendingAction, ActionResult } from "@/lib/types";
+import type { ChatMessage, PendingAction, ActionResult, Workspace } from "@/lib/types";
 import { renderMarkdown } from "@/lib/markdown";
-import { ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy } from "./icons";
+import { notify } from "@/lib/notifications";
+import { ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy, Bookmark, BookmarkCheck } from "./icons";
 import FilePreview from "./FilePreview";
 import ReportCard from "./ReportCard";
+import PinQuickAction from "./PinQuickAction";
 
 interface MessageProps {
   message: ChatMessage;
@@ -13,6 +15,8 @@ interface MessageProps {
   onConfirmAction?: (action: PendingAction) => void;
   onCancelAction?: (actionId: string) => void;
   onViewPage?: (url: string) => void;
+  workspace?: Workspace;
+  onQuickActionPinned?: () => void;
 }
 
 export default function Message({
@@ -21,11 +25,16 @@ export default function Message({
   onConfirmAction,
   onCancelAction,
   onViewPage,
+  workspace = "all",
+  onQuickActionPinned,
 }: MessageProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
   const [showFeedbackTooltip, setShowFeedbackTooltip] = useState(false);
+  const [reportSaved, setReportSaved] = useState(false);
+  const [reportSaving, setReportSaving] = useState(false);
+  const [showPinPopover, setShowPinPopover] = useState(false);
   const isUser = message.role === "user";
 
   const handleCopy = async () => {
@@ -44,13 +53,39 @@ export default function Message({
     setTimeout(() => setShowFeedbackTooltip(false), 2000);
   };
 
+  const handleSaveReport = async () => {
+    if (!message.reportData || reportSaving || reportSaved) return;
+    setReportSaving(true);
+    try {
+      const rd = message.reportData;
+      const res = await fetch("/api/reports/saved", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: rd.title,
+          reportType: "general",
+          reportData: rd,
+        }),
+      });
+      if (res.ok) {
+        setReportSaved(true);
+        setTimeout(() => setReportSaved(false), 3000);
+        notify("info", "Report saved to library");
+      }
+    } catch {
+      notify("error", "Failed to save report");
+    } finally {
+      setReportSaving(false);
+    }
+  };
+
   return (
     <div
-      className={`flex ${isUser ? "justify-end" : "justify-start"} animate-fade-in`}
+      className={`flex ${isUser ? "justify-end" : "justify-start"} animate-fade-in group/msg`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} max-w-[85%]`}>
+      <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"} max-w-[90%] md:max-w-[85%]`}>
         {/* Avatar */}
         {!isUser && (
           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center mt-1 shadow-sm">
@@ -83,7 +118,38 @@ export default function Message({
 
             {/* Report card */}
             {!isUser && message.reportData && (
-              <ReportCard data={message.reportData} />
+              <div className="relative">
+                <ReportCard data={message.reportData} />
+                <div className="flex items-center justify-end mt-1.5 gap-1.5">
+                  <button
+                    onClick={handleSaveReport}
+                    disabled={reportSaving}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all duration-200 ${
+                      reportSaved
+                        ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
+                        : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                    } disabled:opacity-50`}
+                    title={reportSaved ? "Saved!" : "Save report to library"}
+                  >
+                    {reportSaved ? (
+                      <>
+                        <BookmarkCheck size={13} />
+                        <span>Saved!</span>
+                      </>
+                    ) : reportSaving ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark size={13} />
+                        <span>Save Report</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* Typing indicator — 3 dots while thinking, nothing once text is streaming */}
@@ -110,26 +176,48 @@ export default function Message({
             <ResultCard result={message.actionResult} onViewPage={onViewPage} />
           )}
 
-          {/* Hover controls */}
+          {/* Hover controls -- visible on hover (desktop) or on tap (mobile via group/msg) */}
           <div
-            className={`flex items-center gap-2 transition-opacity duration-200 ${
+            className={`flex items-center gap-1 md:gap-2 transition-opacity duration-200 ${
               isHovered ? "opacity-100" : "opacity-0"
-            } ${isUser ? "justify-end" : "justify-start"}`}
+            } ${isUser ? "justify-end" : "justify-start"} relative`}
           >
+            {/* Pin as quick action (user messages) */}
+            {isUser && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowPinPopover((v) => !v)}
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                  title="Save as Quick Action"
+                >
+                  <Bookmark size={14} />
+                </button>
+                {showPinPopover && (
+                  <PinQuickAction
+                    messageContent={message.content}
+                    workspace={workspace}
+                    onClose={() => {
+                      setShowPinPopover(false);
+                      onQuickActionPinned?.();
+                    }}
+                  />
+                )}
+              </div>
+            )}
             {/* C2: Edit button removed from user messages */}
             {!isUser && (
               <div className="relative flex items-center gap-2">
                 {/* C1: Copy button */}
                 <button
                   onClick={handleCopy}
-                  className={`p-1 rounded-md transition-colors ${
+                  className={`p-2 rounded-md transition-colors touch-target ${
                     copied
                       ? "text-emerald-500"
-                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 active:bg-gray-200 dark:active:bg-gray-600/50"
                   }`}
                   title={copied ? "Copied!" : "Copy message"}
                 >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
                 </button>
                 {copied && (
                   <span className="absolute -top-7 left-0 text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-md whitespace-nowrap">
@@ -140,25 +228,25 @@ export default function Message({
                 {/* C3: ThumbsUp/ThumbsDown with toggle state */}
                 <button
                   onClick={() => handleFeedback("up")}
-                  className={`p-1 rounded-md transition-colors ${
+                  className={`p-2 rounded-md transition-colors touch-target ${
                     feedback === "up"
                       ? "text-brand-blue bg-brand-blue/10"
-                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 active:bg-gray-200 dark:active:bg-gray-600/50"
                   }`}
                   title="Helpful"
                 >
-                  <ThumbsUp size={14} />
+                  <ThumbsUp size={16} />
                 </button>
                 <button
                   onClick={() => handleFeedback("down")}
-                  className={`p-1 rounded-md transition-colors ${
+                  className={`p-2 rounded-md transition-colors touch-target ${
                     feedback === "down"
                       ? "text-red-500 bg-red-500/10"
-                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                      : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 active:bg-gray-200 dark:active:bg-gray-600/50"
                   }`}
                   title="Not helpful"
                 >
-                  <ThumbsDown size={14} />
+                  <ThumbsDown size={16} />
                 </button>
 
                 {/* Feedback tooltip */}
@@ -200,13 +288,13 @@ function ActionCard({
       <div className="flex gap-2 mt-3">
         <button
           onClick={() => onConfirm?.(action)}
-          className="px-3.5 py-1.5 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-blue-600 active:scale-[0.97] transition-all duration-200"
+          className="px-4 py-2 bg-brand-blue text-white text-sm font-medium rounded-lg hover:bg-blue-600 active:scale-[0.97] transition-all duration-200 touch-target min-h-[44px]"
         >
           Confirm
         </button>
         <button
           onClick={() => onCancel?.(action.id)}
-          className="px-3.5 py-1.5 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-[0.97] transition-all duration-200"
+          className="px-4 py-2 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 active:scale-[0.97] transition-all duration-200 touch-target min-h-[44px]"
         >
           Cancel
         </button>

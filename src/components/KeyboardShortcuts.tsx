@@ -44,9 +44,9 @@ export default function KeyboardShortcuts({ show, onClose }: KeyboardShortcutsPr
           </h2>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600 transition-colors touch-target"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 

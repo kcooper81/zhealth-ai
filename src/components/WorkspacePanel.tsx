@@ -66,23 +66,39 @@ export default function WorkspacePanel({
       {/* Mobile overlay backdrop */}
       {show && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 md:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 md:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Panel */}
+      {/* Panel: bottom sheet on mobile, side panel on desktop */}
       <div
         className={`
-          fixed md:relative z-40 md:z-auto top-0 ${sidebarCollapsed ? "left-[60px]" : "left-[280px]"} md:left-0 h-full
-          bg-white dark:bg-[#242538] border-r border-gray-200 dark:border-gray-700/60
+          md:relative md:z-auto md:top-0 md:left-0 md:h-full
+          md:bg-white md:dark:bg-[#242538] md:border-r md:border-gray-200 md:dark:border-gray-700/60
+          md:flex md:flex-col
+          md:transition-all md:duration-250 md:ease-out
+          ${show
+            ? "md:w-[300px] md:opacity-100 md:translate-x-0"
+            : "md:w-0 md:opacity-0 md:-translate-x-4 md:overflow-hidden hidden md:flex"
+          }
+          fixed z-40 md:z-auto
+          max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-auto
+          max-md:bg-white max-md:dark:bg-[#242538]
+          max-md:rounded-t-2xl max-md:shadow-2xl
+          max-md:border-t max-md:border-gray-200 max-md:dark:border-gray-700/60
+          max-md:max-h-[70vh]
+          ${show ? "max-md:animate-slide-up-sheet" : "max-md:hidden"}
           flex flex-col
-          transition-all duration-250 ease-out
-          ${show ? "w-[300px] opacity-100 translate-x-0" : "w-0 opacity-0 -translate-x-4 overflow-hidden"}
         `}
         style={{ transitionDuration: "250ms" }}
       >
-        <div className="w-[300px] h-full flex flex-col">
+        <div className="md:w-[300px] h-full flex flex-col">
+          {/* Drag handle (mobile only) */}
+          <div className="flex justify-center pt-2 pb-1 md:hidden">
+            <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+          </div>
+
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
             <div className="flex items-center gap-2.5">
@@ -96,14 +112,14 @@ export default function WorkspacePanel({
             </div>
             <button
               onClick={onClose}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600 hover:text-gray-600 dark:hover:text-gray-300 transition-colors touch-target"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-hidden pt-2">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden pt-2">
             {workspace === "website" && (
               pagesLoading ? (
                 <div className="flex items-center justify-center py-12">

@@ -357,6 +357,35 @@ export const Slash = icon(
   <path d="M7 20L17 4" />
 );
 
+export const Bookmark = icon(
+  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+);
+
+export const EyeOff = icon(
+  <>
+    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </>
+);
+
+export const Eye = icon(
+  <>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </>
+);
+
+export const ArrowUp = icon(<path d="M12 19V5M5 12l7-7 7 7" />);
+
+export const ArrowDown = icon(<path d="M12 5v14M19 12l-7 7-7-7" />);
+
+export const RotateCw = icon(
+  <>
+    <path d="M23 4v6h-6" />
+    <path d="M20.49 15A9 9 0 115.64 5.64L1 10" />
+  </>
+);
+
 export const AtSign = icon(
   <>
     <circle cx="12" cy="12" r="4" />
@@ -392,6 +421,58 @@ export const Upload = icon(
     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
     <polyline points="17 8 12 3 7 8" />
     <line x1="12" y1="3" x2="12" y2="15" />
+  </>
+);
+
+export const FolderOpen = icon(
+  <>
+    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+    <path d="M2 10h20" />
+  </>
+);
+
+export const BookmarkCheck = icon(
+  <>
+    <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+    <path d="M9 10l2 2 4-4" />
+  </>
+);
+
+export const SortDesc = icon(
+  <>
+    <path d="M11 5h10M11 9h7M11 13h4" />
+    <path d="M3 21l4-4M3 21l-4-4M3 3v18" strokeWidth={2} />
+  </>
+);
+
+export const MoreHorizontal = icon(
+  <>
+    <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
+  </>
+);
+
+export const Pin = icon(
+  <>
+    <path d="M12 17v5" />
+    <path d="M9 2h6l-1 7h4l-6 8h-4l1-7H5l4-8z" />
+  </>
+);
+
+export const Download = icon(
+  <>
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </>
+);
+
+export const Eraser = icon(
+  <>
+    <path d="M20 20H7L3 16a1 1 0 010-1.41l9.59-9.59a2 2 0 012.82 0L20.83 10.41a2 2 0 010 2.82L13 21" />
+    <path d="M18 13L9 4" />
+    <path d="M7 20h13" />
   </>
 );
 

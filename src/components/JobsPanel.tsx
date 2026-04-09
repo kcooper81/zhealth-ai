@@ -323,16 +323,16 @@ export function JobsPanel({
       {/* Panel */}
       <div
         ref={panelRef}
-        className="fixed top-0 right-0 h-full w-full max-w-md bg-white dark:bg-[#1c1c1e] border-l border-gray-200 dark:border-gray-800 z-50 flex flex-col animate-slide-in-right shadow-2xl"
+        className="fixed top-0 right-0 h-full w-full sm:max-w-md bg-white dark:bg-[#1c1c1e] border-l border-gray-200 dark:border-gray-800 z-50 flex flex-col animate-slide-in-right shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Activity</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-11 h-11 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors touch-target"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
@@ -340,7 +340,7 @@ export function JobsPanel({
         <div className="flex border-b border-gray-100 dark:border-gray-800 px-5">
           <button
             onClick={() => setTab("active")}
-            className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors touch-target ${
               tab === "active"
                 ? "border-brand-blue text-brand-blue"
                 : "border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
@@ -355,7 +355,7 @@ export function JobsPanel({
           </button>
           <button
             onClick={() => setTab("history")}
-            className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors touch-target ${
               tab === "history"
                 ? "border-brand-blue text-brand-blue"
                 : "border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
