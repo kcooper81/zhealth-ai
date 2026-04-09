@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import type { Workspace } from "@/lib/types";
-import { Search, X, Filter, Clock, Zap, Globe, Users, BarChart, Activity } from "./icons";
+import { Search, X, Clock, Zap, Globe, Users, BarChart, Activity } from "./icons";
 import PanelShell from "./PanelShell";
 
 interface ActivityEntry {

@@ -550,7 +550,7 @@ export default function Chat() {
           .filter((m) => m.role === "user" || m.role === "assistant")
           .filter((m) => m.content.trim() !== "" || m.actionResult || m.reportData)
           .map((m) => {
-            let content = m.content;
+            let content = m.content || "";
             // Append action results so AI has historical context
             if (m.actionResult) {
               const ar = m.actionResult;
@@ -600,18 +600,20 @@ export default function Chat() {
         let accumulated = "";
         let buffer = "";
 
-        // Timeout: if no data received within 30s, show error
+        // Timeout: if no data received within 30s, cancel the stream
         let lastDataTime = Date.now();
-        const streamTimeout = setInterval(() => {
+        let streamTimeoutId: ReturnType<typeof setInterval> | null = setInterval(() => {
           if (Date.now() - lastDataTime > 30000 && !accumulated) {
-            clearInterval(streamTimeout);
-            reader.cancel();
+            if (streamTimeoutId) clearInterval(streamTimeoutId);
+            streamTimeoutId = null;
+            reader.cancel().catch(() => {});
           }
         }, 5000);
 
+        try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) { clearInterval(streamTimeout); break; }
+          if (done) break;
           lastDataTime = Date.now();
 
           buffer += decoder.decode(value, { stream: true });
@@ -709,6 +711,10 @@ export default function Chat() {
               throw parseErr;
             }
           }
+        }
+
+        } finally {
+          if (streamTimeoutId) clearInterval(streamTimeoutId);
         }
 
       } catch (err) {

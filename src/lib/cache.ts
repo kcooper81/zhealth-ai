@@ -89,10 +89,7 @@ export async function cacheSet(key: string, data: unknown, ttlSeconds: number): 
     const expiresAtIso = new Date(expiresAt).toISOString();
     supabase
       .from("api_cache")
-      .upsert(
-        { cache_key: key, data, expires_at: expiresAtIso, updated_at: new Date().toISOString() },
-        { onConflict: "cache_key" }
-      )
+      .upsert({ cache_key: key, data, expires_at: expiresAtIso, updated_at: new Date().toISOString() })
       .then(() => {});
   }
 }
