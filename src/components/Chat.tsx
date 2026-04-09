@@ -545,8 +545,25 @@ export default function Chat() {
         const conv = conversationsRef.current.find((c) => c.id === convId);
         const existingMessages = (conv?.messages || [])
           .filter((m) => m.role === "user" || m.role === "assistant")
-          .filter((m) => m.content.trim() !== "")
-          .map((m) => ({ role: m.role, content: m.content }));
+          .filter((m) => m.content.trim() !== "" || m.actionResult || m.reportData)
+          .map((m) => {
+            let content = m.content;
+            // Append action results so AI has historical context
+            if (m.actionResult) {
+              const ar = m.actionResult;
+              if (ar.success) {
+                const r = ar.result as Record<string, unknown> | undefined;
+                content += `\n\n[Action executed successfully: ${JSON.stringify(r || {}).slice(0, 500)}]`;
+              } else {
+                content += `\n\n[Action failed: ${ar.error || "unknown error"}]`;
+              }
+            }
+            // Append report data so AI remembers what reports were generated
+            if (m.reportData) {
+              content += `\n\n[Report generated: "${m.reportData.title}" (${m.reportData.period})]`;
+            }
+            return { role: m.role, content };
+          });
         const apiMessages = [...existingMessages, { role: "user", content: text }];
 
         const controller = new AbortController();
