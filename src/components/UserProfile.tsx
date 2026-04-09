@@ -73,7 +73,7 @@ export default function UserProfile({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-[#2c2c2e] rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="absolute bottom-full left-0 mb-2 w-[280px] bg-white dark:bg-[#2c2c2e] rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
           {/* User info header */}
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-3">

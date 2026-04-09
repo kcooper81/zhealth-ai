@@ -28,6 +28,7 @@ import { ActiveJobsBar, JobsPanel } from "./JobsPanel";
 import JobIndicator from "./JobIndicator";
 import QuickActionsManager from "./QuickActionsManager";
 import FilesLibrary from "./FilesLibrary";
+import CommandPanel from "./CommandPanel";
 import NotificationToast from "./NotificationToast";
 import { notify } from "@/lib/notifications";
 import { Menu, Loader, Document, X } from "./icons";
@@ -63,6 +64,7 @@ export default function Chat() {
   const [showWorkflows, setShowWorkflows] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showFilesLibrary, setShowFilesLibrary] = useState(false);
+  const [showCommandPanel, setShowCommandPanel] = useState(false);
   const [initialWorkflowId, setInitialWorkflowId] = useState<string | null>(null);
   const [, setShowOnboarding] = useState(true);
   const [pages, setPages] = useState<SidebarPage[]>([]);
@@ -995,6 +997,7 @@ export default function Chat() {
         onOpenWorkflows={() => { setInitialWorkflowId(null); setShowWorkflows(true); }}
         onRunWorkflow={(workflowId: string) => { setInitialWorkflowId(workflowId); setShowWorkflows(true); }}
         onOpenFiles={() => setShowFilesLibrary(true)}
+        onOpenCommands={() => setShowCommandPanel(true)}
         onOpenQuickActionsManager={() => setShowQuickActionsManager(true)}
         quickActions={quickActions}
         onQuickAction={handleQuickAction}
@@ -1169,6 +1172,18 @@ export default function Chat() {
         workspace={workspace}
         quickActions={quickActions}
         onRefresh={fetchQuickActions}
+      />
+
+      {/* Command panel */}
+      <CommandPanel
+        show={showCommandPanel}
+        onClose={() => setShowCommandPanel(false)}
+        workspace={workspace}
+        quickActions={quickActions}
+        onQuickAction={handleQuickAction}
+        onOpenQuickActionsManager={() => { setShowCommandPanel(false); setShowQuickActionsManager(true); }}
+        onOpenWorkflows={() => { setShowCommandPanel(false); setShowWorkflows(true); }}
+        onRunWorkflow={(id) => { setShowCommandPanel(false); setInitialWorkflowId(id); setShowWorkflows(true); }}
       />
 
       {/* Notification toasts */}

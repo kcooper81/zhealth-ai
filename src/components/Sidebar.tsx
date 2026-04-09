@@ -93,6 +93,7 @@ interface SidebarProps {
   onCloseSidebar: () => void;
   onOpenWorkflows?: () => void;
   onRunWorkflow?: (workflowId: string) => void;
+  onOpenCommands?: () => void;
   onOpenFiles?: () => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -164,6 +165,7 @@ export default function Sidebar({
   onCloseSidebar,
   onOpenWorkflows,
   onRunWorkflow,
+  onOpenCommands,
   onOpenFiles,
   collapsed,
   onToggleCollapse,
@@ -374,88 +376,6 @@ export default function Sidebar({
 
             {/* Conversation list section */}
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Workflows section */}
-              {sidebarWorkflows.length > 0 && onOpenWorkflows && (
-                <div className="px-3 pt-3 pb-2 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Workflow size={13} className="text-gray-500" />
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                        Workflows
-                      </p>
-                    </div>
-                    <button
-                      onClick={onOpenWorkflows}
-                      className="text-[11px] font-medium text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      View all
-                    </button>
-                  </div>
-                  <div className="space-y-0.5">
-                    {sidebarWorkflows.map((wf) => (
-                      <button
-                        key={wf.id}
-                        onClick={() => {
-                          onRunWorkflow?.(wf.id);
-                          onCloseSidebar();
-                        }}
-                        className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-400 rounded-lg hover:bg-white/5 hover:text-gray-200 transition-colors group"
-                      >
-                        <span className="truncate">{wf.name}</span>
-                        <ChevronRight
-                          size={12}
-                          className="text-gray-600 group-hover:text-gray-500 flex-shrink-0"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Quick Actions section */}
-              {quickActions && quickActions.length > 0 && (
-                <div className="px-3 pt-3 pb-2 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-2 group/qa">
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={13} className="text-gray-500" />
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                        Quick Actions
-                      </p>
-                    </div>
-                    {onOpenQuickActionsManager && (
-                      <button
-                        onClick={() => {
-                          onOpenQuickActionsManager();
-                          onCloseSidebar();
-                        }}
-                        className="w-5 h-5 rounded flex items-center justify-center text-gray-600 hover:text-gray-300 opacity-0 group-hover/qa:opacity-100 transition-all"
-                        title="Manage quick actions"
-                      >
-                        <Settings size={12} />
-                      </button>
-                    )}
-                  </div>
-                  <div className="space-y-0.5">
-                    {quickActions.slice(0, 4).map((qa) => (
-                      <button
-                        key={qa.id}
-                        onClick={() => {
-                          onQuickAction?.(qa.prompt);
-                          onCloseSidebar();
-                        }}
-                        className="flex items-center justify-between w-full px-2.5 py-1.5 text-[12px] font-medium text-gray-400 rounded-lg hover:bg-white/5 hover:text-gray-200 transition-colors group"
-                      >
-                        <span className="truncate">{qa.label}</span>
-                        <ChevronRight
-                          size={12}
-                          className="text-gray-600 group-hover:text-gray-500 flex-shrink-0"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Search conversations */}
               <div className="px-3 pt-2 pb-2 flex-shrink-0">
                 <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
@@ -536,6 +456,16 @@ export default function Sidebar({
                   onThemeChange={onThemeChange}
                 />
               </div>
+              <button
+                onClick={() => {
+                  onOpenCommands?.();
+                  onCloseSidebar();
+                }}
+                className="relative w-11 h-11 rounded-lg flex items-center justify-center text-gray-500 hover:bg-white/10 active:bg-white/20 hover:text-gray-300 transition-colors flex-shrink-0 touch-target"
+                title="Commands"
+              >
+                <Zap size={18} />
+              </button>
               <button
                 onClick={() => {
                   onOpenFiles?.();
