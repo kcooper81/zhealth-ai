@@ -113,6 +113,67 @@ export async function streamChat(
   return { content: fullContent, inputTokens, outputTokens };
 }
 
+/**
+ * Walk an Elementor JSON data tree and produce a human-readable summary of
+ * sections, columns, and widgets so the AI knows what is on the page without
+ * consuming the full (often huge) JSON payload.
+ */
+export function summarizeElementorData(data: unknown[]): string {
+  if (!Array.isArray(data) || data.length === 0) return "(empty Elementor data)";
+
+  const lines: string[] = [];
+
+  function widgetLabel(el: Record<string, unknown>): string {
+    const wt = (el.widgetType || el.widget_type || "unknown") as string;
+    const settings = (el.settings || {}) as Record<string, unknown>;
+    // Try to extract a short preview from common settings
+    const title = settings.title || settings.heading || settings.editor || settings.text || "";
+    const btnText = settings.button_text || settings.text || "";
+    const imgUrl = (settings.image as Record<string, unknown>)?.url as string | undefined;
+    let preview = "";
+    if (typeof title === "string" && title.length > 0) {
+      const clean = title.replace(/<[^>]*>/g, "").trim();
+      preview = clean.length > 60 ? clean.slice(0, 60) + "..." : clean;
+    } else if (typeof btnText === "string" && btnText.length > 0) {
+      preview = btnText;
+    } else if (imgUrl) {
+      preview = imgUrl.split("/").pop() || "image";
+    }
+    return preview ? `${wt} ("${preview}")` : wt;
+  }
+
+  function walkElements(elements: unknown[], depth: number, path: string): void {
+    if (!Array.isArray(elements)) return;
+    elements.forEach((el, idx) => {
+      const item = el as Record<string, unknown>;
+      const elType = (item.elType || item.el_type || "") as string;
+      const currentPath = path ? `${path}.elements.${idx}` : String(idx);
+      const indent = "  ".repeat(depth);
+
+      if (elType === "section" || elType === "container") {
+        const settings = (item.settings || {}) as Record<string, unknown>;
+        const cssId = settings._element_id || settings.css_id || "";
+        const label = cssId ? ` id="${cssId}"` : "";
+        lines.push(`${indent}Section ${idx}${label}:`);
+        walkElements((item.elements || []) as unknown[], depth + 1, currentPath);
+      } else if (elType === "column") {
+        lines.push(`${indent}Column ${idx}:`);
+        walkElements((item.elements || []) as unknown[], depth + 1, currentPath);
+      } else if (elType === "widget") {
+        lines.push(`${indent}- [${currentPath}] ${widgetLabel(item)}`);
+      } else {
+        // Unknown type — still recurse
+        if (item.elements) {
+          walkElements(item.elements as unknown[], depth, currentPath);
+        }
+      }
+    });
+  }
+
+  walkElements(data, 0, "");
+  return lines.join("\n");
+}
+
 export function buildSystemPrompt(context: {
   pages?: Array<{
     id: number;
@@ -120,7 +181,7 @@ export function buildSystemPrompt(context: {
     status: string;
     url: string;
   }>;
-  currentPage?: { id: number; title: string; content: string; template?: string };
+  currentPage?: { id: number; title: string; content: string; template?: string; elementorSummary?: string };
   capabilities?: string[];
   brandGuide?: Record<string, unknown>;
   pluginContext?: string;
@@ -148,6 +209,14 @@ export function buildSystemPrompt(context: {
     ? "This page uses Elementor. When editing, be aware that Elementor stores its own layout data. For simple text/content changes, updating post_content works. For layout changes, Elementor data may need updating."
     : "This page uses the standard WordPress editor.";
 
+  const elementorSummarySection =
+    context.currentPage?.elementorSummary
+      ? `\n\nElementor Structure (sections and widgets on this page):
+${context.currentPage.elementorSummary}
+
+Use the widget paths shown in brackets (e.g. "0.elements.0.elements.1") when calling elementor_update_widget.`
+      : "";
+
   const currentPageSection = context.currentPage
     ? `\n\n--- CURRENTLY SELECTED PAGE ---
 Page ID: ${context.currentPage.id}
@@ -161,7 +230,7 @@ Any changes should target page ID ${context.currentPage.id}.
 
 Current page content (HTML):
 ${context.currentPage.content.slice(0, 12000)}
-${context.currentPage.content.length > 12000 ? "\n(Content truncated)" : ""}
+${context.currentPage.content.length > 12000 ? "\n(Content truncated)" : ""}${elementorSummarySection}
 --- END SELECTED PAGE ---`
     : "";
 
@@ -221,11 +290,21 @@ When you need to perform an action on the WordPress site, include an action bloc
 </action>
 
 Available action types:
+
+WordPress pages/posts:
 - create_page: params { title, content, status?, slug?, template? }
 - update_page: params { id, title?, content?, status?, slug? }
 - delete_page: params { id, force? }
 - create_post: params { title, content, status?, slug?, categories?, tags? }
 - update_post: params { id, title?, content?, status? }
+
+Elementor (for pages built with Elementor page builder):
+- elementor_get_structure: params { pageId } - Returns the Elementor section/widget tree for a page
+- elementor_update_widget: params { pageId, widgetPath, changes } - Update a specific widget's settings (text, url, image, etc). widgetPath is a dot-separated path like "0.elements.0.elements.1"
+- elementor_add_section: params { pageId, position, sectionData } - Insert a new Elementor section JSON object at the given index position
+- elementor_remove_section: params { pageId, sectionIndex } - Remove the section at the given index
+
+SEO / Media / Products:
 - update_seo: params { postId, title?, description?, focusKeyword? }
 - upload_media: params { url, filename, alt? }
 - clear_cache: params {}
@@ -261,6 +340,38 @@ CRITICAL GUIDELINES FOR RESPONSES:
    - Match the existing page style
 
 8. When the user attaches images, analyze them carefully and describe what you see. If they ask you to use the image on the site, suggest an appropriate action.
+
+PAGE CREATION GUIDELINES:
+When the user asks to "create a landing page" or "create a page", the content field in your action MUST contain:
+- A complete <style> block with all CSS (responsive, brand-colored using #080a0d, #2c8df3, #d32431, #d0f689)
+- A complete HTML structure with multiple sections (hero, content sections, CTAs, etc.)
+- Professional marketing copy appropriate for Z-Health and their neuroscience-based movement education
+- Responsive design with media queries that works on mobile
+- The content should be 200+ lines of HTML minimum for a landing page
+- Include: hero section with headline and CTA, content/benefit sections, testimonials if relevant, pricing if relevant, final CTA
+- Do NOT create a placeholder or stub page -- build a real, production-ready page
+
+Template selection when creating pages:
+- Use template: "elementor_canvas" for full-width landing pages (no theme header/footer)
+- Use template: "elementor_header_footer" for pages that should have the site header and footer
+- Use template: "" (empty string) for default theme template
+
+PAGE EDITING GUIDELINES:
+When editing an EXISTING page:
+- Read the current content carefully before making changes
+- Make ONLY the requested change -- do not rewrite unrelated sections
+- Return the FULL content with the change applied (the entire post_content, not just the changed part)
+- For Elementor pages, if the edit is to text/headings/buttons visible in post_content, use update_page with the modified HTML
+- For structural changes on Elementor pages (adding/removing/reordering sections), use the elementor_add_section or elementor_remove_section actions
+- For targeted widget changes on Elementor pages (changing a button label, heading text, image), use elementor_update_widget with the widget path from the Elementor structure summary
+
+ELEMENTOR EDITING GUIDELINES:
+When a page uses Elementor, an "Elementor Structure" summary is provided showing sections, columns, and widgets with their paths.
+- To answer "what sections are on this page?" -- read the Elementor Structure summary and describe it in plain language
+- To change text in a specific widget -- use elementor_update_widget with the widgetPath and changes (e.g. changes: { "title": "New Headline" })
+- To add a new section -- use elementor_add_section with a properly structured Elementor section JSON
+- To remove a section -- use elementor_remove_section with the sectionIndex
+- Widget paths look like "0.elements.0.elements.1" meaning: section 0, column 0, widget 1
 
 When generating reports with data, use the <report> tag format:
 

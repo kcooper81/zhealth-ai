@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { buildSystemPrompt } from "@/lib/claude";
+import { buildSystemPrompt, summarizeElementorData } from "@/lib/claude";
 import { streamAIChat, isValidModel, getAvailableModels, getDefaultModel, type AIModel } from "@/lib/ai-router";
 import { parseActions } from "@/lib/actions";
 import { parseReport } from "@/lib/report-parser";
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       url: string;
     }> = [];
     let currentPage:
-      | { id: number; title: string; content: string; template?: string }
+      | { id: number; title: string; content: string; template?: string; elementorSummary?: string }
       | undefined;
     let pluginContextStr = "";
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
           url: p.link,
         }));
 
-        const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string }; template?: string } | null | undefined;
+        const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string }; template?: string; meta?: Record<string, unknown> } | null | undefined;
         if (pageData) {
           currentPage = {
             id: pageData.id,
@@ -101,6 +101,21 @@ export async function POST(request: NextRequest) {
             content: pageData.content.raw || pageData.content.rendered,
             template: pageData.template || "",
           };
+
+          // Fetch Elementor structure if this is an Elementor page
+          const tpl = pageData.template || "";
+          if (tpl.includes("elementor") || (pageData.meta && pageData.meta._elementor_edit_mode)) {
+            try {
+              const wpClient = getWordPressClient();
+              const elementorData = await wpClient.getElementorData(pageData.id);
+              if (elementorData && elementorData.length > 0) {
+                (currentPage as { elementorSummary?: string }).elementorSummary =
+                  summarizeElementorData(elementorData);
+              }
+            } catch {
+              // Elementor data not available -- continue without it
+            }
+          }
         }
       }
     } catch (error) {

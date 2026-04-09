@@ -330,6 +330,146 @@ export async function executeAction(
         };
       }
 
+      // ---- Elementor Actions ----
+
+      case "elementor_get_structure": {
+        const { pageId } = action.params as { pageId: number };
+        const elementorData = await wp.getElementorData(pageId);
+        if (!elementorData) {
+          return {
+            success: false,
+            error: `Page ${pageId} has no Elementor data, or the page does not exist.`,
+          };
+        }
+        // Import summarizeElementorData dynamically to avoid circular deps
+        const { summarizeElementorData } = await import("./claude");
+        const summary = summarizeElementorData(elementorData);
+        return {
+          success: true,
+          result: {
+            pageId,
+            sectionCount: elementorData.length,
+            structure: summary,
+          },
+        };
+      }
+
+      case "elementor_update_widget": {
+        const { pageId: ewPageId, widgetPath, changes } = action.params as {
+          pageId: number;
+          widgetPath: string;
+          changes: Record<string, unknown>;
+        };
+        const elData = await wp.getElementorData(ewPageId);
+        if (!elData) {
+          return { success: false, error: `Page ${ewPageId} has no Elementor data.` };
+        }
+
+        // Navigate the Elementor tree using the dot-separated path
+        // Path format: "0.elements.0.elements.1" means data[0].elements[0].elements[1]
+        const pathParts = widgetPath.split(".");
+        let current: unknown = elData;
+        for (let i = 0; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          if (current === null || current === undefined) {
+            return { success: false, error: `Invalid widget path: could not traverse at "${pathParts.slice(0, i + 1).join(".")}"` };
+          }
+          if (Array.isArray(current)) {
+            const idx = parseInt(part, 10);
+            if (isNaN(idx) || idx < 0 || idx >= current.length) {
+              return { success: false, error: `Invalid index ${part} at path "${pathParts.slice(0, i + 1).join(".")}"` };
+            }
+            current = current[idx];
+          } else if (typeof current === "object") {
+            current = (current as Record<string, unknown>)[part];
+          } else {
+            return { success: false, error: `Cannot traverse path at "${pathParts.slice(0, i + 1).join(".")}"` };
+          }
+        }
+
+        const widget = current as Record<string, unknown>;
+        if (!widget || typeof widget !== "object") {
+          return { success: false, error: `No widget found at path "${widgetPath}"` };
+        }
+
+        // Merge changes into the widget's settings
+        const existingSettings = (widget.settings || {}) as Record<string, unknown>;
+        widget.settings = { ...existingSettings, ...changes };
+
+        // Write back
+        await wp.updateElementorData(ewPageId, elData);
+        return {
+          success: true,
+          result: {
+            pageId: ewPageId,
+            widgetPath,
+            updatedSettings: Object.keys(changes),
+          },
+        };
+      }
+
+      case "elementor_add_section": {
+        const { pageId: asPageId, position, sectionData } = action.params as {
+          pageId: number;
+          position: number;
+          sectionData: Record<string, unknown>;
+        };
+        const asData = await wp.getElementorData(asPageId);
+        if (!asData) {
+          return { success: false, error: `Page ${asPageId} has no Elementor data.` };
+        }
+
+        // Ensure the section has required Elementor fields
+        const newSection: Record<string, unknown> = {
+          id: Math.random().toString(36).substring(2, 10),
+          elType: "section",
+          isInner: false,
+          settings: {},
+          elements: [],
+          ...sectionData,
+        };
+
+        // Insert at the requested position (clamped to valid range)
+        const insertAt = Math.max(0, Math.min(position, asData.length));
+        asData.splice(insertAt, 0, newSection);
+
+        await wp.updateElementorData(asPageId, asData);
+        return {
+          success: true,
+          result: {
+            pageId: asPageId,
+            insertedAt: insertAt,
+            totalSections: asData.length,
+          },
+        };
+      }
+
+      case "elementor_remove_section": {
+        const { pageId: rsPageId, sectionIndex } = action.params as {
+          pageId: number;
+          sectionIndex: number;
+        };
+        const rsData = await wp.getElementorData(rsPageId);
+        if (!rsData) {
+          return { success: false, error: `Page ${rsPageId} has no Elementor data.` };
+        }
+        if (sectionIndex < 0 || sectionIndex >= rsData.length) {
+          return { success: false, error: `Section index ${sectionIndex} is out of range (0-${rsData.length - 1}).` };
+        }
+
+        await takeSnapshot(rsPageId);
+        rsData.splice(sectionIndex, 1);
+        await wp.updateElementorData(rsPageId, rsData);
+        return {
+          success: true,
+          result: {
+            pageId: rsPageId,
+            removedIndex: sectionIndex,
+            remainingSections: rsData.length,
+          },
+        };
+      }
+
       // ---- Keap CRM Actions ----
       case "keap_list_contacts": {
         const { email, name, limit: contactLimit } = action.params as { email?: string; name?: string; limit?: number };

@@ -4,7 +4,11 @@ import * as db from "@/lib/db";
 export async function POST(request: NextRequest) {
   try {
     const { messageId, rating, conversationId } = await request.json();
-    await db.logActivity("feedback", "feedback", { messageId, rating, conversationId });
+    await db.logActivity("system", "feedback", {
+      targetType: "message",
+      targetId: messageId,
+      extra: { rating, conversationId },
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
