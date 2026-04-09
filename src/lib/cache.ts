@@ -103,11 +103,11 @@ export async function cacheSet(key: string, data: unknown, ttlSeconds: number): 
  */
 export async function cacheInvalidate(prefix: string): Promise<void> {
   // Clear from memory
-  for (const key of memoryCache.keys()) {
-    if (key.startsWith(prefix)) {
-      memoryCache.delete(key);
-    }
-  }
+  const keysToDelete: string[] = [];
+  memoryCache.forEach((_, key) => {
+    if (key.startsWith(prefix)) keysToDelete.push(key);
+  });
+  keysToDelete.forEach((key) => memoryCache.delete(key));
 
   // Clear from Supabase
   if (isSupabaseConfigured) {
