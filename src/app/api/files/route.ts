@@ -15,12 +15,28 @@ export async function GET() {
       return NextResponse.json([]);
     }
 
-    // Query messages that have non-null files, joining with conversations for context
+    // First get user's conversation IDs, then query messages with files
+    const { data: userConvs } = await supabase
+      .from("conversations")
+      .select("id, title")
+      .eq("user_id", userId);
+
+    if (!userConvs || userConvs.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    const convMap = new Map<string, string>();
+    for (const c of userConvs) {
+      convMap.set(c.id, c.title || "Unknown conversation");
+    }
+
+    const convIds = userConvs.map((c) => c.id);
+
     const { data: messages, error } = await supabase
       .from("messages")
-      .select("id, files, created_at, conversation_id, conversations!inner(id, title, user_id)")
+      .select("id, files, created_at, conversation_id")
       .not("files", "is", null)
-      .eq("conversations.user_id", userId)
+      .in("conversation_id", convIds)
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -54,7 +70,6 @@ export async function GET() {
       }>;
       if (!Array.isArray(msgFiles)) continue;
 
-      const conv = msg.conversations as any;
       for (const f of msgFiles) {
         files.push({
           id: f.id,
@@ -65,7 +80,7 @@ export async function GET() {
           preview: f.preview,
           date: msg.created_at,
           conversationId: msg.conversation_id,
-          conversationTitle: conv?.title || "Unknown conversation",
+          conversationTitle: convMap.get(msg.conversation_id) || "Unknown conversation",
           messageId: msg.id,
         });
       }

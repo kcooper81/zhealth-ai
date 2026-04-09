@@ -7,12 +7,9 @@ import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
 import { getSystemPromptAddendum } from "@/lib/workspaces";
-import { getThinkificContext, isConfigured as isThinkificConfigured } from "@/lib/thinkific";
-import { getKeapContext, isConfigured as isKeapConfigured } from "@/lib/keap";
+import { getThinkificContext, isConfigured as isThinkificConfigured, getCourse, listEnrollments } from "@/lib/thinkific";
+import { getKeapContext, isConfigured as isKeapConfigured, getContact } from "@/lib/keap";
 import { getAnalyticsContext, isConfigured as isAnalyticsConfigured, getTrafficOverview } from "@/lib/google-analytics";
-import { getContact } from "@/lib/keap";
-import { getCourse, listEnrollments } from "@/lib/thinkific";
-import { getServerSession } from "@/lib/auth";
 import type { Workspace, FileAttachment } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,7 +17,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const authSession = await requireAuth();
     const body = await request.json();
     const { messages, pageContextId, conversationId, model: requestedModel, workspace: requestedWorkspace, files: requestFiles, contactId, courseId } = body as {
       messages: Array<{ role: string; content: string }>;
@@ -159,8 +156,7 @@ export async function POST(request: NextRequest) {
     let analyticsDataContext = "";
     if ((workspace === "analytics" || workspace === "all") && isAnalyticsConfigured()) {
       try {
-        const session = await getServerSession() as any;
-        const accessToken = session?.accessToken;
+        const accessToken = (authSession as any)?.accessToken;
         if (accessToken) {
           const overview = await getTrafficOverview(accessToken, "website", "7d");
           const avgMins = Math.floor(overview.avgSessionDuration / 60);

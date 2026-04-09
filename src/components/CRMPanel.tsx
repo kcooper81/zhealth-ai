@@ -63,8 +63,35 @@ export default function CRMPanel({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch contacts
+  // Normalize raw API contacts into our Contact shape
+  const normalizeContacts = useCallback((rawContacts: Record<string, unknown>[]): Contact[] => {
+    return rawContacts.map((c) => ({
+      id: c.id as number,
+      name:
+        ((c.given_name || c.first_name || "") as string) +
+        " " +
+        ((c.family_name || c.last_name || "") as string).trim() ||
+        (c.name as string) ||
+        "Unknown",
+      email:
+        (c.email_address as string) ||
+        (Array.isArray(c.email_addresses) && c.email_addresses.length > 0
+          ? (c.email_addresses[0] as Record<string, unknown>).email as string
+          : "") ||
+        (c.email as string) ||
+        "",
+      tagCount: Array.isArray(c.tag_ids)
+        ? c.tag_ids.length
+        : typeof c.tagCount === "number"
+        ? c.tagCount
+        : 0,
+    }));
+  }, []);
+
+  // Fetch default contacts on mount
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -72,35 +99,12 @@ export default function CRMPanel({
       .then((res) => (res.ok ? res.json() : { contacts: [], tags: [] }))
       .then((data) => {
         if (cancelled) return;
-        // Normalize response
         const rawContacts = Array.isArray(data.contacts)
           ? data.contacts
           : Array.isArray(data)
           ? data
           : [];
-        setContacts(
-          rawContacts.map((c: Record<string, unknown>) => ({
-            id: c.id as number,
-            name:
-              ((c.given_name || c.first_name || "") as string) +
-              " " +
-              ((c.family_name || c.last_name || "") as string).trim() ||
-              (c.name as string) ||
-              "Unknown",
-            email:
-              (c.email_address as string) ||
-              (Array.isArray(c.email_addresses) && c.email_addresses.length > 0
-                ? (c.email_addresses[0] as Record<string, unknown>).email as string
-                : "") ||
-              (c.email as string) ||
-              "",
-            tagCount: Array.isArray(c.tag_ids)
-              ? c.tag_ids.length
-              : typeof c.tagCount === "number"
-              ? c.tagCount
-              : 0,
-          }))
-        );
+        setContacts(normalizeContacts(rawContacts));
         if (data.tags && Array.isArray(data.tags)) {
           setTags(
             data.tags.slice(0, 15).map((t: Record<string, unknown>) => ({
@@ -118,18 +122,59 @@ export default function CRMPanel({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [normalizeContacts]);
+
+  // Debounced server-side search when user types
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const query = search.trim();
+    if (!query) {
+      // Reset to default contacts when search is cleared
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const encodedQuery = encodeURIComponent(query);
+        const [emailRes, nameRes] = await Promise.all([
+          fetch(`/api/keap?action=contacts&email=${encodedQuery}&limit=30`).then((r) => r.ok ? r.json() : { contacts: [] }),
+          fetch(`/api/keap?action=contacts&name=${encodedQuery}&limit=30`).then((r) => r.ok ? r.json() : { contacts: [] }),
+        ]);
+
+        const emailContacts = Array.isArray(emailRes.contacts) ? emailRes.contacts : [];
+        const nameContacts = Array.isArray(nameRes.contacts) ? nameRes.contacts : [];
+
+        // Merge and deduplicate by ID
+        const seen = new Set<number>();
+        const merged: Record<string, unknown>[] = [];
+        for (const c of [...nameContacts, ...emailContacts]) {
+          const id = c.id as number;
+          if (!seen.has(id)) {
+            seen.add(id);
+            merged.push(c);
+          }
+        }
+
+        setContacts(normalizeContacts(merged));
+      } catch {
+        // Keep current contacts on error
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search, normalizeContacts]);
 
   const filtered = useMemo(() => {
     let result = contacts;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.email.toLowerCase().includes(q)
-      );
-    }
+    // Client-side filtering is only applied for filter pills, not for the search
+    // (search is now server-side)
     switch (filter) {
       case "tagged":
         result = result.filter((c) => c.tagCount > 0);
@@ -139,7 +184,7 @@ export default function CRMPanel({
         break;
     }
     return result;
-  }, [contacts, search, filter]);
+  }, [contacts, filter]);
 
   const filters: { label: string; value: FilterType }[] = [
     { label: "All", value: "all" },
@@ -204,6 +249,13 @@ export default function CRMPanel({
         {loading && (
           <div className="flex items-center justify-center py-8">
             <div className="w-5 h-5 border-2 border-gray-200 dark:border-gray-700 border-t-gray-400 dark:border-t-gray-500 rounded-full animate-spin" />
+          </div>
+        )}
+
+        {!loading && searching && (
+          <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-gray-400 dark:text-gray-500">
+            <Loader size={12} className="animate-spin" />
+            <span>Searching...</span>
           </div>
         )}
 
