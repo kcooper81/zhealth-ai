@@ -1,8 +1,55 @@
+import type { FileAttachment } from "./types";
+
+interface GeminiPart {
+  text?: string;
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function buildGeminiParts(
+  text: string,
+  files?: FileAttachment[]
+): GeminiPart[] {
+  const parts: GeminiPart[] = [];
+
+  if (files && files.length > 0) {
+    for (const file of files) {
+      if (file.data && file.type.startsWith("image/")) {
+        parts.push({
+          inlineData: {
+            mimeType: file.type,
+            data: file.data,
+          },
+        });
+      } else {
+        parts.push({
+          text: `[Attached file: ${file.name} (${file.type}, ${formatBytes(file.size)})]`,
+        });
+      }
+    }
+  }
+
+  if (text) {
+    parts.push({ text });
+  }
+
+  return parts;
+}
+
 export async function streamGeminiChat(
   messages: Array<{ role: string; content: string }>,
   system: string,
   onChunk: (text: string) => void,
-  model = "gemini-2.0-flash"
+  model = "gemini-2.0-flash",
+  files?: FileAttachment[]
 ): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -10,10 +57,22 @@ export async function streamGeminiChat(
   }
 
   // Convert messages from Claude format to Gemini format
-  const geminiContents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const geminiContents = messages.map((m, idx) => {
+    const isLastUser =
+      idx === messages.length - 1 && m.role === "user" && files && files.length > 0;
+
+    if (isLastUser) {
+      return {
+        role: "user",
+        parts: buildGeminiParts(m.content, files),
+      };
+    }
+
+    return {
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }] as GeminiPart[],
+    };
+  });
 
   const requestBody: Record<string, unknown> = {
     contents: geminiContents,

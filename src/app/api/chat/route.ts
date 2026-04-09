@@ -9,7 +9,7 @@ import { getSystemPromptAddendum } from "@/lib/workspaces";
 import { getThinkificContext, isConfigured as isThinkificConfigured } from "@/lib/thinkific";
 import { getKeapContext, isConfigured as isKeapConfigured } from "@/lib/keap";
 import { getAnalyticsContext, isConfigured as isAnalyticsConfigured } from "@/lib/google-analytics";
-import type { Workspace } from "@/lib/types";
+import type { Workspace, FileAttachment } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,12 +18,13 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth();
     const body = await request.json();
-    const { messages, pageContextId, conversationId, model: requestedModel, workspace: requestedWorkspace } = body as {
+    const { messages, pageContextId, conversationId, model: requestedModel, workspace: requestedWorkspace, files: requestFiles } = body as {
       messages: Array<{ role: string; content: string }>;
       pageContextId?: number;
       conversationId?: string;
       model?: string;
       workspace?: Workspace;
+      files?: FileAttachment[];
     };
 
     const workspace: Workspace = requestedWorkspace || "all";

@@ -210,7 +210,7 @@ export default function LMSPanel({
             <GraduationCap
               size={16}
               className="flex-shrink-0"
-              style={{ color: accentColor }}
+              className="flex-shrink-0 text-pink-500"
             />
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200 truncate">
@@ -249,7 +249,7 @@ export default function LMSPanel({
               onClick={() => onQuickAction?.(action)}
               className="flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
             >
-              <TrendingUp size={12} className="flex-shrink-0" style={{ color: accentColor }} />
+              <TrendingUp size={12} className="flex-shrink-0 text-pink-500" />
               {action}
             </button>
           ))}

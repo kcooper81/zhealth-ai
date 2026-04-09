@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import type { ChatMessage, PendingAction, ActionResult } from "@/lib/types";
 import { renderMarkdown } from "@/lib/markdown";
 import { ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy } from "./icons";
+import FilePreview from "./FilePreview";
 
 interface MessageProps {
   message: ChatMessage;
@@ -65,6 +66,11 @@ export default function Message({
                 : "bg-white dark:bg-[#2c2c2e] text-gray-800 dark:text-gray-100 px-4 py-2.5 rounded-[20px] rounded-bl-[4px] border border-gray-100 dark:border-gray-700/50 shadow-sm"
             }
           >
+            {/* File attachments */}
+            {message.files && message.files.length > 0 && (
+              <FilePreview files={message.files} mode="message" />
+            )}
+
             {isUser ? (
               <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
             ) : (

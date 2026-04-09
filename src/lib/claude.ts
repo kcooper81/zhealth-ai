@@ -1,27 +1,98 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { FileAttachment } from "./types";
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+type ContentBlock =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      source: {
+        type: "base64";
+        media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+        data: string;
+      };
+    };
+
+function buildContentBlocks(
+  text: string,
+  files?: FileAttachment[]
+): ContentBlock[] | string {
+  if (!files || files.length === 0) return text;
+
+  const blocks: ContentBlock[] = [];
+
+  // Add image files as image content blocks
+  for (const file of files) {
+    if (file.data && file.type.startsWith("image/")) {
+      const mediaType = file.type as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      blocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: file.data,
+        },
+      });
+    } else {
+      // Non-image files: describe them as text
+      blocks.push({
+        type: "text",
+        text: `[Attached file: ${file.name} (${file.type}, ${formatBytes(file.size)})]`,
+      });
+    }
+  }
+
+  // Add the user's text message
+  if (text) {
+    blocks.push({ type: "text", text });
+  }
+
+  return blocks;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export async function streamChat(
   messages: Array<{ role: string; content: string }>,
   system: string,
   onChunk: (text: string) => void,
-  model = "claude-sonnet-4-20250514"
+  model = "claude-sonnet-4-20250514",
+  files?: FileAttachment[]
 ): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
   let fullContent = "";
   let inputTokens = 0;
   let outputTokens = 0;
 
+  // Build messages array - for the last user message, attach files if provided
+  const apiMessages = messages.map((m, idx) => {
+    const isLastUser =
+      idx === messages.length - 1 && m.role === "user" && files && files.length > 0;
+
+    if (isLastUser) {
+      return {
+        role: m.role as "user" | "assistant",
+        content: buildContentBlocks(m.content, files),
+      };
+    }
+
+    return {
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    };
+  });
+
   const stream = client.messages.stream({
     model,
     max_tokens: 8192,
     system,
-    messages: messages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
+    messages: apiMessages as Anthropic.MessageParam[],
   });
 
   for await (const event of stream) {
@@ -105,6 +176,7 @@ Your capabilities include full WordPress management:
 - Updating SEO metadata (Yoast)
 - Managing WooCommerce products
 - Generating optimized content for the target audience
+- Analyzing images and files that users attach to messages
 
 When you need to perform an action on the WordPress site, include an action block in your response using the following format:
 
@@ -153,6 +225,8 @@ CRITICAL GUIDELINES FOR RESPONSES:
    - Follow the brand color palette
    - Ensure responsive design
    - Match the existing page style
+
+8. When the user attaches images, analyze them carefully and describe what you see. If they ask you to use the image on the site, suggest an appropriate action.
 
 Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${currentPageSection}`;
 }

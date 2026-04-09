@@ -86,11 +86,22 @@ export interface WPOrder {
   }>;
 }
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data?: string;
+  url?: string;
+  preview?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  files?: FileAttachment[];
   pendingAction?: PendingAction | null;
   actionResult?: ActionResult | null;
 }

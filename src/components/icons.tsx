@@ -372,6 +372,29 @@ export const LogOut = icon(
   </>
 );
 
+export const FileIcon = icon(
+  <>
+    <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+    <path d="M13 2v7h7" />
+  </>
+);
+
+export const ImageIcon = icon(
+  <>
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+    <path d="M21 15l-5-5L5 21" />
+  </>
+);
+
+export const Upload = icon(
+  <>
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </>
+);
+
 export const GraduationCap = icon(
   <>
     <path d="M22 10v6M2 10l10-5 10 5-10 5z" />

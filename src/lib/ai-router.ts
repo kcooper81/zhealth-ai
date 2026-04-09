@@ -1,5 +1,6 @@
 import { streamChat } from "./claude";
 import { streamGeminiChat } from "./gemini";
+import type { FileAttachment } from "./types";
 
 export type AIModel =
   | "claude-sonnet-4-6"
@@ -96,14 +97,15 @@ export async function streamAIChat(
   model: AIModel,
   messages: Array<{ role: string; content: string }>,
   system: string,
-  onChunk: (text: string) => void
+  onChunk: (text: string) => void,
+  files?: FileAttachment[]
 ): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
   const info = getModelInfo(model);
 
   if (info.provider === "gemini") {
-    return streamGeminiChat(messages, system, onChunk, info.apiModel);
+    return streamGeminiChat(messages, system, onChunk, info.apiModel, files);
   }
 
   // Claude provider
-  return streamChat(messages, system, onChunk, info.apiModel);
+  return streamChat(messages, system, onChunk, info.apiModel, files);
 }
