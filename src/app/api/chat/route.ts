@@ -8,6 +8,7 @@ import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
 import { getSystemPromptAddendum } from "@/lib/workspaces";
 import { getThinkificContext, isConfigured as isThinkificConfigured } from "@/lib/thinkific";
 import { getKeapContext, isConfigured as isKeapConfigured } from "@/lib/keap";
+import { getAnalyticsContext, isConfigured as isAnalyticsConfigured } from "@/lib/google-analytics";
 import type { Workspace } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -109,6 +110,9 @@ export async function POST(request: NextRequest) {
     }
     if ((workspace === "crm" || workspace === "all") && isKeapConfigured()) {
       integrationContext += getKeapContext();
+    }
+    if ((workspace === "analytics" || workspace === "all") && isAnalyticsConfigured()) {
+      integrationContext += getAnalyticsContext();
     }
 
     const systemPrompt = buildSystemPrompt({
