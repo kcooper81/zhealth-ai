@@ -371,3 +371,10 @@ export const LogOut = icon(
     <line x1="21" y1="12" x2="9" y2="12" />
   </>
 );
+
+export const GraduationCap = icon(
+  <>
+    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+    <path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5" />
+  </>
+);

@@ -95,7 +95,7 @@ export interface ChatMessage {
   actionResult?: ActionResult | null;
 }
 
-export type Workspace = 'all' | 'website' | 'crm' | 'analytics';
+export type Workspace = 'all' | 'website' | 'crm' | 'analytics' | 'lms';
 
 export interface WorkspaceConfig {
   id: Workspace;

@@ -4,13 +4,14 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { Workspace, WorkspaceConfig } from "@/lib/types";
 import { WORKSPACES } from "@/lib/workspaces";
 import { useClickOutside } from "@/lib/hooks";
-import { Sparkles, Globe, Users, BarChart, ChevronDown, Check } from "./icons";
+import { Sparkles, Globe, Users, BarChart, GraduationCap, ChevronDown, Check } from "./icons";
 
 const iconMap: Record<string, React.FC<{ size?: number; className?: string }>> = {
   Sparkles,
   Globe,
   Users,
   BarChart,
+  GraduationCap,
 };
 
 interface WorkspaceSelectorProps {

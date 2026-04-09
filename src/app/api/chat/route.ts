@@ -6,6 +6,8 @@ import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
 import { getSystemPromptAddendum } from "@/lib/workspaces";
+import { getThinkificContext, isConfigured as isThinkificConfigured } from "@/lib/thinkific";
+import { getKeapContext, isConfigured as isKeapConfigured } from "@/lib/keap";
 import type { Workspace } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -100,10 +102,19 @@ export async function POST(request: NextRequest) {
       console.error("Failed to fetch context:", error);
     }
 
+    // Add integration-specific context based on workspace
+    let integrationContext = "";
+    if ((workspace === "lms" || workspace === "all") && isThinkificConfigured()) {
+      integrationContext += getThinkificContext();
+    }
+    if ((workspace === "crm" || workspace === "all") && isKeapConfigured()) {
+      integrationContext += getKeapContext();
+    }
+
     const systemPrompt = buildSystemPrompt({
       pages,
       currentPage,
-      pluginContext: pluginContextStr,
+      pluginContext: pluginContextStr + integrationContext,
     }) + getSystemPromptAddendum(workspace);
 
     const encoder = new TextEncoder();

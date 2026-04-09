@@ -23,6 +23,13 @@ export const WORKSPACES: WorkspaceConfig[] = [
     color: "#f59e0b",
   },
   {
+    id: "lms",
+    name: "Z-Health LMS",
+    description: "Thinkific courses, students, enrollments",
+    icon: "GraduationCap",
+    color: "#ec4899",
+  },
+  {
     id: "analytics",
     name: "Analytics",
     description: "Traffic, performance, insights",
@@ -41,6 +48,8 @@ export function getQuickActions(workspace: Workspace): string[] {
       return ["List pages", "Create page", "SEO audit", "Clear cache"];
     case "crm":
       return ["List contacts", "Tag breakdown", "Pipeline status", "Recent orders"];
+    case "lms":
+      return ["List courses", "LMS overview", "Recent enrollments", "Create coupon"];
     case "analytics":
       return ["Top pages this week", "Traffic overview", "Bounce rate issues"];
     case "all":
@@ -55,6 +64,8 @@ export function getSystemPromptAddendum(workspace: Workspace): string {
       return `\n\nWorkspace context: The user is working in the Z-Health Website workspace. Focus on WordPress management tasks including pages, posts, Elementor page building, SEO optimization, media management, and WooCommerce. Prioritize website-related capabilities in your responses.`;
     case "crm":
       return `\n\nWorkspace context: The user is working in the Z-Health CRM workspace. Focus on Keap/Infusionsoft CRM management including contacts, tags, campaigns, pipeline management, and order tracking. Prioritize CRM-related capabilities in your responses.`;
+    case "lms":
+      return `\n\nWorkspace context: The user is working in the Z-Health LMS workspace. Focus on Thinkific LMS management including courses, chapters, lessons, student accounts, enrollments, completion tracking, orders, coupon/promo codes, and LMS analytics. The LMS is at courses.zhealtheducation.com. Prioritize LMS-related capabilities in your responses.`;
     case "analytics":
       return `\n\nWorkspace context: The user is working in the Analytics workspace. Focus on Google Analytics, Microsoft Clarity, site performance metrics, traffic analysis, bounce rates, conversion tracking, and data-driven insights. Prioritize analytics-related capabilities in your responses.`;
     case "all":
