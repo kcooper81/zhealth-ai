@@ -77,7 +77,7 @@ export function useNotifications(): Notification[] {
       }
 
       // Clean up timers for removed notifications
-      for (const [id, timer] of timersRef.current.entries()) {
+      for (const [id, timer] of Array.from(timersRef.current.entries())) {
         if (!notifs.find((n) => n.id === id)) {
           clearTimeout(timer);
           timersRef.current.delete(id);
@@ -88,7 +88,7 @@ export function useNotifications(): Notification[] {
     return () => {
       listeners.delete(listener);
       // Clear all timers on unmount
-      for (const timer of timersRef.current.values()) {
+      for (const timer of Array.from(timersRef.current.values())) {
         clearTimeout(timer);
       }
       timersRef.current.clear();
