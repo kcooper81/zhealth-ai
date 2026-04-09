@@ -292,6 +292,8 @@ When you need to perform an action on the WordPress site, include an action bloc
 Available action types:
 
 WordPress pages/posts:
+- list_pages: params { status?, search?, per_page? } - List pages (use for "show me all pages")
+- get_page: params { id } - Get a single page's details
 - create_page: params { title, content, status?, slug?, template? }
 - update_page: params { id, title?, content?, status?, slug? }
 - delete_page: params { id, force? }

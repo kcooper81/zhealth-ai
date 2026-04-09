@@ -77,6 +77,35 @@ export async function executeAction(
 
   try {
     switch (action.type) {
+      // ---- Read-only WordPress actions ----
+      case "get_pages":
+      case "list_pages": {
+        const params = action.params as { status?: string; search?: string; per_page?: number };
+        const pages = await wp.listPages({ per_page: params.per_page || 50, status: params.status, search: params.search });
+        return {
+          success: true,
+          result: {
+            pages: pages.map((p) => ({ id: p.id, title: p.title.rendered, status: p.status, link: p.link })),
+            count: pages.length,
+          },
+        };
+      }
+
+      case "get_page": {
+        const { id: getPageId } = action.params as { id: number };
+        const page = await wp.getPage(getPageId, "view");
+        return {
+          success: true,
+          result: {
+            id: page.id,
+            title: page.title.rendered,
+            status: page.status,
+            link: page.link,
+            content_preview: (page.content.rendered || "").slice(0, 500),
+          },
+        };
+      }
+
       case "create_page": {
         const { title, content, status, slug, template } = action.params as {
           title: string;

@@ -270,39 +270,41 @@ export default function Chat() {
     setJobs((prev) => prev.filter(isJobActive));
   }, [setJobs]);
 
-  // Fetch real pages from WordPress on mount
-  useEffect(() => {
-    async function fetchPages() {
-      try {
-        const [pagesRes, postsRes] = await Promise.all([
-          fetch("/api/pages?per_page=100").then((r) => r.ok ? r.json() : []),
-          fetch("/api/posts?per_page=100").then((r) => r.ok ? r.json() : []),
-        ]);
-        const allPages: SidebarPage[] = [
-          ...(Array.isArray(pagesRes) ? pagesRes : []).map((p: any) => ({
-            id: p.id,
-            title: p.title?.rendered || p.title || "Untitled",
-            status: p.status || "publish",
-            type: "page" as const,
-            modified: p.modified,
-          })),
-          ...(Array.isArray(postsRes) ? postsRes : []).map((p: any) => ({
-            id: p.id,
-            title: p.title?.rendered || p.title || "Untitled",
-            status: p.status || "publish",
-            type: "post" as const,
-            modified: p.modified,
-          })),
-        ];
-        setPages(allPages);
-      } catch {
-        // WordPress not reachable — leave empty
-      } finally {
-        setPagesLoading(false);
-      }
+  // Fetch pages from WordPress — extracted so we can call after actions
+  const refreshPages = useCallback(async () => {
+    try {
+      const [pagesRes, postsRes] = await Promise.all([
+        fetch("/api/pages?per_page=100").then((r) => r.ok ? r.json() : []),
+        fetch("/api/posts?per_page=100").then((r) => r.ok ? r.json() : []),
+      ]);
+      const allPages: SidebarPage[] = [
+        ...(Array.isArray(pagesRes) ? pagesRes : []).map((p: any) => ({
+          id: p.id,
+          title: p.title?.rendered || p.title || "Untitled",
+          status: p.status || "publish",
+          type: "page" as const,
+          modified: p.modified,
+        })),
+        ...(Array.isArray(postsRes) ? postsRes : []).map((p: any) => ({
+          id: p.id,
+          title: p.title?.rendered || p.title || "Untitled",
+          status: p.status || "publish",
+          type: "post" as const,
+          modified: p.modified,
+        })),
+      ];
+      setPages(allPages);
+    } catch {
+      // WordPress not reachable
+    } finally {
+      setPagesLoading(false);
     }
-    fetchPages();
   }, []);
+
+  // Fetch on mount
+  useEffect(() => {
+    refreshPages();
+  }, [refreshPages]);
 
   // --- Derived ---
   const currentConversation = useMemo(
@@ -865,6 +867,10 @@ export default function Chat() {
             })
           );
           notify("success", action.summary || "Action completed successfully");
+          // Refresh page list if this was a WordPress action
+          if (["create_page", "update_page", "delete_page", "create_post", "update_post"].includes(action.type)) {
+            refreshPages();
+          }
         } else {
           updateJob(jobId, (j) =>
             failJob(j, result.error || "Action failed")

@@ -10,6 +10,7 @@ import { getSystemPromptAddendum } from "@/lib/workspaces";
 import { getThinkificContext, isConfigured as isThinkificConfigured, getCourse, listEnrollments } from "@/lib/thinkific";
 import { getKeapContext, isConfigured as isKeapConfigured, getContact } from "@/lib/keap";
 import { getAnalyticsContext, isConfigured as isAnalyticsConfigured, getTrafficOverview } from "@/lib/google-analytics";
+import { logError, logWarn } from "@/lib/error-logger";
 import type { Workspace, FileAttachment } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
     // Determine which model to use — only allow models with configured keys
     const available = getAvailableModels();
     if (available.length === 0) {
+      logWarn("api/chat", "No AI models configured", { availableKeys: "none" });
       return new Response(
         JSON.stringify({ error: "No AI models configured. Add ANTHROPIC_API_KEY or GEMINI_API_KEY to environment variables." }),
         { status: 500, headers: { "Content-Type": "application/json" } }
@@ -119,7 +121,8 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch context:", error);
+      const ctxMsg = error instanceof Error ? error.message : "Unknown context error";
+      logWarn("api/chat", "Failed to fetch WordPress/plugin context", { error: ctxMsg, workspace });
     }
 
     // Add integration-specific context based on workspace
@@ -144,7 +147,7 @@ export async function POST(request: NextRequest) {
         const tags = (contact.tag_ids || []).map((t) => String(t));
         currentContact = { id: contactId, name, email, tags };
       } catch (err) {
-        console.error("Failed to fetch contact:", err);
+        logWarn("api/chat", "Failed to fetch contact", { contactId, error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -163,7 +166,7 @@ export async function POST(request: NextRequest) {
           enrollmentCount: (enrollments as any).meta?.pagination?.total_items || 0,
         };
       } catch (err) {
-        console.error("Failed to fetch course:", err);
+        logWarn("api/chat", "Failed to fetch course", { courseId, error: err instanceof Error ? err.message : String(err) });
       }
     }
 
