@@ -3,6 +3,7 @@
 import React, { useCallback } from "react";
 import type { ReportData } from "@/lib/types";
 import { Download } from "./icons";
+import ReportChart from "./ReportChart";
 
 interface ReportCardProps {
   data: ReportData;
@@ -234,6 +235,13 @@ export default function ReportCard({ data }: ReportCardProps) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Chart visualization */}
+      {data.chart && data.chart.data && data.chart.data.length > 0 && (
+        <div className="border-t border-gray-100 dark:border-gray-700/40">
+          <ReportChart chart={data.chart} />
         </div>
       )}
 

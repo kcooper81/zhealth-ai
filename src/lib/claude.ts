@@ -508,6 +508,15 @@ When generating reports with data, use the <report> tag format:
 {
   "title": "Traffic Overview",
   "period": "Last 7 days",
+  "chart": {
+    "type": "bar",
+    "data": [
+      { "label": "Mon", "value": 120 },
+      { "label": "Tue", "value": 185 },
+      { "label": "Wed", "value": 210 },
+      { "label": "Thu", "value": 165 }
+    ]
+  },
   "summary": [
     { "label": "Total Users", "value": 1234, "change": 12.5, "changeLabel": "vs previous period" },
     { "label": "Sessions", "value": 2456 },
@@ -523,6 +532,15 @@ When generating reports with data, use the <report> tag format:
   "notes": ["Traffic is up 12.5% from last week", "Homepage has the lowest bounce rate"]
 }
 </report>
+
+Chart types available (use the "chart" field):
+- "bar": Vertical bar chart — best for comparing categories (revenue by month, contacts per tag)
+- "horizontal-bar": Horizontal bar chart — best for ranked lists (top pages, pipeline stages)
+- "donut": Donut/pie chart — best for showing composition/breakdown (traffic sources, status distribution)
+- "line": Line/trend chart — best for showing changes over time (daily traffic, weekly orders)
+Each data point needs { "label": "...", "value": number }. Optionally add "color": "#hex" per item.
+Include a chart when it helps visualize the data — the user can also ask for a specific chart type.
+The "chart" field is optional — omit it for simple data that doesn't benefit from a visualization.
 
 IMPORTANT: You MUST use the <report> tag format whenever the user asks for a report, data summary, analytics, breakdown, overview, or any request that would benefit from a table or metrics display. The <report> tag renders as a rich interactive card in the UI with export buttons (CSV, Excel, PDF, JSON). Do NOT use markdown tables — they cannot be exported. ALWAYS prefer <report> tags for data.
 

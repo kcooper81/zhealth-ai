@@ -172,9 +172,16 @@ export interface PageSnapshot {
   snapshotAt: string;
 }
 
+export interface ChartData {
+  type: "bar" | "donut" | "line" | "horizontal-bar";
+  data: Array<{ label: string; value: number; color?: string }>;
+  height?: number;
+}
+
 export interface ReportData {
   title: string;
   period: string;
+  chart?: ChartData;
   summary?: Array<{
     label: string;
     value: string | number;
