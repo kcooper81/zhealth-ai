@@ -55,18 +55,20 @@ export async function GET(request: NextRequest) {
         if (!accessToken) {
           return NextResponse.json({ error: "Not authenticated for analytics." }, { status: 401 });
         }
-        const data = await ga.getTrafficOverview(accessToken, property, range);
+        const comparison = await ga.getTrafficOverviewWithComparison(accessToken, property, range);
+        const prevLabel = range === "today" ? "vs yesterday" : range === "7d" ? "vs previous 7 days" : range === "90d" ? "vs previous 90 days" : "vs previous 30 days";
         report = {
           title: "Traffic Overview",
           period,
           summary: [
-            { label: "Total Users", value: data.totalUsers },
-            { label: "Sessions", value: data.totalSessions },
-            { label: "Pageviews", value: data.totalPageviews },
-            { label: "Bounce Rate", value: fmtPct(data.bounceRate) },
+            { label: "Total Users", value: comparison.current.totalUsers, change: comparison.changes.users, changeLabel: prevLabel },
+            { label: "Sessions", value: comparison.current.totalSessions, change: comparison.changes.sessions, changeLabel: prevLabel },
+            { label: "Pageviews", value: comparison.current.totalPageviews, change: comparison.changes.pageviews, changeLabel: prevLabel },
+            { label: "Bounce Rate", value: fmtPct(comparison.current.bounceRate), change: comparison.changes.bounceRate, changeLabel: prevLabel },
           ],
           notes: [
-            `Average session duration: ${fmtDuration(data.avgSessionDuration)}`,
+            `Average session duration: ${fmtDuration(comparison.current.avgSessionDuration)} (${comparison.changes.avgSessionDuration > 0 ? "+" : ""}${comparison.changes.avgSessionDuration.toFixed(1)}% ${prevLabel})`,
+            `Previous period: ${comparison.previous.totalUsers.toLocaleString()} users, ${comparison.previous.totalSessions.toLocaleString()} sessions`,
           ],
         };
         break;
@@ -140,7 +142,8 @@ export async function GET(request: NextRequest) {
       }
 
       case "contacts": {
-        const contactData = await keap.listContacts({ limit: 25, order: "date_created", order_direction: "DESCENDING" });
+        const contactLimit = Number(searchParams.get("limit")) || 100;
+        const contactData = await keap.listContacts({ limit: contactLimit, order: "date_created", order_direction: "DESCENDING" });
         report = {
           title: "Contact Overview",
           period,
@@ -149,8 +152,36 @@ export async function GET(request: NextRequest) {
             { label: "Shown", value: contactData.contacts.length },
           ],
           table: {
-            headers: ["Name", "Email", "Tags", "Created"],
+            headers: ["Name", "Email", "Tags", "Created", "Last Updated"],
             rows: contactData.contacts.map((c) => [
+              `${c.given_name || ""} ${c.family_name || ""}`.trim() || "Unknown",
+              c.email_addresses?.[0]?.email || "",
+              c.tag_ids?.length || 0,
+              c.date_created ? new Date(c.date_created).toLocaleDateString() : "",
+              c.last_updated ? new Date(c.last_updated).toLocaleDateString() : "",
+            ]),
+          },
+        };
+        break;
+      }
+
+      case "contacts-by-tag": {
+        const tagId = Number(searchParams.get("tag_id"));
+        if (!tagId) {
+          return NextResponse.json({ error: "tag_id query parameter is required for contacts-by-tag report." }, { status: 400 });
+        }
+        const tagLimit = Number(searchParams.get("limit")) || 100;
+        const taggedContacts = await keap.getContactsWithTag(tagId, { limit: tagLimit });
+        report = {
+          title: `Contacts with Tag #${tagId}`,
+          period: "Current",
+          summary: [
+            { label: "Total Contacts", value: taggedContacts.count },
+            { label: "Shown", value: taggedContacts.contacts.length },
+          ],
+          table: {
+            headers: ["Name", "Email", "Total Tags", "Created"],
+            rows: taggedContacts.contacts.map((c) => [
               `${c.given_name || ""} ${c.family_name || ""}`.trim() || "Unknown",
               c.email_addresses?.[0]?.email || "",
               c.tag_ids?.length || 0,
@@ -162,7 +193,8 @@ export async function GET(request: NextRequest) {
       }
 
       case "tags": {
-        const tagData = await keap.listTags({ limit: 50 });
+        const tagLimit2 = Number(searchParams.get("limit")) || 200;
+        const tagData = await keap.listTags({ limit: tagLimit2 });
         report = {
           title: "Tag Breakdown",
           period: "Current",
@@ -181,6 +213,28 @@ export async function GET(request: NextRequest) {
         break;
       }
 
+      case "campaigns": {
+        const campLimit = Number(searchParams.get("limit")) || 100;
+        const campData = await keap.listCampaigns({ limit: campLimit });
+        report = {
+          title: "Campaign Overview",
+          period: "Current",
+          summary: [
+            { label: "Total Campaigns", value: campData.count },
+          ],
+          table: {
+            headers: ["Campaign", "Active Contacts", "Published", "Goals"],
+            rows: campData.campaigns.map((c) => [
+              c.name,
+              c.active_contact_count || 0,
+              c.published_date ? new Date(c.published_date).toLocaleDateString() : "Not published",
+              c.goals?.length || 0,
+            ]),
+          },
+        };
+        break;
+      }
+
       case "revenue": {
         const now = new Date();
         const since = range === "today"
@@ -189,9 +243,10 @@ export async function GET(request: NextRequest) {
           ? new Date(Date.now() - 7 * 86400000).toISOString()
           : range === "90d"
           ? new Date(Date.now() - 90 * 86400000).toISOString()
-          : new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          : new Date(Date.now() - 30 * 86400000).toISOString();
 
-        const orderData = await keap.listOrders({ limit: 50, since });
+        const revenueLimit = Number(searchParams.get("limit")) || 200;
+        const orderData = await keap.listOrders({ limit: revenueLimit, since });
         const totalRevenue = orderData.orders.reduce((sum, o) => sum + (o.total || 0), 0);
         const orderCount = orderData.orders.length;
 
@@ -204,10 +259,11 @@ export async function GET(request: NextRequest) {
             { label: "Avg Order Value", value: orderCount > 0 ? "$" + (totalRevenue / orderCount).toFixed(2) : "$0.00" },
           ],
           table: {
-            headers: ["Date", "Contact", "Total", "Status"],
-            rows: orderData.orders.slice(0, 20).map((o) => [
+            headers: ["Date", "Contact", "Email", "Total", "Status"],
+            rows: orderData.orders.map((o) => [
               new Date(o.order_date).toLocaleDateString(),
               `${o.contact.first_name} ${o.contact.last_name}`,
+              o.contact.email || "",
               "$" + o.total.toFixed(2),
               o.status,
             ]),
@@ -216,14 +272,85 @@ export async function GET(request: NextRequest) {
         break;
       }
 
+      case "orders-detail": {
+        const now2 = new Date();
+        const orderSince = range === "today"
+          ? new Date(now2.getFullYear(), now2.getMonth(), now2.getDate()).toISOString()
+          : range === "7d"
+          ? new Date(Date.now() - 7 * 86400000).toISOString()
+          : range === "90d"
+          ? new Date(Date.now() - 90 * 86400000).toISOString()
+          : new Date(Date.now() - 30 * 86400000).toISOString();
+
+        const detailLimit = Number(searchParams.get("limit")) || 100;
+        const detailOrders = await keap.listOrders({ limit: detailLimit, since: orderSince });
+
+        // Build line-item level rows
+        const itemRows: (string | number)[][] = [];
+        for (const o of detailOrders.orders) {
+          if (o.order_items && o.order_items.length > 0) {
+            for (const item of o.order_items) {
+              itemRows.push([
+                new Date(o.order_date).toLocaleDateString(),
+                `${o.contact.first_name} ${o.contact.last_name}`,
+                item.name,
+                item.quantity,
+                "$" + item.price.toFixed(2),
+                "$" + (item.quantity * item.price).toFixed(2),
+                o.status,
+              ]);
+            }
+          } else {
+            itemRows.push([
+              new Date(o.order_date).toLocaleDateString(),
+              `${o.contact.first_name} ${o.contact.last_name}`,
+              o.title || "Order",
+              1,
+              "$" + o.total.toFixed(2),
+              "$" + o.total.toFixed(2),
+              o.status,
+            ]);
+          }
+        }
+
+        report = {
+          title: "Order Detail Report",
+          period,
+          summary: [
+            { label: "Orders", value: detailOrders.count },
+            { label: "Line Items", value: itemRows.length },
+            { label: "Total Revenue", value: "$" + detailOrders.orders.reduce((s, o) => s + (o.total || 0), 0).toLocaleString("en-US", { minimumFractionDigits: 2 }) },
+          ],
+          table: {
+            headers: ["Date", "Contact", "Product", "Qty", "Unit Price", "Total", "Status"],
+            rows: itemRows,
+          },
+        };
+        break;
+      }
+
       case "pipeline": {
+        const pipeLimit = Number(searchParams.get("limit")) || 100;
         const [opportunities, stages] = await Promise.all([
-          keap.listOpportunities({ limit: 50 }),
+          keap.listOpportunities({ limit: pipeLimit }),
           keap.listPipelineStages().catch(() => []),
         ]);
 
         const totalProjected = opportunities.opportunities.reduce(
           (sum, o) => sum + (o.projected_revenue_high || 0), 0
+        );
+
+        // Build stage summary
+        const stageCounts: Record<string, { count: number; revenue: number }> = {};
+        for (const o of opportunities.opportunities) {
+          const stageName = o.stage?.name || "Unknown";
+          if (!stageCounts[stageName]) stageCounts[stageName] = { count: 0, revenue: 0 };
+          stageCounts[stageName].count++;
+          stageCounts[stageName].revenue += o.projected_revenue_high || 0;
+        }
+
+        const stageNotes = Object.entries(stageCounts).map(
+          ([name, data]) => `${name}: ${data.count} deals, $${data.revenue.toLocaleString("en-US", { minimumFractionDigits: 2 })} projected`
         );
 
         report = {
@@ -232,16 +359,135 @@ export async function GET(request: NextRequest) {
           summary: [
             { label: "Active Opportunities", value: opportunities.count },
             { label: "Total Projected Revenue", value: "$" + totalProjected.toLocaleString("en-US", { minimumFractionDigits: 2 }) },
+            { label: "Pipeline Stages", value: Object.keys(stageCounts).length },
           ],
           table: {
-            headers: ["Opportunity", "Contact", "Stage", "Projected Revenue"],
+            headers: ["Opportunity", "Contact", "Stage", "Est. Close", "Projected Revenue"],
             rows: opportunities.opportunities.map((o) => [
               o.opportunity_title,
               o.contact ? `${o.contact.first_name} ${o.contact.last_name}` : "N/A",
               o.stage?.name || "Unknown",
+              o.estimated_close_date ? new Date(o.estimated_close_date).toLocaleDateString() : "N/A",
               o.projected_revenue_high ? "$" + o.projected_revenue_high.toLocaleString() : "$0",
             ]),
           },
+          notes: stageNotes,
+        };
+        break;
+      }
+
+      case "emails": {
+        const now3 = new Date();
+        const emailSince = range === "today"
+          ? new Date(now3.getFullYear(), now3.getMonth(), now3.getDate()).toISOString()
+          : range === "7d"
+          ? new Date(Date.now() - 7 * 86400000).toISOString()
+          : range === "90d"
+          ? new Date(Date.now() - 90 * 86400000).toISOString()
+          : new Date(Date.now() - 30 * 86400000).toISOString();
+
+        const emailLimit = Number(searchParams.get("limit")) || 200;
+        const contactFilter = searchParams.get("contact_id") ? Number(searchParams.get("contact_id")) : undefined;
+        const emailData = await keap.listEmails({
+          limit: emailLimit,
+          since_sent_date: emailSince,
+          contact_id: contactFilter,
+        });
+
+        const totalSent = emailData.emails.length;
+
+        // Group by subject to show send volume per email
+        const subjectCounts: Record<string, number> = {};
+        for (const e of emailData.emails) {
+          const subj = e.subject || "(no subject)";
+          subjectCounts[subj] = (subjectCounts[subj] || 0) + 1;
+        }
+        const uniqueSubjects = Object.keys(subjectCounts).length;
+
+        // Group by date to show send volume over time
+        const dateCounts: Record<string, number> = {};
+        for (const e of emailData.emails) {
+          const d = e.sent_date ? new Date(e.sent_date).toLocaleDateString() : "Unknown";
+          dateCounts[d] = (dateCounts[d] || 0) + 1;
+        }
+
+        report = {
+          title: contactFilter ? `Email History for Contact #${contactFilter}` : "Email Send Activity",
+          period,
+          summary: [
+            { label: "Emails Sent", value: totalSent },
+            { label: "Unique Subjects", value: uniqueSubjects },
+            { label: "Active Days", value: Object.keys(dateCounts).length },
+          ],
+          table: {
+            headers: ["Date Sent", "Subject", "From", "To"],
+            rows: emailData.emails.map((e) => [
+              e.sent_date ? new Date(e.sent_date).toLocaleDateString() : "N/A",
+              e.subject || "(no subject)",
+              e.sent_from_address || "N/A",
+              e.sent_to_address || "N/A",
+            ]),
+          },
+          notes: [
+            `${totalSent} emails sent across ${Object.keys(dateCounts).length} days.`,
+            uniqueSubjects > 0 ? `Most sent: "${Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0][0]}" (${Object.entries(subjectCounts).sort((a, b) => b[1] - a[1])[0][1]} sends)` : "",
+            "Note: Email open/click tracking is only available in the Keap admin dashboard, not via the API.",
+          ].filter(Boolean),
+        };
+        break;
+      }
+
+      case "email-stats": {
+        // Send volume grouped by subject line
+        const statsNow = new Date();
+        const statsSince = range === "today"
+          ? new Date(statsNow.getFullYear(), statsNow.getMonth(), statsNow.getDate()).toISOString()
+          : range === "7d"
+          ? new Date(Date.now() - 7 * 86400000).toISOString()
+          : range === "90d"
+          ? new Date(Date.now() - 90 * 86400000).toISOString()
+          : new Date(Date.now() - 30 * 86400000).toISOString();
+
+        const statsEmails = await keap.listEmails({ limit: 200, since_sent_date: statsSince });
+
+        // Group by subject
+        const subjStats: Record<string, { sent: number; recipients: Set<string>; firstSent: string; lastSent: string }> = {};
+        for (const e of statsEmails.emails) {
+          const subj = e.subject || "(no subject)";
+          if (!subjStats[subj]) {
+            subjStats[subj] = { sent: 0, recipients: new Set(), firstSent: e.sent_date || "", lastSent: e.sent_date || "" };
+          }
+          subjStats[subj].sent++;
+          if (e.sent_to_address) subjStats[subj].recipients.add(e.sent_to_address);
+          if (e.sent_date && e.sent_date > subjStats[subj].lastSent) subjStats[subj].lastSent = e.sent_date;
+          if (e.sent_date && (!subjStats[subj].firstSent || e.sent_date < subjStats[subj].firstSent)) subjStats[subj].firstSent = e.sent_date;
+        }
+
+        const sortedSubjects = Object.entries(subjStats)
+          .sort((a, b) => b[1].sent - a[1].sent);
+
+        report = {
+          title: "Email Send Volume by Subject",
+          period,
+          summary: [
+            { label: "Total Sent", value: statsEmails.emails.length },
+            { label: "Unique Subjects", value: sortedSubjects.length },
+            { label: "Unique Recipients", value: new Set(statsEmails.emails.map((e) => e.sent_to_address).filter(Boolean)).size },
+          ],
+          table: {
+            headers: ["Subject", "Sends", "Recipients", "First Sent", "Last Sent"],
+            rows: sortedSubjects.map(([subj, s]) => [
+              subj.length > 50 ? subj.slice(0, 47) + "..." : subj,
+              s.sent,
+              s.recipients.size,
+              s.firstSent ? new Date(s.firstSent).toLocaleDateString() : "N/A",
+              s.lastSent ? new Date(s.lastSent).toLocaleDateString() : "N/A",
+            ]),
+          },
+          notes: [
+            sortedSubjects.length > 0 ? `Most sent: "${sortedSubjects[0][0]}" (${sortedSubjects[0][1].sent} sends to ${sortedSubjects[0][1].recipients.size} recipients)` : "No emails sent in this period.",
+            "Note: Open/click rate tracking is not available via the Keap API. Check the Keap admin dashboard for engagement metrics.",
+          ],
         };
         break;
       }
@@ -347,7 +593,7 @@ export async function GET(request: NextRequest) {
 
       default:
         return NextResponse.json(
-          { error: `Unknown report type: ${type}. Use: overview, traffic, top-pages, sources, bounce, contacts, tags, revenue, pipeline, enrollments, courses, cross-service` },
+          { error: `Unknown report type: ${type}. Use: overview, traffic, top-pages, sources, bounce, contacts, contacts-by-tag, tags, campaigns, revenue, orders-detail, pipeline, emails, email-stats, enrollments, courses, cross-service` },
           { status: 400 }
         );
     }

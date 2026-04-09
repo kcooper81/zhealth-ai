@@ -1,6 +1,7 @@
 import type {
   WPPage,
   WPPost,
+  WPPopup,
   WPMedia,
   WPProduct,
   WPOrder,
@@ -303,6 +304,135 @@ class WordPressClient {
     await this.request<unknown>(`/wp-json/wp/v2/media/${id}`, {
       method: "DELETE",
       params: { force: true },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Elementor Popups (elementor_library post type)
+  // ---------------------------------------------------------------------------
+
+  async listPopups(
+    params?: {
+      search?: string;
+      status?: string;
+      per_page?: number;
+      page?: number;
+    }
+  ): Promise<WPPopup[]> {
+    return this.request<WPPopup[]>("/wp-json/wp/v2/elementor_library", {
+      params: { ...params, type: "popup" },
+    });
+  }
+
+  async getPopup(
+    id: number,
+    context: "view" | "edit" = "view"
+  ): Promise<WPPopup> {
+    return this.request<WPPopup>(`/wp-json/wp/v2/elementor_library/${id}`, {
+      params: { context },
+    });
+  }
+
+  async createPopup(data: {
+    title: string;
+    content?: string;
+    status?: string;
+    meta?: Record<string, unknown>;
+  }): Promise<WPPopup> {
+    return this.request<WPPopup>("/wp-json/wp/v2/elementor_library", {
+      method: "POST",
+      body: {
+        ...data,
+        status: data.status || "draft",
+        meta: {
+          _elementor_template_type: "popup",
+          _elementor_edit_mode: "builder",
+          ...data.meta,
+        },
+      },
+    });
+  }
+
+  async updatePopup(
+    id: number,
+    data: Partial<{
+      title: string;
+      content: string;
+      status: string;
+      meta: Record<string, unknown>;
+    }>
+  ): Promise<WPPopup> {
+    return this.request<WPPopup>(`/wp-json/wp/v2/elementor_library/${id}`, {
+      method: "POST",
+      body: data,
+    });
+  }
+
+  async deletePopup(id: number, force = false): Promise<WPPopup> {
+    return this.request<WPPopup>(`/wp-json/wp/v2/elementor_library/${id}`, {
+      method: "DELETE",
+      params: { force },
+    });
+  }
+
+  async getPopupDisplayConditions(
+    popupId: number
+  ): Promise<Record<string, unknown> | null> {
+    const popup = await this.getPopup(popupId, "edit");
+    const meta = popup.meta as Record<string, unknown> | undefined;
+    if (!meta) return null;
+    return {
+      conditions: meta._elementor_conditions || [],
+      triggers: meta._elementor_popup_triggers || {},
+      timing: meta._elementor_popup_timing || {},
+    };
+  }
+
+  async updatePopupDisplayConditions(
+    popupId: number,
+    settings: {
+      conditions?: unknown[];
+      triggers?: Record<string, unknown>;
+      timing?: Record<string, unknown>;
+    }
+  ): Promise<WPPopup> {
+    const meta: Record<string, unknown> = {};
+    if (settings.conditions !== undefined) {
+      meta._elementor_conditions = settings.conditions;
+    }
+    if (settings.triggers !== undefined) {
+      meta._elementor_popup_triggers = settings.triggers;
+    }
+    if (settings.timing !== undefined) {
+      meta._elementor_popup_timing = settings.timing;
+    }
+    return this.updatePopup(popupId, { meta });
+  }
+
+  async getPopupElementorData(popupId: number): Promise<unknown[] | null> {
+    const popup = await this.getPopup(popupId, "edit");
+    const meta = popup.meta as Record<string, unknown> | undefined;
+    if (!meta || !meta._elementor_data) return null;
+    const data = meta._elementor_data;
+    if (typeof data === "string") {
+      try {
+        return JSON.parse(data);
+      } catch {
+        return null;
+      }
+    }
+    return Array.isArray(data) ? data : null;
+  }
+
+  async updatePopupElementorData(
+    popupId: number,
+    data: unknown[]
+  ): Promise<WPPopup> {
+    return this.updatePopup(popupId, {
+      meta: {
+        _elementor_data: JSON.stringify(data),
+        _elementor_edit_mode: "builder",
+      },
     });
   }
 

@@ -61,6 +61,11 @@ export async function POST(request: NextRequest) {
       status: string;
       url: string;
     }> = [];
+    let popups: Array<{
+      id: number;
+      title: string;
+      status: string;
+    }> = [];
     let currentPage:
       | { id: number; title: string; content: string; template?: string; elementorSummary?: string }
       | undefined;
@@ -76,10 +81,11 @@ export async function POST(request: NextRequest) {
 
       if (needsWpContext) {
         const wp = getWordPressClient();
-        promises.push(wp.listPages({ per_page: 50 }).catch(() => []));
+        promises.push(wp.listPages({ per_page: 50, status: "publish,draft,pending,private" }).catch(() => []));
         if (pageContextId) {
           promises.push(wp.getPage(pageContextId, "edit").catch(() => null));
         }
+        promises.push(wp.listPopups({ per_page: 50, status: "publish,draft,pending,private" }).catch(() => []));
       }
 
       const results = await Promise.all(promises);
@@ -95,30 +101,42 @@ export async function POST(request: NextRequest) {
           url: p.link,
         }));
 
-        const pageData = results[2] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string }; template?: string; meta?: Record<string, unknown> } | null | undefined;
-        if (pageData) {
-          currentPage = {
-            id: pageData.id,
-            title: pageData.title.raw || pageData.title.rendered,
-            content: pageData.content.raw || pageData.content.rendered,
-            template: pageData.template || "",
-          };
+        let nextIdx = 2;
+        if (pageContextId) {
+          const pageData = results[nextIdx] as { id: number; title: { raw?: string; rendered: string }; content: { raw?: string; rendered: string }; template?: string; meta?: Record<string, unknown> } | null | undefined;
+          nextIdx++;
+          if (pageData) {
+            currentPage = {
+              id: pageData.id,
+              title: pageData.title.raw || pageData.title.rendered,
+              content: pageData.content.raw || pageData.content.rendered,
+              template: pageData.template || "",
+            };
 
-          // Fetch Elementor structure if this is an Elementor page
-          const tpl = pageData.template || "";
-          if (tpl.includes("elementor") || (pageData.meta && pageData.meta._elementor_edit_mode)) {
-            try {
-              const wpClient = getWordPressClient();
-              const elementorData = await wpClient.getElementorData(pageData.id);
-              if (elementorData && elementorData.length > 0) {
-                (currentPage as { elementorSummary?: string }).elementorSummary =
-                  summarizeElementorData(elementorData);
+            // Fetch Elementor structure if this is an Elementor page
+            const tpl = pageData.template || "";
+            if (tpl.includes("elementor") || (pageData.meta && pageData.meta._elementor_edit_mode)) {
+              try {
+                const wpClient = getWordPressClient();
+                const elementorData = await wpClient.getElementorData(pageData.id);
+                if (elementorData && elementorData.length > 0) {
+                  (currentPage as { elementorSummary?: string }).elementorSummary =
+                    summarizeElementorData(elementorData);
+                }
+              } catch {
+                // Elementor data not available -- continue without it
               }
-            } catch {
-              // Elementor data not available -- continue without it
             }
           }
         }
+
+        // Process popups
+        const wpPopups = (results[nextIdx] || []) as Array<{ id: number; title: { rendered: string }; status: string }>;
+        popups = wpPopups.map((p) => ({
+          id: p.id,
+          title: p.title.rendered,
+          status: p.status,
+        }));
       }
     } catch (error) {
       const ctxMsg = error instanceof Error ? error.message : "Unknown context error";
@@ -194,6 +212,7 @@ Use these REAL numbers when the user asks about traffic. Do not fabricate data.`
 
     const systemPrompt = buildSystemPrompt({
       pages,
+      popups,
       currentPage,
       pluginContext: pluginContextStr + integrationContext + analyticsDataContext,
       currentContact,

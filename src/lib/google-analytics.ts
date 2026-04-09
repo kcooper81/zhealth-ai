@@ -248,7 +248,87 @@ export async function getHighBouncePages(
     .slice(0, 15);
 }
 
+// ---- Comparison ----
+
+export async function getTrafficOverviewWithComparison(
+  accessToken: string,
+  property: GA4Property = "website",
+  dateRange: string = "7d"
+): Promise<{
+  current: { totalUsers: number; totalSessions: number; totalPageviews: number; avgSessionDuration: number; bounceRate: number };
+  previous: { totalUsers: number; totalSessions: number; totalPageviews: number; avgSessionDuration: number; bounceRate: number };
+  changes: { users: number; sessions: number; pageviews: number; avgSessionDuration: number; bounceRate: number };
+}> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const { startDate: prevStart, endDate: prevEnd } = getPreviousPeriod(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [
+      { startDate, endDate },
+      { startDate: prevStart, endDate: prevEnd },
+    ],
+    metrics: [
+      { name: "totalUsers" },
+      { name: "sessions" },
+      { name: "screenPageViews" },
+      { name: "averageSessionDuration" },
+      { name: "bounceRate" },
+    ],
+  });
+
+  const rows = data.rows || [];
+  const currentRow = rows[0]?.metricValues || [];
+  const previousRow = rows.length > 1 ? rows[1]?.metricValues || [] : [];
+
+  const current = {
+    totalUsers: parseInt(currentRow[0]?.value || "0"),
+    totalSessions: parseInt(currentRow[1]?.value || "0"),
+    totalPageviews: parseInt(currentRow[2]?.value || "0"),
+    avgSessionDuration: parseFloat(currentRow[3]?.value || "0"),
+    bounceRate: parseFloat(currentRow[4]?.value || "0"),
+  };
+
+  const previous = {
+    totalUsers: parseInt(previousRow[0]?.value || "0"),
+    totalSessions: parseInt(previousRow[1]?.value || "0"),
+    totalPageviews: parseInt(previousRow[2]?.value || "0"),
+    avgSessionDuration: parseFloat(previousRow[3]?.value || "0"),
+    bounceRate: parseFloat(previousRow[4]?.value || "0"),
+  };
+
+  function pctChange(curr: number, prev: number): number {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  }
+
+  const changes = {
+    users: pctChange(current.totalUsers, previous.totalUsers),
+    sessions: pctChange(current.totalSessions, previous.totalSessions),
+    pageviews: pctChange(current.totalPageviews, previous.totalPageviews),
+    avgSessionDuration: pctChange(current.avgSessionDuration, previous.avgSessionDuration),
+    bounceRate: pctChange(current.bounceRate, previous.bounceRate),
+  };
+
+  return { current, previous, changes };
+}
+
 // ---- Helpers ----
+
+function getPreviousPeriod(range: string): { startDate: string; endDate: string } {
+  switch (range) {
+    case "today":
+      return { startDate: "1daysAgo", endDate: "1daysAgo" };
+    case "7d":
+      return { startDate: "14daysAgo", endDate: "8daysAgo" };
+    case "30d":
+      return { startDate: "60daysAgo", endDate: "31daysAgo" };
+    case "90d":
+      return { startDate: "180daysAgo", endDate: "91daysAgo" };
+    default:
+      return { startDate: "14daysAgo", endDate: "8daysAgo" };
+  }
+}
 
 function parseDateRange(range: string): { startDate: string; endDate: string } {
   const endDate = "today";

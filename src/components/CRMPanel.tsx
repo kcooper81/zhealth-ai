@@ -43,6 +43,12 @@ const CRM_QUICK_REPORTS = [
     icon: BarChart,
     prompt: "Show the pipeline status as a report",
   },
+  {
+    id: "emails",
+    label: "Email Activity",
+    icon: Activity,
+    prompt: "Show me an email activity report for the last 30 days with open and click rates",
+  },
 ];
 
 interface CRMPanelProps {
@@ -64,6 +70,7 @@ export default function CRMPanel({
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [stats, setStats] = useState<{ totalContacts: number; totalTags: number; openDeals: number; pipelineValue: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Normalize raw API contacts into our Contact shape
@@ -91,34 +98,45 @@ export default function CRMPanel({
     }));
   }, []);
 
-  // Fetch default contacts on mount
+  // Fetch default contacts and stats on mount
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch("/api/keap?action=contacts&limit=30")
-      .then((res) => (res.ok ? res.json() : { contacts: [], tags: [] }))
-      .then((data) => {
-        if (cancelled) return;
-        const rawContacts = Array.isArray(data.contacts)
-          ? data.contacts
-          : Array.isArray(data)
-          ? data
-          : [];
-        setContacts(normalizeContacts(rawContacts));
-        if (data.tags && Array.isArray(data.tags)) {
-          setTags(
-            data.tags.slice(0, 15).map((t: Record<string, unknown>) => ({
-              id: t.id as number,
-              name: t.name as string,
-              count: (t.count as number) || 0,
-            }))
-          );
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
+
+    Promise.all([
+      fetch("/api/keap?action=contacts&limit=30").then((res) => res.ok ? res.json() : { contacts: [], tags: [] }),
+      fetch("/api/keap?action=contacts&limit=1").then((res) => res.ok ? res.json() : { count: 0 }).catch(() => ({ count: 0 })),
+      fetch("/api/keap?action=tags&limit=1").then((res) => res.ok ? res.json() : { count: 0 }).catch(() => ({ count: 0 })),
+      fetch("/api/keap?action=opportunities&limit=1").then((res) => res.ok ? res.json() : { opportunities: [], count: 0 }).catch(() => ({ opportunities: [], count: 0 })),
+    ]).then(([data, contactStats, tagStats, oppStats]) => {
+      if (cancelled) return;
+      const rawContacts = Array.isArray(data.contacts)
+        ? data.contacts
+        : Array.isArray(data)
+        ? data
+        : [];
+      setContacts(normalizeContacts(rawContacts));
+      if (data.tags && Array.isArray(data.tags)) {
+        setTags(
+          data.tags.slice(0, 15).map((t: Record<string, unknown>) => ({
+            id: t.id as number,
+            name: t.name as string,
+            count: (t.count as number) || 0,
+          }))
+        );
+      }
+      const opps = oppStats.opportunities || [];
+      const pipelineValue = opps.reduce((sum: number, o: any) => sum + (o.projected_revenue_high || 0), 0);
+      setStats({
+        totalContacts: contactStats.count || 0,
+        totalTags: tagStats.count || 0,
+        openDeals: oppStats.count || 0,
+        pipelineValue,
       });
+      setLoading(false);
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
@@ -198,6 +216,28 @@ export default function CRMPanel({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Stats overview */}
+      {stats && (
+        <div className="grid grid-cols-2 gap-2 px-3 pb-2">
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Contacts</p>
+            <p className="text-[17px] font-semibold text-gray-900 dark:text-gray-100 leading-tight mt-0.5">{stats.totalContacts.toLocaleString()}</p>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Tags</p>
+            <p className="text-[17px] font-semibold text-gray-900 dark:text-gray-100 leading-tight mt-0.5">{stats.totalTags.toLocaleString()}</p>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Open Deals</p>
+            <p className="text-[17px] font-semibold text-gray-900 dark:text-gray-100 leading-tight mt-0.5">{stats.openDeals.toLocaleString()}</p>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2">
+            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Pipeline Value</p>
+            <p className="text-[17px] font-semibold text-gray-900 dark:text-gray-100 leading-tight mt-0.5">${stats.pipelineValue > 0 ? "$" + stats.pipelineValue.toLocaleString() : "$0"}</p>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="px-3 pb-2">
         <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#2c2c2e] rounded-lg px-3 py-2">

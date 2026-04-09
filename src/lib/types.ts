@@ -150,6 +150,18 @@ export interface SiteInfo {
   namespaces: string[];
 }
 
+export interface WPPopup {
+  id: number;
+  title: { rendered: string; raw?: string };
+  content: { rendered: string; raw?: string };
+  slug: string;
+  status: "publish" | "draft" | "pending" | "private" | "trash";
+  link: string;
+  date: string;
+  modified: string;
+  meta?: Record<string, unknown>;
+}
+
 export interface PageSnapshot {
   pageId: number;
   title: string;

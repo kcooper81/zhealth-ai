@@ -8,7 +8,7 @@ interface PageItem {
   id: number;
   title: string;
   status: "publish" | "draft" | "pending" | "private" | "trash";
-  type: "page" | "post";
+  type: "page" | "post" | "popup";
   modified?: string;
 }
 
@@ -36,7 +36,7 @@ const statusLabels: Record<string, string> = {
   trash: "Trash",
 };
 
-type FilterType = "all" | "publish" | "draft" | "page" | "post";
+type FilterType = "all" | "publish" | "draft" | "page" | "post" | "popup";
 
 function formatRelativeDate(dateStr: string): string {
   try {
@@ -118,6 +118,9 @@ function PageSelectorList({
       case "post":
         result = result.filter((p) => p.type === "post");
         break;
+      case "popup":
+        result = result.filter((p) => p.type === "popup");
+        break;
     }
 
     return result;
@@ -129,6 +132,7 @@ function PageSelectorList({
     { label: "Draft", value: "draft" },
     { label: "Pages", value: "page" },
     { label: "Posts", value: "post" },
+    { label: "Popups", value: "popup" },
   ];
 
   return (
@@ -275,9 +279,10 @@ function PageSelectorDropdown({
   const groupedPages = {
     page: filteredPages.filter((p) => p.type === "page"),
     post: filteredPages.filter((p) => p.type === "post"),
+    popup: filteredPages.filter((p) => p.type === "popup"),
   };
 
-  const allFiltered = [...groupedPages.page, ...groupedPages.post];
+  const allFiltered = [...groupedPages.page, ...groupedPages.post, ...groupedPages.popup];
 
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
@@ -409,6 +414,30 @@ function PageSelectorDropdown({
                   Posts
                 </div>
                 {groupedPages.post.map((page) => {
+                  const idx = allFiltered.indexOf(page);
+                  return (
+                    <PageRow
+                      key={page.id}
+                      page={page}
+                      isFocused={idx === focusIndex}
+                      isSelected={page.id === selectedPageId}
+                      onClick={() => {
+                        onSelect(page.id);
+                        setIsOpen(false);
+                        setSearch("");
+                      }}
+                    />
+                  );
+                })}
+              </>
+            )}
+
+            {groupedPages.popup.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  Popups
+                </div>
+                {groupedPages.popup.map((page) => {
                   const idx = allFiltered.indexOf(page);
                   return (
                     <PageRow

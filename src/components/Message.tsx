@@ -196,7 +196,7 @@ export default function Message({
                   onClick={() => handleFeedback("up")}
                   className={`p-2 rounded-md transition-colors touch-target ${
                     feedback === "up"
-                      ? "text-brand-blue bg-brand-blue/10"
+                      ? "text-brand-blue bg-brand-blue/10 dark:bg-blue-900/30"
                       : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 active:bg-gray-200 dark:active:bg-gray-600/50"
                   }`}
                   title="Helpful"
@@ -207,7 +207,7 @@ export default function Message({
                   onClick={() => handleFeedback("down")}
                   className={`p-2 rounded-md transition-colors touch-target ${
                     feedback === "down"
-                      ? "text-red-500 bg-red-500/10"
+                      ? "text-red-500 bg-red-500/10 dark:bg-red-900/30"
                       : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 active:bg-gray-200 dark:active:bg-gray-600/50"
                   }`}
                   title="Not helpful"
@@ -243,7 +243,7 @@ function ActionCard({
   onCancel?: (actionId: string) => void;
 }) {
   return (
-    <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl p-3 border-l-4 border-l-amber-400 animate-slide-up">
+    <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl p-3 border-l-4 border-l-amber-400 dark:border-l-amber-600 animate-slide-up">
       <div className="flex items-start gap-2.5">
         <Document size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">

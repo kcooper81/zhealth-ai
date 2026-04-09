@@ -39,7 +39,7 @@ type SidebarPage = {
   id: number;
   title: string;
   status: "publish" | "draft" | "pending" | "private" | "trash";
-  type: "page" | "post";
+  type: "page" | "post" | "popup";
   modified?: string;
 };
 
@@ -304,9 +304,10 @@ export default function Chat() {
   // Fetch pages from WordPress — extracted so we can call after actions
   const refreshPages = useCallback(async () => {
     try {
-      const [pagesRes, postsRes] = await Promise.all([
-        fetch("/api/pages?per_page=100").then((r) => r.ok ? r.json() : []),
-        fetch("/api/posts?per_page=100").then((r) => r.ok ? r.json() : []),
+      const [pagesRes, postsRes, popupsRes] = await Promise.all([
+        fetch("/api/pages?per_page=100&status=publish,draft,pending,private").then((r) => r.ok ? r.json() : []),
+        fetch("/api/posts?per_page=100&status=publish,draft,pending,private").then((r) => r.ok ? r.json() : []),
+        fetch("/api/popups?per_page=100&status=publish,draft,pending,private").then((r) => r.ok ? r.json() : []),
       ]);
       const allPages: SidebarPage[] = [
         ...(Array.isArray(pagesRes) ? pagesRes : []).map((p: any) => ({
@@ -321,6 +322,13 @@ export default function Chat() {
           title: p.title?.rendered || p.title || "Untitled",
           status: p.status || "publish",
           type: "post" as const,
+          modified: p.modified,
+        })),
+        ...(Array.isArray(popupsRes) ? popupsRes : []).map((p: any) => ({
+          id: p.id,
+          title: p.title?.rendered || p.title || "Untitled",
+          status: p.status || "publish",
+          type: "popup" as const,
           modified: p.modified,
         })),
       ];
@@ -900,7 +908,7 @@ export default function Chat() {
           );
           notify("success", action.summary || "Action completed successfully");
           // Refresh page list if this was a WordPress action
-          if (["create_page", "update_page", "delete_page", "create_post", "update_post"].includes(action.type)) {
+          if (["create_page", "update_page", "delete_page", "create_post", "update_post", "create_popup", "update_popup", "delete_popup"].includes(action.type)) {
             refreshPages();
           }
         } else {

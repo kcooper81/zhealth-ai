@@ -1,15 +1,18 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Edit, Pin, Download, Eraser, Trash } from "./icons";
+import { Edit, Pin, Download, Eraser, Trash, Layers, FileText } from "./icons";
 
 export interface ConversationMenuProps {
   x: number;
   y: number;
   isPinned: boolean;
+  isArchived: boolean;
   onRename: () => void;
   onPin: () => void;
+  onArchive: () => void;
   onExport: () => void;
+  onExportPdf: () => void;
   onClear: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -45,9 +48,12 @@ export default function ConversationMenu({
   x,
   y,
   isPinned,
+  isArchived,
   onRename,
   onPin,
+  onArchive,
   onExport,
+  onExportPdf,
   onClear,
   onDelete,
   onClose,
@@ -110,9 +116,12 @@ export default function ConversationMenu({
     >
       <MenuItem icon={Edit} label="Rename" onClick={onRename} />
       <MenuItem icon={Pin} label={isPinned ? "Unpin" : "Pin"} onClick={onPin} />
-      <MenuItem icon={Download} label="Export" onClick={onExport} />
-      <MenuItem icon={Eraser} label="Clear messages" onClick={onClear} />
+      <MenuItem icon={Layers} label={isArchived ? "Unarchive" : "Archive"} onClick={onArchive} />
       <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+      <MenuItem icon={Download} label="Export as Text" onClick={onExport} />
+      <MenuItem icon={FileText} label="Export as PDF" onClick={onExportPdf} />
+      <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+      <MenuItem icon={Eraser} label="Clear messages" onClick={onClear} />
       <MenuItem icon={Trash} label="Delete" onClick={onDelete} danger />
     </div>
   );

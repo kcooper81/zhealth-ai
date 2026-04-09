@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useCallback } from "react";
 import type { Workspace } from "@/lib/types";
 import { getWorkspace } from "@/lib/workspaces";
 import { X, Loader } from "./icons";
@@ -13,7 +13,7 @@ type SidebarPage = {
   id: number;
   title: string;
   status: "publish" | "draft" | "pending" | "private" | "trash";
-  type: "page" | "post";
+  type: "page" | "post" | "popup";
   modified?: string;
 };
 
@@ -58,6 +58,16 @@ export default function WorkspacePanel({
 }: WorkspacePanelProps) {
   const workspaceConfig = getWorkspace(workspace);
 
+  // Swipe-down to close on mobile
+  const touchStartY = useRef<number>(0);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    if (deltaY > 60) onClose(); // Swipe down > 60px to dismiss
+  }, [onClose]);
+
   // Don't render for "all" workspace
   if (workspace === "all") return null;
 
@@ -94,8 +104,12 @@ export default function WorkspacePanel({
         style={{ transitionDuration: "250ms" }}
       >
         <div className="md:w-[300px] h-full flex flex-col">
-          {/* Drag handle (mobile only) */}
-          <div className="flex justify-center pt-2 pb-1 md:hidden">
+          {/* Drag handle (mobile only) — swipe down to dismiss */}
+          <div
+            className="flex justify-center pt-2 pb-1 md:hidden cursor-grab"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
           </div>
 
@@ -126,12 +140,29 @@ export default function WorkspacePanel({
                   <Loader size={20} className="text-gray-400 animate-spin" />
                 </div>
               ) : (
-                <PageSelector
-                  pages={pages}
-                  selectedPageId={selectedPageId}
-                  onSelect={onSelectPage}
-                  mode="list"
-                />
+                <>
+                  {/* Website stats */}
+                  <div className="grid grid-cols-3 gap-2 px-3 pb-2">
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2 text-center">
+                      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Pages</p>
+                      <p className="text-[17px] font-semibold text-gray-900 dark:text-gray-100 leading-tight mt-0.5">{pages.filter((p) => p.type === "page").length}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2 text-center">
+                      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Posts</p>
+                      <p className="text-[17px] font-semibold text-gray-900 dark:text-gray-100 leading-tight mt-0.5">{pages.filter((p) => p.type === "post").length}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-2.5 py-2 text-center">
+                      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Drafts</p>
+                      <p className="text-[17px] font-semibold text-amber-500 dark:text-amber-400 leading-tight mt-0.5">{pages.filter((p) => p.status === "draft").length}</p>
+                    </div>
+                  </div>
+                  <PageSelector
+                    pages={pages}
+                    selectedPageId={selectedPageId}
+                    onSelect={onSelectPage}
+                    mode="list"
+                  />
+                </>
               )
             )}
 

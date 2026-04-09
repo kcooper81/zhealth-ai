@@ -14,7 +14,75 @@ type ContentBlock =
         media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
         data: string;
       };
+    }
+  | {
+      type: "document";
+      source: {
+        type: "base64";
+        media_type: "application/pdf";
+        data: string;
+      };
     };
+
+const TEXT_FILE_TYPES = new Set([
+  "text/plain",
+  "text/csv",
+  "text/html",
+  "text/markdown",
+  "application/json",
+  "application/xml",
+  "text/xml",
+]);
+
+function isTextFile(mimeType: string): boolean {
+  return TEXT_FILE_TYPES.has(mimeType) || mimeType.startsWith("text/");
+}
+
+function decodeBase64Content(base64: string): string {
+  try {
+    return Buffer.from(base64, "base64").toString("utf-8");
+  } catch {
+    return "";
+  }
+}
+
+function formatCsvAsTable(csvText: string, maxRows = 100): string {
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length === 0) return csvText;
+
+  const rows = lines.slice(0, maxRows + 1).map((line) => {
+    // Simple CSV parsing (handles quoted fields)
+    const cells: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        cells.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    cells.push(current.trim());
+    return cells;
+  });
+
+  const headers = rows[0];
+  const dataRows = rows.slice(1);
+  let table = `CSV Data (${lines.length - 1} rows, ${headers.length} columns)\n`;
+  table += `Headers: ${headers.join(" | ")}\n`;
+  table += "-".repeat(60) + "\n";
+  for (const row of dataRows) {
+    table += row.join(" | ") + "\n";
+  }
+  if (lines.length - 1 > maxRows) {
+    table += `\n... (${lines.length - 1 - maxRows} more rows truncated)`;
+  }
+  return table;
+}
 
 function buildContentBlocks(
   text: string,
@@ -24,9 +92,17 @@ function buildContentBlocks(
 
   const blocks: ContentBlock[] = [];
 
-  // Add image files as image content blocks
   for (const file of files) {
-    if (file.data && file.type.startsWith("image/")) {
+    if (!file.data) {
+      blocks.push({
+        type: "text",
+        text: `[Attached file: ${file.name} (${file.type}, ${formatBytes(file.size)}) - no data available]`,
+      });
+      continue;
+    }
+
+    if (file.type.startsWith("image/")) {
+      // Images: send as image blocks for vision analysis
       const mediaType = file.type as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
       blocks.push({
         type: "image",
@@ -36,11 +112,38 @@ function buildContentBlocks(
           data: file.data,
         },
       });
+    } else if (file.type === "application/pdf") {
+      // PDFs: send as document blocks (Claude supports native PDF reading)
+      blocks.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: file.data,
+        },
+      });
+    } else if (isTextFile(file.type)) {
+      // Text-based files: decode and send content
+      const content = decodeBase64Content(file.data);
+      if (file.type === "text/csv") {
+        // CSV: format as structured table
+        blocks.push({
+          type: "text",
+          text: `--- File: ${file.name} ---\n${formatCsvAsTable(content)}\n--- End of ${file.name} ---`,
+        });
+      } else {
+        // Other text files: send raw content (truncate at 50KB)
+        const truncated = content.length > 50000 ? content.slice(0, 50000) + "\n\n... (content truncated)" : content;
+        blocks.push({
+          type: "text",
+          text: `--- File: ${file.name} (${file.type}) ---\n${truncated}\n--- End of ${file.name} ---`,
+        });
+      }
     } else {
-      // Non-image files: describe them as text
+      // Unknown file types: describe them
       blocks.push({
         type: "text",
-        text: `[Attached file: ${file.name} (${file.type}, ${formatBytes(file.size)})]`,
+        text: `[Attached file: ${file.name} (${file.type}, ${formatBytes(file.size)}) - binary file, content not readable as text]`,
       });
     }
   }
@@ -181,6 +284,11 @@ export function buildSystemPrompt(context: {
     status: string;
     url: string;
   }>;
+  popups?: Array<{
+    id: number;
+    title: string;
+    status: string;
+  }>;
   currentPage?: { id: number; title: string; content: string; template?: string; elementorSummary?: string };
   capabilities?: string[];
   brandGuide?: Record<string, unknown>;
@@ -201,6 +309,11 @@ export function buildSystemPrompt(context: {
   const pagesSection =
     context.pages && context.pages.length > 0
       ? `\n\nCurrently published pages:\n${context.pages.map((p) => `- [${p.id}] "${p.title}" (${p.status}) ${p.url}`).join("\n")}`
+      : "";
+
+  const popupsSection =
+    context.popups && context.popups.length > 0
+      ? `\n\nElementor Popups:\n${context.popups.map((p) => `- [${p.id}] "${p.title}" (${p.status})`).join("\n")}`
       : "";
 
   const pageTemplate = context.currentPage?.template || "";
@@ -272,6 +385,7 @@ Brand Guide:
 
 Your capabilities include full WordPress management:
 - Creating, editing, and deleting pages and posts
+- Creating, editing, and managing Elementor popups (including display conditions, triggers, and timing)
 - Managing media uploads
 - Building pages with Elementor-compatible HTML
 - Updating SEO metadata (Yoast)
@@ -298,7 +412,9 @@ WordPress pages/posts:
 - update_page: params { id, title?, content?, status?, slug? }
 - delete_page: params { id, force? }
 - create_post: params { title, content, status?, slug?, categories?, tags? }
+- get_post: params { id } - Get a single post's details
 - update_post: params { id, title?, content?, status? }
+- delete_post: params { id, force? }
 
 Elementor (for pages built with Elementor page builder):
 - elementor_get_structure: params { pageId } - Returns the Elementor section/widget tree for a page
@@ -306,10 +422,21 @@ Elementor (for pages built with Elementor page builder):
 - elementor_add_section: params { pageId, position, sectionData } - Insert a new Elementor section JSON object at the given index position
 - elementor_remove_section: params { pageId, sectionIndex } - Remove the section at the given index
 
+Elementor Popups:
+- list_popups: params { status?, search?, per_page? } - List all Elementor popups
+- get_popup: params { id } - Get popup details including display conditions and Elementor structure
+- create_popup: params { title, content?, status?, conditions?, triggers?, timing?, elementor_data? } - Create a new Elementor popup
+- update_popup: params { id, title?, content?, status? } - Update popup title, content, or status
+- update_popup_conditions: params { popupId, conditions?, triggers?, timing? } - Update popup display conditions, triggers (on_page_load, on_scroll, on_click, on_exit_intent, on_inactivity), and timing (show_after, show_up_to, show_on_devices)
+- popup_update_widget: params { popupId, widgetPath, changes } - Update a specific widget inside a popup's Elementor layout (same dot-path syntax as elementor_update_widget)
+- delete_popup: params { id, force? } - Delete a popup
+
 SEO / Media / Products:
 - update_seo: params { postId, title?, description?, focusKeyword? }
 - upload_media: params { url, filename, alt? }
 - clear_cache: params {}
+- list_products: params { search?, status?, per_page? } - List WooCommerce products
+- get_product: params { id } - Get a single product's details
 - update_product: params { id, name?, description?, price?, sale_price?, status? }
 - create_redirect: params { from, to, type? }
 
@@ -403,5 +530,5 @@ The "title" and "period" fields are required. "summary", "table", and "notes" ar
 Use numbers (not strings) for numeric values in summary and table rows when possible.
 For percentages in summary values, use strings like "45.2%". For change indicators, use raw numbers (e.g. 12.5 for +12.5%, -3.1 for -3.1%).
 
-Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${currentPageSection}${currentContactSection}${currentCourseSection}`;
+Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${popupsSection}${currentPageSection}${currentContactSection}${currentCourseSection}`;
 }

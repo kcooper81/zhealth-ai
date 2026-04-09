@@ -201,6 +201,21 @@ export async function executeAction(
         };
       }
 
+      case "get_post": {
+        const { id: getPostId } = action.params as { id: number };
+        const post = await wp.getPost(getPostId, "view");
+        return {
+          success: true,
+          result: {
+            id: post.id,
+            title: post.title.rendered,
+            status: post.status,
+            link: post.link,
+            content_preview: (post.content.rendered || "").slice(0, 500),
+          },
+        };
+      }
+
       case "update_post": {
         const { id: postId, ...postData } = action.params as {
           id: number;
@@ -216,6 +231,43 @@ export async function executeAction(
             title: result.title.rendered,
             link: result.link,
             status: result.status,
+          },
+        };
+      }
+
+      case "delete_post": {
+        const { id: delPostId, force: forcePost } = action.params as { id: number; force?: boolean };
+        await wp.deletePost(delPostId, forcePost);
+        return { success: true, result: { id: delPostId, deleted: true } };
+      }
+
+      case "list_products": {
+        const prodParams = action.params as { search?: string; status?: string; per_page?: number };
+        const products = await wp.listProducts({ search: prodParams.search, status: prodParams.status, per_page: prodParams.per_page || 50 });
+        return {
+          success: true,
+          result: {
+            products: products.map((p) => ({ id: p.id, name: p.name, price: p.price, status: p.status, permalink: p.permalink })),
+            count: products.length,
+          },
+        };
+      }
+
+      case "get_product": {
+        const { id: getProdId } = action.params as { id: number };
+        const product = await wp.getProduct(getProdId);
+        return {
+          success: true,
+          result: {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            regular_price: product.regular_price,
+            sale_price: product.sale_price,
+            status: product.status,
+            description: product.short_description?.slice(0, 500) || "",
+            sku: product.sku,
+            permalink: product.permalink,
           },
         };
       }
@@ -357,6 +409,158 @@ export async function executeAction(
             automated: redirectCreated,
           },
         };
+      }
+
+      // ---- Elementor Popup Actions ----
+
+      case "list_popups": {
+        const params = action.params as { status?: string; search?: string; per_page?: number };
+        const popups = await wp.listPopups({ per_page: params.per_page || 50, status: params.status, search: params.search });
+        return {
+          success: true,
+          result: {
+            popups: popups.map((p) => ({ id: p.id, title: p.title.rendered, status: p.status })),
+            count: popups.length,
+          },
+        };
+      }
+
+      case "get_popup": {
+        const { id: popupId } = action.params as { id: number };
+        const popup = await wp.getPopup(popupId, "edit");
+        const conditions = await wp.getPopupDisplayConditions(popupId);
+        const { summarizeElementorData } = await import("./claude");
+        const elData = await wp.getPopupElementorData(popupId);
+        const structure = elData ? summarizeElementorData(elData) : null;
+        return {
+          success: true,
+          result: {
+            id: popup.id,
+            title: popup.title.rendered || popup.title.raw,
+            status: popup.status,
+            content_preview: (popup.content.rendered || "").slice(0, 500),
+            displayConditions: conditions,
+            elementorStructure: structure,
+          },
+        };
+      }
+
+      case "create_popup": {
+        const { title, content, status, conditions, triggers, timing, elementor_data } = action.params as {
+          title: string;
+          content?: string;
+          status?: string;
+          conditions?: unknown[];
+          triggers?: Record<string, unknown>;
+          timing?: Record<string, unknown>;
+          elementor_data?: unknown[];
+        };
+        const meta: Record<string, unknown> = {};
+        if (conditions) meta._elementor_conditions = conditions;
+        if (triggers) meta._elementor_popup_triggers = triggers;
+        if (timing) meta._elementor_popup_timing = timing;
+        if (elementor_data) {
+          meta._elementor_data = JSON.stringify(elementor_data);
+        }
+        const result = await wp.createPopup({ title, content, status: status || "draft", meta });
+        return {
+          success: true,
+          result: {
+            id: result.id,
+            title: result.title.rendered,
+            status: result.status,
+          },
+        };
+      }
+
+      case "update_popup": {
+        const { id: upId, title, content, status } = action.params as {
+          id: number;
+          title?: string;
+          content?: string;
+          status?: string;
+        };
+        const updateData: Record<string, unknown> = {};
+        if (title !== undefined) updateData.title = title;
+        if (content !== undefined) updateData.content = content;
+        if (status !== undefined) updateData.status = status;
+        const result = await wp.updatePopup(upId, updateData);
+        return {
+          success: true,
+          result: {
+            id: result.id,
+            title: result.title.rendered,
+            status: result.status,
+          },
+        };
+      }
+
+      case "update_popup_conditions": {
+        const { popupId: condId, conditions, triggers, timing } = action.params as {
+          popupId: number;
+          conditions?: unknown[];
+          triggers?: Record<string, unknown>;
+          timing?: Record<string, unknown>;
+        };
+        await wp.updatePopupDisplayConditions(condId, { conditions, triggers, timing });
+        return {
+          success: true,
+          result: {
+            popupId: condId,
+            updated: true,
+            conditions: conditions || "unchanged",
+            triggers: triggers || "unchanged",
+            timing: timing || "unchanged",
+          },
+        };
+      }
+
+      case "popup_update_widget": {
+        const { popupId: pwId, widgetPath: pwPath, changes: pwChanges } = action.params as {
+          popupId: number;
+          widgetPath: string;
+          changes: Record<string, unknown>;
+        };
+        const popupElData = await wp.getPopupElementorData(pwId);
+        if (!popupElData) {
+          return { success: false, error: `Popup ${pwId} has no Elementor data.` };
+        }
+        const pathParts = pwPath.split(".");
+        let current: unknown = popupElData;
+        for (let i = 0; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          if (current === null || current === undefined) {
+            return { success: false, error: `Invalid widget path at "${pathParts.slice(0, i + 1).join(".")}"` };
+          }
+          if (Array.isArray(current)) {
+            const idx = parseInt(part, 10);
+            if (isNaN(idx) || idx < 0 || idx >= current.length) {
+              return { success: false, error: `Invalid index ${part} at path "${pathParts.slice(0, i + 1).join(".")}"` };
+            }
+            current = current[idx];
+          } else if (typeof current === "object") {
+            current = (current as Record<string, unknown>)[part];
+          } else {
+            return { success: false, error: `Cannot traverse path at "${pathParts.slice(0, i + 1).join(".")}"` };
+          }
+        }
+        const widget = current as Record<string, unknown>;
+        if (!widget || typeof widget !== "object") {
+          return { success: false, error: `No widget found at path "${pwPath}"` };
+        }
+        const existingSettings = (widget.settings || {}) as Record<string, unknown>;
+        widget.settings = { ...existingSettings, ...pwChanges };
+        await wp.updatePopupElementorData(pwId, popupElData);
+        return {
+          success: true,
+          result: { popupId: pwId, widgetPath: pwPath, updatedSettings: Object.keys(pwChanges) },
+        };
+      }
+
+      case "delete_popup": {
+        const { id: delPopupId, force: forcePopup } = action.params as { id: number; force?: boolean };
+        await wp.deletePopup(delPopupId, forcePopup);
+        return { success: true, result: { id: delPopupId, deleted: true } };
       }
 
       // ---- Elementor Actions ----
@@ -563,6 +767,39 @@ export async function executeAction(
       case "keap_list_orders": {
         const orders = await keap.listOrders(action.params as any);
         return { success: true, result: orders };
+      }
+      case "keap_list_emails": {
+        const emailParams = action.params as { contact_id?: number; email?: string; since_sent_date?: string; limit?: number };
+        const emails = await keap.listEmails({
+          contact_id: emailParams.contact_id,
+          email: emailParams.email,
+          since_sent_date: emailParams.since_sent_date,
+          limit: emailParams.limit || 50,
+        });
+        return {
+          success: true,
+          result: {
+            emails: emails.emails.map((e) => ({
+              id: e.id,
+              subject: e.subject,
+              sent_to: e.sent_to_address,
+              sent_from: e.sent_from_address,
+              sent_date: e.sent_date,
+              received_date: e.received_date,
+            })),
+            count: emails.count,
+          },
+        };
+      }
+      case "keap_get_email": {
+        const { id: emailId } = action.params as { id: number };
+        const email = await keap.getEmail(emailId);
+        return { success: true, result: email };
+      }
+      case "keap_get_email_opt_status": {
+        const { contact_id: optContactId } = action.params as { contact_id: number };
+        const optStatus = await keap.getContactEmailOptStatus(optContactId);
+        return { success: true, result: optStatus };
       }
       case "keap_send_email": {
         await keap.sendEmail(action.params as any);

@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   Pin,
   Bug,
+  Layers,
 } from "./icons";
 import ConversationMenu from "./ConversationMenu";
 import WorkspaceSelector from "./WorkspaceSelector";
@@ -44,11 +45,77 @@ function savePinnedIds(ids: Set<string>) {
 }
 
 // ---------------------------------------------------------------------------
+// Archived conversations (localStorage)
+// ---------------------------------------------------------------------------
+const ARCHIVED_KEY = "zhealth-archived-conversations";
+
+function getArchivedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(ARCHIVED_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveArchivedIds(ids: Set<string>) {
+  localStorage.setItem(ARCHIVED_KEY, JSON.stringify(Array.from(ids)));
+}
+
+// ---------------------------------------------------------------------------
 // Export conversation as .txt
 // ---------------------------------------------------------------------------
-function exportConversation(conv: Conversation) {
+function exportConversation(conv: Conversation, format: "txt" | "pdf" = "txt") {
+  const title = conv.title || "Untitled Conversation";
+  const slug = title.replace(/[^a-zA-Z0-9 _-]/g, "").slice(0, 60);
+
+  if (format === "pdf") {
+    const messagesHtml = conv.messages.map((msg) => {
+      const role = msg.role === "user" ? "You" : "Assistant";
+      const ts = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : "";
+      const content = msg.content.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+      return `<div class="msg ${msg.role}">
+        <div class="meta"><strong>${role}</strong> <span class="ts">${ts}</span></div>
+        <div class="content">${content}</div>
+      </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  @page { margin: 0.6in; size: letter; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 12px; line-height: 1.6; }
+  .header { border-bottom: 2px solid #2c8df3; padding-bottom: 8px; margin-bottom: 16px; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header .date { font-size: 11px; color: #888; }
+  .msg { margin-bottom: 12px; padding: 8px 12px; border-radius: 6px; }
+  .msg.user { background: #f0f7ff; border-left: 3px solid #2c8df3; }
+  .msg.assistant { background: #f8f9fa; border-left: 3px solid #d0d5dd; }
+  .meta { font-size: 11px; color: #666; margin-bottom: 4px; }
+  .ts { color: #aaa; margin-left: 8px; }
+  .content { white-space: pre-wrap; word-break: break-word; }
+  .footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #e9ecef; font-size: 9px; color: #aaa; text-align: center; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+  <div class="header"><h1>${title}</h1><div class="date">${new Date().toLocaleString()}</div></div>
+  ${messagesHtml}
+  <div class="footer">Exported from Z-Health AI</div>
+</body></html>`;
+
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.focus(); printWindow.print(); }, 500);
+    }
+    notify("success", "PDF export opened");
+    return;
+  }
+
+  // Text export
   const lines: string[] = [];
-  lines.push(conv.title || "Untitled Conversation");
+  lines.push(title);
   lines.push("=".repeat(50));
   lines.push("");
   for (const msg of conv.messages) {
@@ -63,9 +130,7 @@ function exportConversation(conv: Conversation) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${(conv.title || "conversation")
-    .replace(/[^a-zA-Z0-9 _-]/g, "")
-    .slice(0, 60)}.txt`;
+  a.download = `${slug}.txt`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -182,6 +247,8 @@ export default function Sidebar({
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
   const [sidebarWorkflows, setSidebarWorkflows] = useState<
     Array<{ id: string; name: string; icon: string }>
   >([]);
@@ -193,9 +260,10 @@ export default function Sidebar({
     y: number;
   } | null>(null);
 
-  // Load pinned IDs from localStorage
+  // Load pinned and archived IDs from localStorage
   useEffect(() => {
     setPinnedIds(getPinnedIds());
+    setArchivedIds(getArchivedIds());
   }, []);
 
   useEffect(() => {
@@ -218,6 +286,21 @@ export default function Sidebar({
         notify("success", "Conversation pinned");
       }
       savePinnedIds(next);
+      return next;
+    });
+  }, []);
+
+  const toggleArchive = useCallback((convId: string) => {
+    setArchivedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(convId)) {
+        next.delete(convId);
+        notify("info", "Conversation unarchived");
+      } else {
+        next.add(convId);
+        notify("success", "Conversation archived");
+      }
+      saveArchivedIds(next);
       return next;
     });
   }, []);
@@ -256,14 +339,23 @@ export default function Sidebar({
   }, [conversations, workspace]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return workspaceConversations;
-    const q = searchQuery.toLowerCase();
-    return workspaceConversations.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.messages.some((m) => m.content.toLowerCase().includes(q))
-    );
-  }, [workspaceConversations, searchQuery]);
+    let result = workspaceConversations;
+    // Filter by archive state
+    if (showArchived) {
+      result = result.filter((c) => archivedIds.has(c.id));
+    } else {
+      result = result.filter((c) => !archivedIds.has(c.id));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.messages.some((m) => m.content.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [workspaceConversations, searchQuery, archivedIds, showArchived]);
 
   const groups = useMemo(
     () => groupConversations(filtered, pinnedIds),
@@ -403,6 +495,21 @@ export default function Sidebar({
                 </div>
               </div>
 
+              {/* Archive toggle */}
+              {archivedIds.size > 0 && (
+                <div className="px-3 pb-1 flex-shrink-0">
+                  <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${
+                      showArchived ? "text-blue-400" : "text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    <Layers size={12} />
+                    {showArchived ? "Show active" : `Archived (${archivedIds.size})`}
+                  </button>
+                </div>
+              )}
+
               {/* Conversation list */}
               <div className="flex-1 overflow-y-auto px-2">
                 {groups.length === 0 && (
@@ -412,8 +519,7 @@ export default function Sidebar({
                       className="text-gray-600 mb-2"
                     />
                     <p className="text-sm text-gray-500 text-center">
-                      No conversations yet. Start by asking me to build
-                      something.
+                      {showArchived ? "No archived conversations." : "No conversations yet. Start by asking me to build something."}
                     </p>
                   </div>
                 )}
@@ -520,10 +626,10 @@ export default function Sidebar({
           x={menuState.x}
           y={menuState.y}
           isPinned={pinnedIds.has(menuState.convId)}
+          isArchived={archivedIds.has(menuState.convId)}
           onRename={() => {
             const convId = menuState.convId;
             handleCloseMenu();
-            // Trigger inline rename via a custom event on the conversation item
             requestAnimationFrame(() => {
               const el = document.querySelector(
                 `[data-conv-id="${convId}"]`
@@ -539,8 +645,16 @@ export default function Sidebar({
             togglePin(menuState.convId);
             handleCloseMenu();
           }}
+          onArchive={() => {
+            toggleArchive(menuState.convId);
+            handleCloseMenu();
+          }}
           onExport={() => {
-            exportConversation(menuConv);
+            exportConversation(menuConv, "txt");
+            handleCloseMenu();
+          }}
+          onExportPdf={() => {
+            exportConversation(menuConv, "pdf");
             handleCloseMenu();
           }}
           onClear={() => {

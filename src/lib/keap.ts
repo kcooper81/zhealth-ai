@@ -318,6 +318,58 @@ export async function listOrders(params?: {
 
 // ---- Emails ----
 
+export interface KeapEmail {
+  id: number;
+  subject: string;
+  sent_to_address?: string;
+  sent_from_address?: string;
+  sent_date?: string;
+  received_date?: string;
+  contact_id?: number;
+  headers?: string;
+  // Note: Keap REST API v1 does NOT expose email open/click tracking.
+  // Open and click data is only available in the Keap admin UI.
+}
+
+export async function listEmails(params?: {
+  limit?: number;
+  offset?: number;
+  contact_id?: number;
+  email?: string;
+  since_sent_date?: string;
+}): Promise<{ emails: KeapEmail[]; count: number }> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.contact_id) qs.set("contact_id", String(params.contact_id));
+  if (params?.email) qs.set("email", params.email);
+  if (params?.since_sent_date) qs.set("since_sent_date", params.since_sent_date);
+
+  const data = await keapFetch(`/emails?${qs}`);
+  return { emails: data.emails || [], count: data.count || 0 };
+}
+
+export async function getEmail(emailId: number): Promise<KeapEmail> {
+  return keapFetch(`/emails/${emailId}`);
+}
+
+export async function getContactEmailOptStatus(contactId: number): Promise<{
+  opted_in: boolean;
+  opt_in_reason?: string;
+  opt_in_date?: string;
+}> {
+  try {
+    const data = await keapFetch(`/contacts/${contactId}?optional_properties=opt_in_reason`);
+    return {
+      opted_in: data.email_opted_in ?? true,
+      opt_in_reason: data.opt_in_reason || "",
+      opt_in_date: data.date_created || "",
+    };
+  } catch {
+    return { opted_in: false };
+  }
+}
+
 export async function sendEmail(data: {
   contacts: number[];
   subject: string;
@@ -358,6 +410,9 @@ export function getKeapCapabilities(): string[] {
     "View and manage pipeline opportunities",
     "Move opportunities between pipeline stages",
     "View orders and transactions",
+    "List sent emails (subjects, dates, recipients)",
+    "View individual email details",
+    "Check contact email opt-in status",
     "Send emails to contacts",
     "View account information",
   ];
@@ -372,16 +427,27 @@ You can manage the Keap (Infusionsoft) CRM system. Available actions:
 - **Campaigns**: List campaigns, add contacts to campaign sequences for automated email workflows.
 - **Pipeline**: View opportunities in the sales pipeline, create new opportunities, move them between stages.
 - **Orders**: View order history, filter by contact or date range.
-- **Email**: Send emails to specific contacts.
+- **Email**: List sent emails (subject, dates, recipients), check contact opt-in status, send emails to contacts. Note: open/click tracking is NOT available via the Keap API — it's only in the Keap admin UI.
 
-When the user asks about contacts, tags, campaigns, pipeline, or CRM tasks, use the Keap integration.
+When the user asks about contacts, tags, campaigns, pipeline, orders, revenue, or CRM tasks, use the Keap integration.
 Action types for Keap:
 - keap_list_contacts, keap_get_contact, keap_create_contact, keap_update_contact
 - keap_apply_tag, keap_remove_tag, keap_list_tags, keap_create_tag
 - keap_list_campaigns, keap_add_to_campaign
 - keap_list_opportunities, keap_create_opportunity, keap_update_opportunity_stage
 - keap_list_orders
+- keap_list_emails, keap_get_email, keap_get_email_opt_status
 - keap_send_email
+
+You can generate reports on ANY Keap data. When the user asks for a Keap report, pull the data using the appropriate action above, then format it as a <report> block. Available report types you can generate:
+- Contact reports: all contacts, contacts by tag, new contacts in a date range, contacts without tags
+- Tag reports: all tags, tag breakdown by category, contacts per tag
+- Revenue reports: orders by date range, revenue by product, revenue by contact, average order value trends
+- Pipeline reports: opportunities by stage, projected revenue, estimated close dates, stage conversion
+- Campaign reports: all campaigns, active contacts per campaign, campaign performance
+- Order detail reports: line-item breakdowns, product sales, per-contact order history
+- Email reports: emails sent in date range, send volume by subject, per-contact email history, opt-in status. Note: open/click rates are NOT available via API — direct the user to the Keap admin dashboard for engagement metrics.
+Always use the <report> tag format so the data renders as a rich card with downloadable CSV and PDF.
 `;
 }
 
