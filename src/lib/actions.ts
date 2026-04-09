@@ -1,4 +1,6 @@
 import { getWordPressClient } from "./wordpress";
+import * as keap from "./keap";
+import * as thinkific from "./thinkific";
 import type { PendingAction, ActionResult, PageSnapshot } from "./types";
 
 const snapshots: Map<string, PageSnapshot> = new Map();
@@ -280,6 +282,139 @@ export async function executeAction(
             message: "Redirect registered. Verify in your redirection plugin.",
           },
         };
+      }
+
+      // ---- Keap CRM Actions ----
+      case "keap_list_contacts": {
+        const { email, name, limit: contactLimit } = action.params as { email?: string; name?: string; limit?: number };
+        const result = await keap.listContacts({ email, given_name: name, limit: contactLimit || 30 });
+        return { success: true, result: { contacts: result.contacts, count: result.count } };
+      }
+      case "keap_get_contact": {
+        const { id: contactId } = action.params as { id: number };
+        const contact = await keap.getContact(contactId);
+        return { success: true, result: contact };
+      }
+      case "keap_create_contact": {
+        const contact = await keap.createContact(action.params as any);
+        return { success: true, result: contact };
+      }
+      case "keap_update_contact": {
+        const { id: kcId, ...kcData } = action.params as { id: number; [key: string]: any };
+        const updated = await keap.updateContact(kcId, kcData);
+        return { success: true, result: updated };
+      }
+      case "keap_apply_tag": {
+        const { tagId, contactIds } = action.params as { tagId: number; contactIds: number[] };
+        await keap.applyTagToContacts(tagId, contactIds);
+        return { success: true, result: { tagId, contactIds, applied: true } };
+      }
+      case "keap_remove_tag": {
+        const { tagId: rtId, contactIds: rtIds } = action.params as { tagId: number; contactIds: number[] };
+        await keap.removeTagFromContacts(rtId, rtIds);
+        return { success: true, result: { tagId: rtId, contactIds: rtIds, removed: true } };
+      }
+      case "keap_list_tags": {
+        const { name: tagName, limit: tagLimit } = action.params as { name?: string; limit?: number };
+        const tags = await keap.listTags({ name: tagName, limit: tagLimit || 100 });
+        return { success: true, result: tags };
+      }
+      case "keap_create_tag": {
+        const tag = await keap.createTag(action.params as { name: string; description?: string });
+        return { success: true, result: tag };
+      }
+      case "keap_list_campaigns": {
+        const campaigns = await keap.listCampaigns(action.params as any);
+        return { success: true, result: campaigns };
+      }
+      case "keap_add_to_campaign": {
+        const { campaignId, sequenceId, contactId: campContactId } = action.params as { campaignId: number; sequenceId: number; contactId: number };
+        await keap.addContactToCampaignSequence(campaignId, sequenceId, campContactId);
+        return { success: true, result: { campaignId, sequenceId, contactId: campContactId, added: true } };
+      }
+      case "keap_list_opportunities": {
+        const opps = await keap.listOpportunities(action.params as any);
+        return { success: true, result: opps };
+      }
+      case "keap_create_opportunity": {
+        const opp = await keap.createOpportunity(action.params as any);
+        return { success: true, result: opp };
+      }
+      case "keap_update_opportunity_stage": {
+        const { opportunityId, stageId } = action.params as { opportunityId: number; stageId: number };
+        const updatedOpp = await keap.updateOpportunityStage(opportunityId, stageId);
+        return { success: true, result: updatedOpp };
+      }
+      case "keap_list_orders": {
+        const orders = await keap.listOrders(action.params as any);
+        return { success: true, result: orders };
+      }
+      case "keap_send_email": {
+        await keap.sendEmail(action.params as any);
+        return { success: true, result: { sent: true } };
+      }
+
+      // ---- Thinkific LMS Actions ----
+      case "thinkific_list_courses": {
+        const courses = await thinkific.listCourses(action.params as any);
+        return { success: true, result: courses };
+      }
+      case "thinkific_get_course": {
+        const { id: courseId } = action.params as { id: number };
+        const course = await thinkific.getCourse(courseId);
+        return { success: true, result: course };
+      }
+      case "thinkific_update_course": {
+        const { id: tcId, ...tcData } = action.params as { id: number; [key: string]: any };
+        const updatedCourse = await thinkific.updateCourse(tcId, tcData);
+        return { success: true, result: updatedCourse };
+      }
+      case "thinkific_list_students": {
+        const students = await thinkific.listUsers(action.params as any);
+        return { success: true, result: students };
+      }
+      case "thinkific_get_student": {
+        const { id: studentId } = action.params as { id: number };
+        const student = await thinkific.getUser(studentId);
+        return { success: true, result: student };
+      }
+      case "thinkific_create_student": {
+        const newStudent = await thinkific.createUser(action.params as any);
+        return { success: true, result: newStudent };
+      }
+      case "thinkific_list_enrollments": {
+        const enrollments = await thinkific.listEnrollments(action.params as any);
+        return { success: true, result: enrollments };
+      }
+      case "thinkific_create_enrollment": {
+        const enrollment = await thinkific.createEnrollment(action.params as any);
+        return { success: true, result: enrollment };
+      }
+      case "thinkific_update_enrollment": {
+        const { id: enrId, ...enrData } = action.params as { id: number; [key: string]: any };
+        const updatedEnr = await thinkific.updateEnrollment(enrId, enrData);
+        return { success: true, result: updatedEnr };
+      }
+      case "thinkific_list_orders": {
+        const tOrders = await thinkific.listOrders(action.params as any);
+        return { success: true, result: tOrders };
+      }
+      case "thinkific_list_coupons": {
+        const coupons = await thinkific.listCoupons(action.params as any);
+        return { success: true, result: coupons };
+      }
+      case "thinkific_create_coupon": {
+        const coupon = await thinkific.createCoupon(action.params as any);
+        return { success: true, result: coupon };
+      }
+      case "thinkific_course_report": {
+        const { course_id: reportCourseId } = action.params as { course_id: number };
+        const report = await thinkific.getCourseReport(reportCourseId);
+        return { success: true, result: report };
+      }
+      case "thinkific_lms_overview": {
+        const overview = await thinkific.getLMSOverview();
+        return { success: true, result: overview };
       }
 
       default:
