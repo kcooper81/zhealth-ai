@@ -230,11 +230,35 @@ export async function executeAction(
       }
 
       case "clear_cache": {
-        // Cache clearing depends on the caching plugin installed.
-        // This is a placeholder that can be extended.
+        // Attempt common cache-clearing endpoints, fall back to honest message
+        const siteUrl = process.env.WORDPRESS_URL || "";
+        let cacheCleared = false;
+        try {
+          // Try WP Super Cache
+          const wpscRes = await fetch(`${siteUrl}/wp-json/wp-super-cache/v1/cache`, {
+            method: "DELETE",
+            headers: { Authorization: `Basic ${Buffer.from(`${process.env.WORDPRESS_USERNAME}:${process.env.WORDPRESS_APP_PASSWORD}`).toString("base64")}` },
+          });
+          if (wpscRes.ok) cacheCleared = true;
+        } catch { /* not available */ }
+        if (!cacheCleared) {
+          try {
+            // Try LiteSpeed Cache
+            const lsRes = await fetch(`${siteUrl}/wp-json/litespeed/v1/purge/all`, {
+              method: "POST",
+              headers: { Authorization: `Basic ${Buffer.from(`${process.env.WORDPRESS_USERNAME}:${process.env.WORDPRESS_APP_PASSWORD}`).toString("base64")}` },
+            });
+            if (lsRes.ok) cacheCleared = true;
+          } catch { /* not available */ }
+        }
         return {
           success: true,
-          result: { message: "Cache clear requested. Check your caching plugin for confirmation." },
+          result: {
+            message: cacheCleared
+              ? "Cache has been cleared successfully."
+              : `Cache clearing is not automated. Please clear cache manually in your WordPress admin at ${siteUrl}/wp-admin/ using your caching plugin.`,
+            automated: cacheCleared,
+          },
         };
       }
 
@@ -266,20 +290,42 @@ export async function executeAction(
       }
 
       case "create_redirect": {
-        // Redirect creation depends on the redirection plugin.
-        // This is a placeholder implementation.
         const { from, to, type: redirectType } = action.params as {
           from: string;
           to: string;
           type?: number;
         };
+        const siteUrl = process.env.WORDPRESS_URL || "";
+        let redirectCreated = false;
+        try {
+          // Try the Redirection plugin REST API
+          const redRes = await fetch(`${siteUrl}/wp-json/redirection/v1/redirect`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Basic ${Buffer.from(`${process.env.WORDPRESS_USERNAME}:${process.env.WORDPRESS_APP_PASSWORD}`).toString("base64")}`,
+            },
+            body: JSON.stringify({
+              url: from,
+              action_data: { url: to },
+              action_type: "url",
+              action_code: redirectType || 301,
+              group_id: 1,
+              match_type: "url",
+            }),
+          });
+          if (redRes.ok) redirectCreated = true;
+        } catch { /* Redirection plugin not available */ }
         return {
           success: true,
           result: {
             from,
             to,
             type: redirectType || 301,
-            message: "Redirect registered. Verify in your redirection plugin.",
+            message: redirectCreated
+              ? `Redirect created: ${from} -> ${to} (${redirectType || 301})`
+              : `Redirect creation requires the Redirection plugin. Please create the redirect manually at ${siteUrl}/wp-admin/tools.php?page=redirection.php -- From: ${from} To: ${to} (${redirectType || 301})`,
+            automated: redirectCreated,
           },
         };
       }

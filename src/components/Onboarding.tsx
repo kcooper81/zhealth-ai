@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useLocalStorage } from "@/lib/hooks";
-import { Document, Globe, BarChart, Zap } from "./icons";
+import { Document, BarChart, Users, GraduationCap } from "./icons";
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -11,23 +11,23 @@ interface OnboardingProps {
 const capabilities = [
   {
     icon: Document,
-    title: "Build Pages",
-    description: "Describe and edit WordPress pages with AI assistance",
+    title: "Manage Your Website",
+    description: "Create pages, edit content, SEO, and Elementor layouts",
   },
   {
-    icon: Globe,
-    title: "Manage Content",
-    description: "Posts, products, media -- all from a single chat",
+    icon: Users,
+    title: "CRM & Contacts",
+    description: "Manage contacts, tags, campaigns, and pipeline in Keap",
+  },
+  {
+    icon: GraduationCap,
+    title: "LMS & Courses",
+    description: "Manage courses, students, and enrollments in Thinkific",
   },
   {
     icon: BarChart,
-    title: "SEO & Analytics",
-    description: "Optimize your site for search engines automatically",
-  },
-  {
-    icon: Zap,
-    title: "Automate",
-    description: "Workflows and bulk operations at scale",
+    title: "Analytics & Reports",
+    description: "Traffic data, reports, and performance insights",
   },
 ];
 

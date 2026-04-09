@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Search, X, Users, ChevronRight, BarChart, Activity } from "./icons";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Search, X, Users, ChevronRight, BarChart, Activity, Loader } from "./icons";
 
 interface Contact {
   id: number;

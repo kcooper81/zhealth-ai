@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { ReportData } from "@/lib/types";
+import { Download } from "./icons";
 
 interface ReportCardProps {
   data: ReportData;
@@ -31,6 +32,76 @@ function isNumericCell(value: string | number): boolean {
     return /^[\$]?[\d,]+\.?\d*%?$/.test(value.trim());
   }
   return false;
+}
+
+function escapeCsvCell(value: string | number): string {
+  const str = String(value);
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function downloadCSV(headers: string[], rows: (string | number)[][], filename: string) {
+  const csv = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((r) => r.map(escapeCsvCell).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadTextReport(data: ReportData, filename: string) {
+  const lines: string[] = [];
+  lines.push(data.title);
+  lines.push(data.period);
+  lines.push("=".repeat(60));
+  lines.push("");
+
+  if (data.summary && data.summary.length > 0) {
+    lines.push("SUMMARY");
+    lines.push("-".repeat(40));
+    for (const stat of data.summary) {
+      let line = `${stat.label}: ${formatNumber(stat.value)}`;
+      if (stat.change !== undefined) {
+        line += ` (${stat.change > 0 ? "+" : ""}${stat.change.toFixed(1)}%)`;
+      }
+      lines.push(line);
+    }
+    lines.push("");
+  }
+
+  if (data.table && data.table.headers.length > 0) {
+    lines.push("DATA TABLE");
+    lines.push("-".repeat(40));
+    lines.push(data.table.headers.join(" | "));
+    for (const row of data.table.rows) {
+      lines.push(row.map((c) => String(c)).join(" | "));
+    }
+    lines.push("");
+  }
+
+  if (data.notes && data.notes.length > 0) {
+    lines.push("NOTES");
+    lines.push("-".repeat(40));
+    for (const note of data.notes) {
+      lines.push(`- ${note}`);
+    }
+  }
+
+  const text = lines.join("\n");
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function ChangeIndicator({ change, label }: { change: number; label?: string }) {
@@ -133,6 +204,34 @@ export default function ReportCard({ data }: ReportCardProps) {
           </ul>
         </div>
       )}
+
+      {/* Export buttons */}
+      <div className="px-4 pt-2 pb-3 border-t border-gray-100 dark:border-gray-700/40 flex items-center gap-2">
+        {data.table && data.table.headers.length > 0 && (
+          <button
+            onClick={() => {
+              const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+              downloadCSV(data.table!.headers, data.table!.rows, `${slug}.csv`);
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+            title="Download as CSV"
+          >
+            <Download size={13} />
+            <span>Download CSV</span>
+          </button>
+        )}
+        <button
+          onClick={() => {
+            const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+            downloadTextReport(data, `${slug}.txt`);
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+          title="Download as text report"
+        >
+          <Download size={13} />
+          <span>Download PDF</span>
+        </button>
+      </div>
     </div>
   );
 }

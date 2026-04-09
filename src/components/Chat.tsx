@@ -19,7 +19,7 @@ import WorkspacePanel from "./WorkspacePanel";
 import MessageList from "./MessageList";
 import InputArea from "./InputArea";
 import PreviewPanel from "./PreviewPanel";
-import ActionConfirmation from "./ActionConfirmation";
+// ActionConfirmation floating bar removed -- inline ActionCard in Message.tsx handles this
 import Onboarding from "./Onboarding";
 import KeyboardShortcuts from "./KeyboardShortcuts";
 import WorkflowPanel from "./WorkflowPanel";
@@ -81,8 +81,14 @@ export default function Chat() {
   // --- Workspace panel state ---
   const [showWorkspacePanel, setShowWorkspacePanel] = useState(() => workspace !== "all");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
+  const [selectedContactName, setSelectedContactName] = useState<string | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedCourseName, setSelectedCourseName] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState("7d");
+
+  // Ref that always has the latest conversations (avoids stale closures in handleSend)
+  const conversationsRef = useRef(conversations);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
 
   // When workspace changes, show/hide workspace panel
   useEffect(() => {
@@ -491,9 +497,8 @@ export default function Chat() {
       let streamStarted = false;
       try {
         // Build messages array for the API.
-        // Read from current state + append the new user message (since setState is async
-        // and conversations may not have updated yet).
-        const conv = conversations.find((c) => c.id === convId);
+        // Read from ref to avoid stale closure when user sends messages quickly.
+        const conv = conversationsRef.current.find((c) => c.id === convId);
         const existingMessages = (conv?.messages || [])
           .filter((m) => m.role === "user" || m.role === "assistant")
           .filter((m) => m.content.trim() !== "")
@@ -514,6 +519,8 @@ export default function Chat() {
             model: selectedModel,
             workspace,
             files: files,
+            contactId: selectedContactId || undefined,
+            courseId: selectedCourseId || undefined,
           }),
         });
 
@@ -564,6 +571,20 @@ export default function Chat() {
                 }
                 if (data.pendingAction) {
                   setPendingAction(data.pendingAction);
+                  // Also store pendingAction on the assistant message so inline ActionCard renders
+                  setConversations((prev) =>
+                    prev.map((c) => {
+                      if (c.id !== convId) return c;
+                      const msgs = [...c.messages];
+                      for (let i = msgs.length - 1; i >= 0; i--) {
+                        if (msgs[i].role === "assistant") {
+                          msgs[i] = { ...msgs[i], pendingAction: data.pendingAction };
+                          break;
+                        }
+                      }
+                      return { ...c, messages: msgs };
+                    })
+                  );
                 }
                 if (data.reportData) {
                   // Store reportData on the assistant message
@@ -645,7 +666,7 @@ export default function Chat() {
         });
       }
     },
-    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, conversations, selectedPageId, selectedModel, workspace, setJobs, updateJob, persistConversationToDb]
+    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, selectedPageId, selectedModel, workspace, selectedContactId, selectedCourseId, setJobs, updateJob, persistConversationToDb, setConversations]
   );
 
   const handleCancelStream = useCallback(() => {
@@ -788,15 +809,18 @@ export default function Chat() {
       setJobs((prev) => [jobWithStatus, ...prev]);
       const jobId = jobWithStatus.id;
 
-      // Add a placeholder message showing the action is in progress
-      const pendingMsgId = generateId();
-      const pendingMsg: ChatMessage = {
-        id: pendingMsgId,
-        role: "assistant",
-        content: `Executing: ${action.summary}...`,
-        timestamp: new Date().toISOString(),
-      };
-      addMessage(currentConversationId, pendingMsg);
+      // Find the original assistant message that has this pendingAction and mark it as executing
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== currentConversationId) return c;
+          const msgs = c.messages.map((m) =>
+            m.pendingAction?.id === action.id
+              ? { ...m, pendingAction: null }
+              : m
+          );
+          return { ...c, messages: msgs };
+        })
+      );
 
       try {
         // POST to the real actions API
@@ -811,21 +835,22 @@ export default function Chat() {
 
         const result = await response.json();
 
-        // Update the placeholder message with the real result
+        // Update the original assistant message that proposed this action with the result
         setConversations((prev) =>
           prev.map((c) => {
             if (c.id !== currentConversationId) return c;
-            const msgs = c.messages.map((m) =>
-              m.id === pendingMsgId
-                ? {
-                    ...m,
-                    content: result.success
-                      ? "Action completed successfully."
-                      : `Action failed: ${result.error || "Unknown error"}`,
-                    actionResult: result,
-                  }
-                : m
-            );
+            // Find the last assistant message (the one that had the action)
+            const msgs = [...c.messages];
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              if (msgs[i].role === "assistant" && !msgs[i].actionResult) {
+                msgs[i] = {
+                  ...msgs[i],
+                  pendingAction: null,
+                  actionResult: result,
+                };
+                break;
+              }
+            }
             return { ...c, messages: msgs, updatedAt: new Date().toISOString() };
           })
         );
@@ -849,19 +874,21 @@ export default function Chat() {
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Network error";
 
-        // Update the placeholder message with the error
+        // Update the original assistant message with the error result
         setConversations((prev) =>
           prev.map((c) => {
             if (c.id !== currentConversationId) return c;
-            const msgs = c.messages.map((m) =>
-              m.id === pendingMsgId
-                ? {
-                    ...m,
-                    content: `Action failed: ${errorMessage}`,
-                    actionResult: { success: false, error: errorMessage },
-                  }
-                : m
-            );
+            const msgs = [...c.messages];
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              if (msgs[i].role === "assistant" && !msgs[i].actionResult) {
+                msgs[i] = {
+                  ...msgs[i],
+                  pendingAction: null,
+                  actionResult: { success: false, error: errorMessage },
+                };
+                break;
+              }
+            }
             return { ...c, messages: msgs, updatedAt: new Date().toISOString() };
           })
         );
@@ -881,7 +908,7 @@ export default function Chat() {
         });
       }
     },
-    [currentConversationId, addMessage, setConversations, setJobs, updateJob, persistConversationToDb]
+    [currentConversationId, setConversations, setJobs, updateJob, persistConversationToDb]
   );
 
   const handleCancelAction = useCallback(
@@ -911,7 +938,13 @@ export default function Chat() {
   // --- Contact selection ---
   const handleSelectContact = useCallback(
     (contact: { id: number; name: string; email: string }) => {
-      setSelectedContactId(contact.id === 0 ? null : contact.id);
+      if (contact.id === 0) {
+        setSelectedContactId(null);
+        setSelectedContactName(null);
+      } else {
+        setSelectedContactId(contact.id);
+        setSelectedContactName(contact.name);
+      }
     },
     []
   );
@@ -975,7 +1008,9 @@ export default function Chat() {
           setCurrentConversationId(null);
           setSelectedPageId(null);
           setSelectedContactId(null);
+          setSelectedContactName(null);
           setSelectedCourseId(null);
+          setSelectedCourseName(null);
         }}
         conversations={conversations}
         currentConversationId={currentConversationId}
@@ -1016,7 +1051,7 @@ export default function Chat() {
         selectedContactId={selectedContactId}
         onSelectContact={handleSelectContact}
         selectedCourseId={selectedCourseId}
-        onSelectCourse={(course) => setSelectedCourseId(course.id)}
+        onSelectCourse={(course) => { setSelectedCourseId(course.id); setSelectedCourseName(course.name); }}
         onQuickAction={handleQuickAction}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
@@ -1076,6 +1111,40 @@ export default function Chat() {
           );
         })()}
 
+        {/* Contact context bar */}
+        {selectedContactId && selectedContactName && (
+          <div className="flex items-center gap-2 px-4 h-9 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800/40 flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500 dark:text-amber-400 flex-shrink-0"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span className="text-xs text-amber-700 dark:text-amber-300 truncate flex-1">
+              Working on: {selectedContactName}
+            </span>
+            <button
+              onClick={() => { setSelectedContactId(null); setSelectedContactName(null); }}
+              className="p-0.5 rounded text-amber-400 hover:text-amber-600 dark:hover:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-800/40 transition-colors flex-shrink-0"
+              title="Clear contact context"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* Course context bar */}
+        {selectedCourseId && selectedCourseName && (
+          <div className="flex items-center gap-2 px-4 h-9 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800/40 flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500 dark:text-emerald-400 flex-shrink-0"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            <span className="text-xs text-emerald-700 dark:text-emerald-300 truncate flex-1">
+              Working on: {selectedCourseName}
+            </span>
+            <button
+              onClick={() => { setSelectedCourseId(null); setSelectedCourseName(null); }}
+              className="p-0.5 rounded text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors flex-shrink-0"
+              title="Clear course context"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
         <MessageList
           messages={messages}
@@ -1109,13 +1178,6 @@ export default function Chat() {
             </div>
           );
         })()}
-
-        {/* Floating action confirmation bar */}
-        <ActionConfirmation
-          action={pendingAction}
-          onConfirm={handleConfirmAction}
-          onCancel={handleCancelAction}
-        />
 
         {/* Input */}
         <InputArea

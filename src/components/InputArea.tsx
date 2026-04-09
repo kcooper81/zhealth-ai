@@ -153,7 +153,7 @@ export default function InputArea({
     if (!canSend) return;
     const trimmed = value.trim();
     const filesToSend = files.length > 0 ? files : undefined;
-    onSend(trimmed || "(attached files)", filesToSend);
+    onSend(trimmed || "Please analyze these files and tell me what you see.", filesToSend);
     setValue("");
     setFiles([]);
     setFileError(null);

@@ -3,8 +3,7 @@
 import React, { useState } from "react";
 import type { ChatMessage, PendingAction, ActionResult, Workspace } from "@/lib/types";
 import { renderMarkdown } from "@/lib/markdown";
-import { notify } from "@/lib/notifications";
-import { ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy, Bookmark, BookmarkCheck } from "./icons";
+import { ThumbsUp, ThumbsDown, Check, AlertCircle, Document, ExternalLink, AIBrain, Copy, Bookmark } from "./icons";
 import FilePreview from "./FilePreview";
 import ReportCard from "./ReportCard";
 import PinQuickAction from "./PinQuickAction";
@@ -17,6 +16,7 @@ interface MessageProps {
   onViewPage?: (url: string) => void;
   workspace?: Workspace;
   onQuickActionPinned?: () => void;
+  conversationId?: string;
 }
 
 export default function Message({
@@ -27,13 +27,12 @@ export default function Message({
   onViewPage,
   workspace = "all",
   onQuickActionPinned,
+  conversationId,
 }: MessageProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
   const [showFeedbackTooltip, setShowFeedbackTooltip] = useState(false);
-  const [reportSaved, setReportSaved] = useState(false);
-  const [reportSaving, setReportSaving] = useState(false);
   const [showPinPopover, setShowPinPopover] = useState(false);
   const isUser = message.role === "user";
 
@@ -47,35 +46,25 @@ export default function Message({
     }
   };
 
-  const handleFeedback = (type: "up" | "down") => {
-    setFeedback((prev) => (prev === type ? null : type));
+  const handleFeedback = async (type: "up" | "down") => {
+    const newValue = feedback === type ? null : type;
+    setFeedback(newValue);
     setShowFeedbackTooltip(true);
     setTimeout(() => setShowFeedbackTooltip(false), 2000);
-  };
-
-  const handleSaveReport = async () => {
-    if (!message.reportData || reportSaving || reportSaved) return;
-    setReportSaving(true);
-    try {
-      const rd = message.reportData;
-      const res = await fetch("/api/reports/saved", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: rd.title,
-          reportType: "general",
-          reportData: rd,
-        }),
-      });
-      if (res.ok) {
-        setReportSaved(true);
-        setTimeout(() => setReportSaved(false), 3000);
-        notify("info", "Report saved to library");
+    if (newValue) {
+      try {
+        await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messageId: message.id,
+            rating: newValue,
+            conversationId: conversationId || null,
+          }),
+        });
+      } catch {
+        // Feedback logging is best-effort
       }
-    } catch {
-      notify("error", "Failed to save report");
-    } finally {
-      setReportSaving(false);
     }
   };
 
@@ -121,33 +110,10 @@ export default function Message({
               <div className="relative">
                 <ReportCard data={message.reportData} />
                 <div className="flex items-center justify-end mt-1.5 gap-1.5">
-                  <button
-                    onClick={handleSaveReport}
-                    disabled={reportSaving}
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all duration-200 ${
-                      reportSaved
-                        ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
-                        : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
-                    } disabled:opacity-50`}
-                    title={reportSaved ? "Saved!" : "Save report to library"}
-                  >
-                    {reportSaved ? (
-                      <>
-                        <BookmarkCheck size={13} />
-                        <span>Saved!</span>
-                      </>
-                    ) : reportSaving ? (
-                      <>
-                        <div className="w-3 h-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Bookmark size={13} />
-                        <span>Save Report</span>
-                      </>
-                    )}
-                  </button>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20">
+                    <Check size={13} />
+                    <span>Saved to library</span>
+                  </span>
                 </div>
               </div>
             )}

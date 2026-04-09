@@ -1,0 +1,13 @@
+import { NextRequest, NextResponse } from "next/server";
+import * as db from "@/lib/db";
+
+export async function POST(request: NextRequest) {
+  try {
+    const { messageId, rating, conversationId } = await request.json();
+    await db.logActivity("feedback", "feedback", { messageId, rating, conversationId });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+  }
+}

@@ -124,6 +124,18 @@ export function buildSystemPrompt(context: {
   capabilities?: string[];
   brandGuide?: Record<string, unknown>;
   pluginContext?: string;
+  currentContact?: {
+    id: number;
+    name: string;
+    email: string;
+    tags: string[];
+  };
+  currentCourse?: {
+    id: number;
+    name: string;
+    status: string;
+    enrollmentCount: number;
+  };
 }): string {
   const pagesSection =
     context.pages && context.pages.length > 0
@@ -151,6 +163,26 @@ Current page content (HTML):
 ${context.currentPage.content.slice(0, 12000)}
 ${context.currentPage.content.length > 12000 ? "\n(Content truncated)" : ""}
 --- END SELECTED PAGE ---`
+    : "";
+
+  const currentContactSection = context.currentContact
+    ? `\n\n--- CURRENTLY SELECTED CONTACT ---
+Contact ID: ${context.currentContact.id}
+Name: "${context.currentContact.name}"
+Email: ${context.currentContact.email}
+Tags: [${context.currentContact.tags.join(", ")}]
+The user has selected this contact. Questions about "this contact" or "them" refer to this person.
+--- END SELECTED CONTACT ---`
+    : "";
+
+  const currentCourseSection = context.currentCourse
+    ? `\n\n--- CURRENTLY SELECTED COURSE ---
+Course ID: ${context.currentCourse.id}
+Name: "${context.currentCourse.name}"
+Status: ${context.currentCourse.status}
+Enrollment Count: ${context.currentCourse.enrollmentCount}
+The user has selected this course. Questions about "this course" or "it" refer to this course.
+--- END SELECTED COURSE ---`
     : "";
 
   const pluginSection = context.pluginContext || "";
@@ -258,5 +290,5 @@ The "title" and "period" fields are required. "summary", "table", and "notes" ar
 Use numbers (not strings) for numeric values in summary and table rows when possible.
 For percentages in summary values, use strings like "45.2%". For change indicators, use raw numbers (e.g. 12.5 for +12.5%, -3.1 for -3.1%).
 
-Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${currentPageSection}`;
+Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${currentPageSection}${currentContactSection}${currentCourseSection}`;
 }

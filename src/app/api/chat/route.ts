@@ -9,7 +9,10 @@ import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
 import { getSystemPromptAddendum } from "@/lib/workspaces";
 import { getThinkificContext, isConfigured as isThinkificConfigured } from "@/lib/thinkific";
 import { getKeapContext, isConfigured as isKeapConfigured } from "@/lib/keap";
-import { getAnalyticsContext, isConfigured as isAnalyticsConfigured } from "@/lib/google-analytics";
+import { getAnalyticsContext, isConfigured as isAnalyticsConfigured, getTrafficOverview } from "@/lib/google-analytics";
+import { getContact } from "@/lib/keap";
+import { getCourse, listEnrollments } from "@/lib/thinkific";
+import { getServerSession } from "@/lib/auth";
 import type { Workspace, FileAttachment } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -19,13 +22,15 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth();
     const body = await request.json();
-    const { messages, pageContextId, conversationId, model: requestedModel, workspace: requestedWorkspace, files: requestFiles } = body as {
+    const { messages, pageContextId, conversationId, model: requestedModel, workspace: requestedWorkspace, files: requestFiles, contactId, courseId } = body as {
       messages: Array<{ role: string; content: string }>;
       pageContextId?: number;
       conversationId?: string;
       model?: string;
       workspace?: Workspace;
       files?: FileAttachment[];
+      contactId?: number;
+      courseId?: number;
     };
 
     const workspace: Workspace = requestedWorkspace || "all";
@@ -117,10 +122,69 @@ export async function POST(request: NextRequest) {
       integrationContext += getAnalyticsContext();
     }
 
+    // Fetch selected contact details if provided
+    let currentContact: { id: number; name: string; email: string; tags: string[] } | undefined;
+    if (contactId && isKeapConfigured()) {
+      try {
+        const contact = await getContact(contactId);
+        const name = `${contact.given_name || ""} ${contact.family_name || ""}`.trim() || "Unknown";
+        const email = contact.email_addresses?.[0]?.email || "";
+        const tags = (contact.tag_ids || []).map((t) => String(t));
+        currentContact = { id: contactId, name, email, tags };
+      } catch (err) {
+        console.error("Failed to fetch contact:", err);
+      }
+    }
+
+    // Fetch selected course details if provided
+    let currentCourse: { id: number; name: string; status: string; enrollmentCount: number } | undefined;
+    if (courseId && isThinkificConfigured()) {
+      try {
+        const [course, enrollments] = await Promise.all([
+          getCourse(courseId),
+          listEnrollments({ course_id: courseId, limit: 1 }).catch(() => ({ meta: { pagination: { total_items: 0 } } })),
+        ]);
+        currentCourse = {
+          id: courseId,
+          name: course.name,
+          status: course.status,
+          enrollmentCount: (enrollments as any).meta?.pagination?.total_items || 0,
+        };
+      } catch (err) {
+        console.error("Failed to fetch course:", err);
+      }
+    }
+
+    // Pre-fetch real GA4 data when analytics workspace is active
+    let analyticsDataContext = "";
+    if ((workspace === "analytics" || workspace === "all") && isAnalyticsConfigured()) {
+      try {
+        const session = await getServerSession() as any;
+        const accessToken = session?.accessToken;
+        if (accessToken) {
+          const overview = await getTrafficOverview(accessToken, "website", "7d");
+          const avgMins = Math.floor(overview.avgSessionDuration / 60);
+          const avgSecs = Math.round(overview.avgSessionDuration % 60);
+          analyticsDataContext = `\n\nCurrent GA4 data (last 7 days):
+- Total Users: ${overview.totalUsers.toLocaleString()}
+- Sessions: ${overview.totalSessions.toLocaleString()}
+- Pageviews: ${overview.totalPageviews.toLocaleString()}
+- Bounce Rate: ${(overview.bounceRate * 100).toFixed(1)}%
+- Avg Session Duration: ${avgMins}m ${avgSecs}s
+Use these REAL numbers when the user asks about traffic. Do not fabricate data.`;
+        }
+      } catch (err) {
+        // GA4 call failed (no token, expired, etc.) -- skip silently
+        console.error("GA4 pre-fetch failed:", err);
+      }
+    }
+
     const systemPrompt = buildSystemPrompt({
       pages,
       currentPage,
-      pluginContext: pluginContextStr + integrationContext,
+      pluginContext: pluginContextStr + integrationContext + analyticsDataContext,
+      currentContact,
+      currentCourse,
     }) + getSystemPromptAddendum(workspace);
 
     const encoder = new TextEncoder();
