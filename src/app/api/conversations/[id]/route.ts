@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import * as db from "@/lib/db";
 import {
-  getConversation,
-  updateConversation,
-  deleteConversation,
+  getConversation as getConversationFile,
+  updateConversation as updateConversationFile,
+  deleteConversation as deleteConversationFile,
 } from "@/lib/conversations";
 import { requireAuth } from "@/lib/auth";
 
@@ -12,7 +14,20 @@ export async function GET(
 ) {
   try {
     await requireAuth();
-    const conversation = await getConversation(params.id);
+
+    if (isSupabaseConfigured) {
+      const conversation = await db.getConversation(params.id);
+      if (!conversation) {
+        return NextResponse.json(
+          { error: "Conversation not found" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json(conversation);
+    }
+
+    // Fallback
+    const conversation = await getConversationFile(params.id);
     if (!conversation) {
       return NextResponse.json(
         { error: "Conversation not found" },
@@ -43,23 +58,65 @@ export async function PUT(
         role: "user" | "assistant";
         content: string;
         timestamp: string;
+        files?: any;
+        pendingAction?: any;
+        actionResult?: any;
+        reportData?: any;
       }>;
       pageContextId?: number;
     };
 
-    const updated = await updateConversation(params.id, {
+    if (isSupabaseConfigured) {
+      // Update conversation metadata (title) if provided
+      if (title !== undefined) {
+        await db.updateConversation(params.id, { title });
+      }
+
+      // If messages are provided, sync them: add any new messages
+      // We use a simple strategy: fetch existing messages, add any that are new
+      if (messages && messages.length > 0) {
+        const existing = await db.getConversation(params.id);
+        const existingIds = new Set(
+          (existing?.messages || []).map((m) => m.id)
+        );
+
+        for (const msg of messages) {
+          if (!existingIds.has(msg.id)) {
+            await db.addMessage(params.id, {
+              role: msg.role,
+              content: msg.content,
+              files: msg.files || null,
+              pendingAction: msg.pendingAction || null,
+              actionResult: msg.actionResult || null,
+              reportData: msg.reportData || null,
+            });
+          }
+        }
+      }
+
+      // Return updated conversation
+      const updated = await db.getConversation(params.id);
+      if (!updated) {
+        return NextResponse.json(
+          { error: "Conversation not found" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json(updated);
+    }
+
+    // Fallback
+    const updated = await updateConversationFile(params.id, {
       title,
       messages,
       pageContextId,
     });
-
     if (!updated) {
       return NextResponse.json(
         { error: "Conversation not found" },
         { status: 404 }
       );
     }
-
     return NextResponse.json(updated);
   } catch (error) {
     const errorMessage =
@@ -76,7 +133,20 @@ export async function DELETE(
 ) {
   try {
     await requireAuth();
-    const deleted = await deleteConversation(params.id);
+
+    if (isSupabaseConfigured) {
+      const deleted = await db.deleteConversation(params.id);
+      if (!deleted) {
+        return NextResponse.json(
+          { error: "Conversation not found" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // Fallback
+    const deleted = await deleteConversationFile(params.id);
     if (!deleted) {
       return NextResponse.json(
         { error: "Conversation not found" },

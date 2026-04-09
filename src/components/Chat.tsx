@@ -82,6 +82,9 @@ export default function Chat() {
     }
   }, [workspace]);
 
+  // Track whether DB sync has completed
+  const dbSyncedRef = useRef(false);
+
   // Hydration flag
   useEffect(() => {
     setHydrated(true);
@@ -103,6 +106,103 @@ export default function Chat() {
       }
     }
   }, [theme]);
+
+  // --- Database sync: load conversations from Supabase on mount ---
+  useEffect(() => {
+    if (dbSyncedRef.current) return;
+    dbSyncedRef.current = true;
+
+    async function syncConversations() {
+      try {
+        const res = await fetch("/api/conversations");
+        if (!res.ok) return;
+        const dbConversations = await res.json();
+        if (!Array.isArray(dbConversations) || dbConversations.length === 0) return;
+
+        // Replace localStorage conversations with database truth
+        setConversations(dbConversations);
+      } catch {
+        // Database not reachable — keep localStorage data
+      }
+    }
+    syncConversations();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- Database sync: load preferences from Supabase on mount ---
+  useEffect(() => {
+    async function syncPreferences() {
+      try {
+        const res = await fetch("/api/preferences");
+        if (!res.ok) return;
+        const prefs = await res.json();
+        if (prefs.source !== "database") return;
+
+        // Apply database preferences over localStorage cache
+        if (prefs.selectedModel) setSelectedModel(prefs.selectedModel);
+        if (prefs.workspace) setWorkspace(prefs.workspace as Workspace);
+        if (prefs.theme) setTheme(prefs.theme as "light" | "dark" | "auto");
+        if (prefs.sidebarCollapsed !== undefined) setSidebarCollapsed(prefs.sidebarCollapsed);
+      } catch {
+        // Database not reachable — keep localStorage values
+      }
+    }
+    syncPreferences();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- Helper: persist a preference change to the database (fire-and-forget) ---
+  const persistPreference = useCallback(
+    (data: Record<string, any>) => {
+      fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    },
+    []
+  );
+
+  // --- Persist preference changes to database (debounced via useEffect) ---
+  const prefsInitRef = useRef(false);
+  useEffect(() => {
+    // Skip the initial render (values come from localStorage/DB sync, not user action)
+    if (!prefsInitRef.current) { prefsInitRef.current = true; return; }
+    persistPreference({ selectedModel });
+  }, [selectedModel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const wsInitRef = useRef(false);
+  useEffect(() => {
+    if (!wsInitRef.current) { wsInitRef.current = true; return; }
+    persistPreference({ workspace });
+  }, [workspace]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const themeInitRef = useRef(false);
+  useEffect(() => {
+    if (!themeInitRef.current) { themeInitRef.current = true; return; }
+    persistPreference({ theme });
+  }, [theme]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sidebarInitRef = useRef(false);
+  useEffect(() => {
+    if (!sidebarInitRef.current) { sidebarInitRef.current = true; return; }
+    persistPreference({ sidebarCollapsed });
+  }, [sidebarCollapsed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- ID mapping for local-to-DB conversation IDs ---
+  const idMapRef = useRef<Record<string, string>>({});
+
+  // --- Helper: persist conversation to database (fire-and-forget) ---
+  const persistConversationToDb = useCallback(
+    (convId: string, data: { title?: string; messages?: ChatMessage[] }) => {
+      // Resolve the actual DB ID (may differ from local ID if DB assigned a UUID)
+      const dbId = idMapRef.current[convId] || convId;
+      fetch(`/api/conversations/${dbId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).catch(() => {});
+    },
+    []
+  );
 
   // --- Jobs state ---
   const [jobs, setJobs] = useLocalStorage<Job[]>("zhealth-jobs", []);
@@ -190,9 +290,10 @@ export default function Chat() {
         const firstSentence = text.split(/[.!?\n]/)[0].trim();
         return firstSentence.length <= 40 ? firstSentence : firstSentence.slice(0, 40).trimEnd() + "...";
       };
+      const title = firstMessage ? autoTitle(firstMessage) : "New conversation";
       const conv: Conversation = {
         id,
-        title: firstMessage ? autoTitle(firstMessage) : "New conversation",
+        title,
         messages: [],
         pageContextId: selectedPageId ?? undefined,
         workspace,
@@ -201,6 +302,37 @@ export default function Chat() {
       };
       setConversations((prev) => [conv, ...prev]);
       setCurrentConversationId(id);
+
+      // Persist to database — replace local ID with DB-generated UUID
+      fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          pageContextId: selectedPageId ?? undefined,
+          workspace,
+        }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((dbConv) => {
+          if (dbConv && dbConv.id && dbConv.id !== id) {
+            // Store the mapping so in-flight requests can resolve the real DB ID
+            idMapRef.current[id] = dbConv.id;
+            // Replace the local conversation with the DB version so IDs match
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === id
+                  ? { ...c, id: dbConv.id, createdAt: dbConv.createdAt || now, updatedAt: dbConv.updatedAt || now }
+                  : c
+              )
+            );
+            setCurrentConversationId((prevId) =>
+              prevId === id ? dbConv.id : prevId
+            );
+          }
+        })
+        .catch(() => {});
+
       return id;
     },
     [selectedPageId, workspace, setConversations, setCurrentConversationId]
@@ -208,23 +340,43 @@ export default function Chat() {
 
   const addMessage = useCallback(
     (convId: string, message: ChatMessage) => {
+      let newTitle: string | undefined;
       setConversations((prev) =>
-        prev.map((c) =>
-          c.id === convId
-            ? {
-                ...c,
-                messages: [...c.messages, message],
-                title:
-                  c.messages.length === 0 && message.role === "user"
-                    ? (() => { const s = message.content.split(/[.!?\n]/)[0].trim(); return s.length <= 40 ? s : s.slice(0, 40).trimEnd() + "..."; })()
-                    : c.title,
-                updatedAt: new Date().toISOString(),
-              }
-            : c
-        )
+        prev.map((c) => {
+          if (c.id !== convId) return c;
+          const isFirst = c.messages.length === 0 && message.role === "user";
+          if (isFirst) {
+            const s = message.content.split(/[.!?\n]/)[0].trim();
+            newTitle = s.length <= 40 ? s : s.slice(0, 40).trimEnd() + "...";
+          }
+          return {
+            ...c,
+            messages: [...c.messages, message],
+            title: newTitle || c.title,
+            updatedAt: new Date().toISOString(),
+          };
+        })
       );
+
+      // Persist to database
+      const msgPayload: Record<string, any> = {
+        messages: [
+          {
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            timestamp: message.timestamp,
+            files: message.files || null,
+            pendingAction: message.pendingAction || null,
+            actionResult: message.actionResult || null,
+            reportData: message.reportData || null,
+          },
+        ],
+      };
+      if (newTitle) msgPayload.title = newTitle;
+      persistConversationToDb(convId, msgPayload);
     },
-    [setConversations]
+    [setConversations, persistConversationToDb]
   );
 
   const updateLastAssistantMessage = useCallback(
@@ -253,8 +405,10 @@ export default function Chat() {
           c.id === id ? { ...c, title: newTitle, updatedAt: new Date().toISOString() } : c
         )
       );
+      // Persist to database
+      persistConversationToDb(id, { title: newTitle });
     },
-    [setConversations]
+    [setConversations, persistConversationToDb]
   );
 
   const deleteConversation = useCallback(
@@ -263,6 +417,9 @@ export default function Chat() {
       if (currentConversationId === id) {
         setCurrentConversationId(null);
       }
+      // Persist to database
+      const dbId = idMapRef.current[id] || id;
+      fetch(`/api/conversations/${dbId}`, { method: "DELETE" }).catch(() => {});
     },
     [currentConversationId, setConversations, setCurrentConversationId]
   );
@@ -426,9 +583,19 @@ export default function Chat() {
         setStreamingMessageId(null);
         abortControllerRef.current = null;
         currentJobRef.current = null;
+
+        // Persist the full conversation (with completed assistant message) to the database.
+        // We read the latest state via a trick: setConversations with identity returns current.
+        setConversations((prev) => {
+          const conv = prev.find((c) => c.id === convId);
+          if (conv && conv.messages.length > 0) {
+            persistConversationToDb(convId, { messages: conv.messages });
+          }
+          return prev; // no mutation
+        });
       }
     },
-    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, conversations, selectedPageId, selectedModel, workspace, setJobs, updateJob]
+    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, conversations, selectedPageId, selectedModel, workspace, setJobs, updateJob, persistConversationToDb]
   );
 
   const handleCancelStream = useCallback(() => {
@@ -477,6 +644,31 @@ export default function Chat() {
     setTimeout(() => handleSend(lastUserMessage!), 50);
   }, [isStreaming, currentConversationId, conversations, setConversations, handleSend]);
 
+  // --- Load full conversation from DB when selecting one ---
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      setCurrentConversationId(id);
+
+      // Check if we already have messages locally
+      const local = conversations.find((c) => c.id === id);
+      if (local && local.messages.length > 0) return;
+
+      // Fetch from DB to get messages
+      fetch(`/api/conversations/${id}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((conv) => {
+          if (!conv || !conv.messages || conv.messages.length === 0) return;
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === id ? { ...c, messages: conv.messages } : c
+            )
+          );
+        })
+        .catch(() => {});
+    },
+    [conversations, setCurrentConversationId, setConversations]
+  );
+
   // --- L2: Clear conversation ---
   const clearConversation = useCallback(() => {
     if (!currentConversationId) return;
@@ -487,7 +679,9 @@ export default function Chat() {
           : c
       )
     );
-  }, [currentConversationId, setConversations]);
+    // Persist: send empty messages array to DB
+    persistConversationToDb(currentConversationId, { messages: [] });
+  }, [currentConversationId, setConversations, persistConversationToDb]);
 
   // --- L10: Input focus ref and focus management ---
   const inputAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -607,8 +801,19 @@ export default function Chat() {
 
         updateJob(jobId, (j) => failJob(j, errorMessage));
       }
+
+      // Persist updated messages to database
+      if (currentConversationId) {
+        setConversations((prev) => {
+          const conv = prev.find((c) => c.id === currentConversationId);
+          if (conv) {
+            persistConversationToDb(currentConversationId, { messages: conv.messages });
+          }
+          return prev;
+        });
+      }
     },
-    [currentConversationId, addMessage, setConversations, setJobs, updateJob]
+    [currentConversationId, addMessage, setConversations, setJobs, updateJob, persistConversationToDb]
   );
 
   const handleCancelAction = useCallback(
@@ -699,7 +904,7 @@ export default function Chat() {
         }}
         conversations={conversations}
         currentConversationId={currentConversationId}
-        onSelectConversation={setCurrentConversationId}
+        onSelectConversation={handleSelectConversation}
         onNewConversation={() => createConversation()}
         onDeleteConversation={deleteConversation}
         onRenameConversation={renameConversation}
