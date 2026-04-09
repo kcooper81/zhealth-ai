@@ -857,7 +857,7 @@ export default function Chat() {
           if (c.id !== currentConversationId) return c;
           const msgs = c.messages.map((m) =>
             m.pendingAction?.id === action.id
-              ? { ...m, pendingAction: null }
+              ? { ...m, pendingAction: null, actionExecuting: action.summary }
               : m
           );
           return { ...c, messages: msgs };
@@ -888,6 +888,7 @@ export default function Chat() {
                 msgs[i] = {
                   ...msgs[i],
                   pendingAction: null,
+                  actionExecuting: undefined,
                   actionResult: result,
                 };
                 break;

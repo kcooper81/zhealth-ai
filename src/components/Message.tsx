@@ -128,6 +128,18 @@ export default function Message({
             )}
           </div>
 
+          {/* Executing indicator */}
+          {message.actionExecuting && !message.actionResult && (
+            <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/40 rounded-xl p-3 border-l-4 border-l-brand-blue animate-pulse">
+              <div className="flex items-center gap-2.5">
+                <div className="w-4 h-4 border-2 border-brand-blue border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-700 dark:text-gray-200 font-medium">Executing: {message.actionExecuting}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Pending action card */}
           {message.pendingAction && !message.actionResult && (
             <ActionCard
@@ -277,7 +289,11 @@ function ResultCard({
   onViewPage?: (url: string) => void;
 }) {
   if (result.success) {
-    const pageUrl = (result.result as { link?: string })?.link;
+    const r = result.result as { link?: string; status?: string; id?: number; title?: string } | undefined;
+    const pageUrl = r?.link;
+    const pageStatus = r?.status;
+    const pageId = r?.id;
+    const pageTitle = r?.title;
     return (
       <div className="mt-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/40 rounded-xl p-3 border-l-4 border-l-emerald-400 animate-slide-up">
         <div className="flex items-center gap-2">
@@ -285,8 +301,14 @@ function ResultCard({
             <Check size={12} className="text-emerald-600 dark:text-emerald-400" />
           </div>
           <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">Action completed</span>
+          {pageStatus === "draft" && (
+            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">Draft</span>
+          )}
         </div>
-        {pageUrl && (
+        {pageTitle && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{pageTitle}{pageId ? ` (ID: ${pageId})` : ""}</p>
+        )}
+        {pageUrl && pageStatus !== "draft" && (
           <button
             onClick={() => onViewPage?.(pageUrl)}
             className="mt-2 flex items-center gap-1.5 text-sm text-brand-blue hover:underline"
@@ -294,6 +316,11 @@ function ResultCard({
             <ExternalLink size={14} />
             View page
           </button>
+        )}
+        {pageUrl && pageStatus === "draft" && (
+          <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+            Draft pages can be previewed in WordPress admin.
+          </p>
         )}
       </div>
     );

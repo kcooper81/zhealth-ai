@@ -525,8 +525,8 @@ export default function Sidebar({
                 )}
 
                 {groups.map((group) => (
-                  <div key={group.label} className="mb-1.5">
-                    <div className="px-2 py-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <div key={group.label} className="mb-2 mt-1">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       {group.label === "Pinned" && (
                         <Pin size={11} className="text-gray-500" />
                       )}
@@ -798,7 +798,7 @@ function ConversationItem({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
-      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all duration-200 group relative ${
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all duration-200 group relative mb-0.5 ${
         isActive
           ? "border-l-2 bg-white/[0.08]"
           : "hover:bg-white/[0.04] active:bg-white/[0.06] border-l-2 border-transparent"

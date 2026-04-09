@@ -103,6 +103,7 @@ export interface ChatMessage {
   timestamp: string;
   files?: FileAttachment[];
   pendingAction?: PendingAction | null;
+  actionExecuting?: string;
   actionResult?: ActionResult | null;
   reportData?: ReportData | null;
 }
