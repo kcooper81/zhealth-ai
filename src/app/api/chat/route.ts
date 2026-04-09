@@ -75,19 +75,23 @@ export async function POST(request: NextRequest) {
     // Only fetch WordPress context for website/all workspaces — not for CRM/analytics
     const needsWpContext = workspace === "all" || workspace === "website";
 
+    // Wrap context fetching with a 8s timeout to prevent hanging
+    const withTimeout = <T>(p: Promise<T>, fallback: T, ms = 8000): Promise<T> =>
+      Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+
     try {
       const promises: Promise<unknown>[] = [
-        cachedFetch(CacheKeys.wpPlugins(), TTL.WP_PLUGINS, () => discoverPlugins().catch(() => [])),
+        withTimeout(cachedFetch(CacheKeys.wpPlugins(), TTL.WP_PLUGINS, () => discoverPlugins().catch(() => [])), []),
       ];
 
       if (needsWpContext) {
         const wp = getWordPressClient();
         const status = "publish,draft,pending,private";
-        promises.push(cachedFetch(CacheKeys.wpPages(status), TTL.WP_PAGES, () => wp.listPages({ per_page: 50, status }).catch(() => [])));
+        promises.push(withTimeout(cachedFetch(CacheKeys.wpPages(status), TTL.WP_PAGES, () => wp.listPages({ per_page: 50, status }).catch(() => [])), []));
         if (pageContextId) {
-          promises.push(wp.getPage(pageContextId, "edit").catch(() => null)); // Don't cache individual page edits
+          promises.push(withTimeout(wp.getPage(pageContextId, "edit").catch(() => null), null));
         }
-        promises.push(cachedFetch(CacheKeys.wpPopups(status), TTL.WP_POPUPS, () => wp.listPopups({ per_page: 50, status }).catch(() => [])));
+        promises.push(withTimeout(cachedFetch(CacheKeys.wpPopups(status), TTL.WP_POPUPS, () => wp.listPopups({ per_page: 50, status }).catch(() => [])), []));
       }
 
       const results = await Promise.all(promises);

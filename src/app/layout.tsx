@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Z-Health AI",
   description:
     "AI-powered management dashboard for Z-Health Education WordPress site",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export const viewport: Viewport = {

@@ -600,9 +600,19 @@ export default function Chat() {
         let accumulated = "";
         let buffer = "";
 
+        // Timeout: if no data received within 30s, show error
+        let lastDataTime = Date.now();
+        const streamTimeout = setInterval(() => {
+          if (Date.now() - lastDataTime > 30000 && !accumulated) {
+            clearInterval(streamTimeout);
+            reader.cancel();
+          }
+        }, 5000);
+
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) { clearInterval(streamTimeout); break; }
+          lastDataTime = Date.now();
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
