@@ -5,7 +5,7 @@
  * Docs: https://developers.thinkific.com/api/api-reference/
  */
 
-const API_BASE = "https://api.thinkific.com/api/v2";
+const API_BASE = "https://api.thinkific.com/api/public/v1";
 
 function getToken(): string {
   const token = process.env.THINKIFIC_API_TOKEN;
