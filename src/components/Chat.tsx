@@ -1211,24 +1211,7 @@ export default function Chat() {
           onQuickActionPinned={fetchQuickActions}
         />
 
-        {/* Thinking indicator (M11) */}
-        {isStreaming && streamingMessageId && (() => {
-          const streamingMsg = messages.find((m) => m.id === streamingMessageId);
-          const noTokensYet = !streamingMsg || streamingMsg.content === "";
-          if (!noTokensYet) return null;
-          return (
-            <div className="px-4 md:px-8 pb-1">
-              <div className="max-w-3xl mx-auto flex items-center gap-2 py-1.5">
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-blue animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-blue animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-blue animate-bounce [animation-delay:300ms]" />
-                </div>
-                <span className="text-xs text-gray-400 dark:text-gray-500">Z-Health AI is thinking...</span>
-              </div>
-            </div>
-          );
-        })()}
+        {/* Thinking indicator removed — Message.tsx already shows dots inside the message bubble */}
 
         {/* Input */}
         <InputArea
