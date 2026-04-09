@@ -257,6 +257,9 @@ export default function Chat() {
     (convId: string, data: { title?: string; messages?: ChatMessage[] }) => {
       // Resolve the actual DB ID (may differ from local ID if DB assigned a UUID)
       const dbId = idMapRef.current[convId] || convId;
+      // Only persist if we have a DB-mapped ID (conversation was created server-side)
+      // Local-only IDs (timestamp-based) haven't been created in DB yet
+      if (!idMapRef.current[convId] && convId.match(/^\d+-/)) return;
       fetch(`/api/conversations/${dbId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -766,8 +769,10 @@ export default function Chat() {
       const local = conversations.find((c) => c.id === id);
       if (local && local.messages.length > 0) return;
 
-      // Fetch from DB to get messages
-      fetch(`/api/conversations/${id}`)
+      // Fetch from DB to get messages (skip for local-only IDs)
+      const dbId = idMapRef.current[id] || id;
+      if (!idMapRef.current[id] && id.match(/^\d+-/)) return;
+      fetch(`/api/conversations/${dbId}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((conv) => {
           if (!conv || !conv.messages || conv.messages.length === 0) return;
