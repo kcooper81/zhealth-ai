@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import * as ga from "@/lib/google-analytics";
 import type { GA4Property } from "@/lib/google-analytics";
+import { logError } from "@/lib/error-logger";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Analytics error";
+    logError("api/analytics", msg, { action, property, dateRange });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

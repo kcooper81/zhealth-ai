@@ -7,6 +7,7 @@ import {
   deleteConversation as deleteConversationFile,
 } from "@/lib/conversations";
 import { requireAuth } from "@/lib/auth";
+import { logError } from "@/lib/error-logger";
 
 export async function GET(
   request: NextRequest,
@@ -40,6 +41,7 @@ export async function GET(
       error instanceof Error
         ? error.message
         : "Failed to fetch conversation";
+    logError("api/conversations/[id]", errorMessage, { id: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -123,6 +125,7 @@ export async function PUT(
       error instanceof Error
         ? error.message
         : "Failed to update conversation";
+    logError("api/conversations/[id]", errorMessage, { id: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -159,6 +162,7 @@ export async function DELETE(
       error instanceof Error
         ? error.message
         : "Failed to delete conversation";
+    logError("api/conversations/[id]", errorMessage, { id: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

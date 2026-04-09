@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { logError } from "@/lib/error-logger";
 
 function getUserId(session: any): string {
   return session?.user?.email || "anonymous";
@@ -89,6 +90,7 @@ export async function GET() {
     return NextResponse.json(files);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to list files";
+    logError("api/files", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

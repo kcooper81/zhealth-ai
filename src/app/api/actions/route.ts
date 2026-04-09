@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { executeAction } from "@/lib/actions";
 import type { PendingAction } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
+import { logError } from "@/lib/error-logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to execute action";
+    logError("api/actions", errorMessage);
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

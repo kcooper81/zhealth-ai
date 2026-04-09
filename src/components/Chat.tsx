@@ -29,6 +29,7 @@ import JobIndicator from "./JobIndicator";
 import QuickActionsManager from "./QuickActionsManager";
 import FilesLibrary from "./FilesLibrary";
 import CommandPanel from "./CommandPanel";
+import DebugPanel from "./DebugPanel";
 import NotificationToast from "./NotificationToast";
 import { notify } from "@/lib/notifications";
 import { Menu, Loader, Document, X } from "./icons";
@@ -65,6 +66,8 @@ export default function Chat() {
   const [showSettings, setShowSettings] = useState(false);
   const [showFilesLibrary, setShowFilesLibrary] = useState(false);
   const [showCommandPanel, setShowCommandPanel] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [hasLogErrors, setHasLogErrors] = useState(false);
   const [initialWorkflowId, setInitialWorkflowId] = useState<string | null>(null);
   const [, setShowOnboarding] = useState(true);
   const [pages, setPages] = useState<SidebarPage[]>([]);
@@ -137,6 +140,34 @@ export default function Chat() {
       }
     }
   }, [theme]);
+
+  // --- Poll for error log entries (for sidebar badge) ---
+  useEffect(() => {
+    let mounted = true;
+    async function checkErrors() {
+      try {
+        const res = await fetch("/api/logs");
+        if (res.ok && mounted) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setHasLogErrors(data.some((l: { level: string }) => l.level === "error"));
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    checkErrors();
+    const interval = setInterval(checkErrors, 5000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
+  // --- Client-side error logging helper ---
+  const logClientError = useCallback((source: string, message: string, details?: unknown) => {
+    fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: "error", source, message, details }),
+    }).catch(() => {});
+  }, []);
 
   // --- Database sync: load conversations from Supabase on mount ---
   useEffect(() => {
@@ -650,6 +681,7 @@ export default function Chat() {
             `I encountered an error: ${errorMsg}\n\nPlease check that your API keys are configured in the environment variables and try again.`
           );
           notify("error", "Connection lost. Try again.", errorMsg);
+          logClientError("chat/stream", errorMsg, { model: selectedModel, workspace });
         }
       } finally {
         setIsStreaming(false);
@@ -668,7 +700,7 @@ export default function Chat() {
         });
       }
     },
-    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, selectedPageId, selectedModel, workspace, selectedContactId, selectedCourseId, setJobs, updateJob, persistConversationToDb, setConversations]
+    [currentConversationId, createConversation, addMessage, updateLastAssistantMessage, selectedPageId, selectedModel, workspace, selectedContactId, selectedCourseId, setJobs, updateJob, persistConversationToDb, setConversations, logClientError]
   );
 
   const handleCancelStream = useCallback(() => {
@@ -899,6 +931,7 @@ export default function Chat() {
           })
         );
         notify("error", "Action failed", errorMessage);
+        logClientError("chat/action", errorMessage, { actionType: action.type });
 
         updateJob(jobId, (j) => failJob(j, errorMessage));
       }
@@ -914,7 +947,7 @@ export default function Chat() {
         });
       }
     },
-    [currentConversationId, setConversations, setJobs, updateJob, persistConversationToDb]
+    [currentConversationId, setConversations, setJobs, updateJob, persistConversationToDb, logClientError]
   );
 
   const handleCancelAction = useCallback(
@@ -969,6 +1002,7 @@ export default function Chat() {
       "mod+b": () => setShowSidebar((v) => !v),
       "mod+j": () => setShowJobsPanel((v) => !v),
       "mod+shift+f": () => setShowFilesLibrary((v) => !v),
+      "mod+d": () => setShowDebugPanel((v) => !v),
       "mod+e": () => {
         if (workspace !== "all") setShowWorkspacePanel((v) => !v);
       },
@@ -978,7 +1012,8 @@ export default function Chat() {
         if (!isInput) setShowShortcuts(true);
       },
       escape: () => {
-        if (showQuickActionsManager) setShowQuickActionsManager(false);
+        if (showDebugPanel) setShowDebugPanel(false);
+        else if (showQuickActionsManager) setShowQuickActionsManager(false);
         else if (showFilesLibrary) setShowFilesLibrary(false);
         else if (showJobsPanel) setShowJobsPanel(false);
         else if (showSettings) setShowSettings(false);
@@ -988,7 +1023,7 @@ export default function Chat() {
         else if (isStreaming) handleCancelStream();
       },
     }),
-    [createConversation, workspace, showQuickActionsManager, showFilesLibrary, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
+    [createConversation, workspace, showDebugPanel, showQuickActionsManager, showFilesLibrary, showJobsPanel, showSettings, showWorkflows, showShortcuts, showPreview, isStreaming, handleCancelStream]
   );
 
   useKeyboardShortcuts(shortcutHandlers);
@@ -1042,6 +1077,8 @@ export default function Chat() {
         onOpenQuickActionsManager={() => setShowQuickActionsManager(true)}
         quickActions={quickActions}
         onQuickAction={handleQuickAction}
+        onOpenDebug={() => setShowDebugPanel(true)}
+        hasErrors={hasLogErrors}
       />
 
       {/* Right Panel - 300px (workspace content) */}
@@ -1215,6 +1252,12 @@ export default function Chat() {
       <FilesLibrary
         show={showFilesLibrary}
         onClose={() => setShowFilesLibrary(false)}
+      />
+
+      {/* Debug / Error Log panel (slide-over) */}
+      <DebugPanel
+        show={showDebugPanel}
+        onClose={() => setShowDebugPanel(false)}
       />
 
       {/* Modals */}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listWorkflows, saveWorkflow } from "@/lib/workflows";
 import type { Workflow } from "@/lib/workflows";
 import { requireAuth } from "@/lib/auth";
+import { logError } from "@/lib/error-logger";
 
 export async function GET() {
   try {
@@ -11,6 +12,7 @@ export async function GET() {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to list workflows";
+    logError("api/workflows", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -36,6 +38,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to create workflow";
+    logError("api/workflows", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

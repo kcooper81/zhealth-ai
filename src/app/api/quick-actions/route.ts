@@ -4,6 +4,7 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import * as db from "@/lib/db";
 import { getQuickActions as getDefaultQuickActions } from "@/lib/workspaces";
 import type { Workspace, QuickAction } from "@/lib/types";
+import { logError } from "@/lib/error-logger";
 
 function getUserId(session: any): string {
   return session?.user?.email || "anonymous";
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to get quick actions";
+    logError("api/quick-actions", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -147,6 +149,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to create quick action";
+    logError("api/quick-actions", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -173,6 +176,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to update quick action";
+    logError("api/quick-actions", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -199,6 +203,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to delete quick action";
+    logError("api/quick-actions", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

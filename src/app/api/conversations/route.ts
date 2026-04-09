@@ -6,6 +6,7 @@ import {
   listConversations as listConversationsFile,
   createConversation as createConversationFile,
 } from "@/lib/conversations";
+import { logError } from "@/lib/error-logger";
 
 /** Derive a stable user ID from the session, or fall back to a default. */
 function getUserId(session: any): string {
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
       error instanceof Error
         ? error.message
         : "Failed to list conversations";
+    logError("api/conversations", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
       error instanceof Error
         ? error.message
         : "Failed to create conversation";
+    logError("api/conversations", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

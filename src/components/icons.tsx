@@ -482,3 +482,33 @@ export const GraduationCap = icon(
     <path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5" />
   </>
 );
+
+export const Bug = icon(
+  <>
+    <path d="M8 2l1.88 1.88M14.12 3.88L16 2" />
+    <path d="M9 7.13v-1a3.003 3.003 0 116 0v1" />
+    <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 014-4h4a4 4 0 014 4v3c0 3.3-2.7 6-6 6z" />
+    <path d="M12 20v-9" />
+    <path d="M6.53 9C4.6 8.8 3 7.1 3 5" />
+    <path d="M6 13H2" />
+    <path d="M3 21c0-2.1 1.7-3.9 3.8-4" />
+    <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4" />
+    <path d="M22 13h-4" />
+    <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" />
+  </>
+);
+
+export const ClipboardCopy = icon(
+  <>
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" />
+    <path d="M12 11v6M9 14h6" />
+  </>
+);
+
+export const Terminal = icon(
+  <>
+    <polyline points="4 17 10 11 4 5" />
+    <line x1="12" y1="19" x2="20" y2="19" />
+  </>
+);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWorkflow, saveWorkflow, deleteWorkflow } from "@/lib/workflows";
 import { requireAuth } from "@/lib/auth";
+import { logError } from "@/lib/error-logger";
 
 export async function GET(
   request: NextRequest,
@@ -19,6 +20,7 @@ export async function GET(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to fetch workflow";
+    logError("api/workflows/[id]", errorMessage, { id: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -44,6 +46,7 @@ export async function PUT(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to update workflow";
+    logError("api/workflows/[id]", errorMessage, { id: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -65,6 +68,7 @@ export async function DELETE(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to delete workflow";
+    logError("api/workflows/[id]", errorMessage, { id: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

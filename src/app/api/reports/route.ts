@@ -5,6 +5,7 @@ import * as keap from "@/lib/keap";
 import * as thinkific from "@/lib/thinkific";
 import type { GA4Property } from "@/lib/google-analytics";
 import type { ReportData } from "@/lib/types";
+import { logError } from "@/lib/error-logger";
 
 export const runtime = "nodejs";
 
@@ -370,6 +371,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(report);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Report generation error";
+    logError("api/reports", msg, { type, property, range });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

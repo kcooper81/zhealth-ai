@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import * as db from "@/lib/db";
+import { logError } from "@/lib/error-logger";
 
 function getUserId(session: any): string {
   return session?.user?.email || "anonymous";
@@ -20,6 +21,7 @@ export async function GET() {
     return NextResponse.json(reports);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to list saved reports";
+    logError("api/reports/saved", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -48,6 +50,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(saved);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to save report";
+    logError("api/reports/saved", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -70,6 +73,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to delete report";
+    logError("api/reports/saved", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

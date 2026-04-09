@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as keap from "@/lib/keap";
+import { logError } from "@/lib/error-logger";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Keap API error";
+    logError("api/keap", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -170,6 +172,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Keap API error";
+    logError("api/keap", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

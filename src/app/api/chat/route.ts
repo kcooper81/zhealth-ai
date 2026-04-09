@@ -188,8 +188,7 @@ export async function POST(request: NextRequest) {
 Use these REAL numbers when the user asks about traffic. Do not fabricate data.`;
         }
       } catch (err) {
-        // GA4 call failed (no token, expired, etc.) -- skip silently
-        console.error("GA4 pre-fetch failed:", err);
+        logWarn("api/chat", "GA4 pre-fetch failed", { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -236,6 +235,7 @@ Use these REAL numbers when the user asks about traffic. Do not fabricate data.`
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Stream failed";
+          logError("api/chat", `Stream error: ${errorMessage}`, { model, workspace, messageCount: messages?.length });
           const errorChunk = JSON.stringify({
             type: "error",
             error: errorMessage,
@@ -256,6 +256,7 @@ Use these REAL numbers when the user asks about traffic. Do not fabricate data.`
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Internal server error";
+    logError("api/chat", errorMessage, { stack: error instanceof Error ? error.stack : undefined });
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

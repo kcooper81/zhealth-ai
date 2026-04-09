@@ -18,6 +18,7 @@ import {
   Zap,
   MoreHorizontal,
   Pin,
+  Bug,
 } from "./icons";
 import ConversationMenu from "./ConversationMenu";
 import WorkspaceSelector from "./WorkspaceSelector";
@@ -102,6 +103,8 @@ interface SidebarProps {
   onOpenQuickActionsManager?: () => void;
   quickActions?: QuickAction[];
   onQuickAction?: (prompt: string) => void;
+  onOpenDebug?: () => void;
+  hasErrors?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +177,8 @@ export default function Sidebar({
   onOpenQuickActionsManager,
   quickActions,
   onQuickAction,
+  onOpenDebug,
+  hasErrors,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
@@ -475,6 +480,19 @@ export default function Sidebar({
                 title="Files & Reports"
               >
                 <FolderOpen size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  onOpenDebug?.();
+                  onCloseSidebar();
+                }}
+                className="relative w-11 h-11 rounded-lg flex items-center justify-center text-gray-500 hover:bg-white/10 active:bg-white/20 hover:text-gray-300 transition-colors flex-shrink-0 touch-target"
+                title="Error Log (Cmd+D)"
+              >
+                <Bug size={18} />
+                {hasErrors && (
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500" />
+                )}
               </button>
               <button
                 onClick={() => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { summarizeElementorData } from "@/lib/claude";
+import { logError } from "@/lib/error-logger";
 
 export async function GET(
   request: NextRequest,
@@ -48,6 +49,7 @@ export async function GET(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to fetch page";
+    logError("api/pages/[id]", errorMessage, { pageId: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
@@ -99,6 +101,7 @@ export async function POST(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to update page";
+    logError("api/pages/[id]", errorMessage, { pageId: params.id });
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

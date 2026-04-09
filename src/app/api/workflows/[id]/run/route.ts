@@ -3,6 +3,7 @@ import { getWorkflow, updateWorkflowRunStats } from "@/lib/workflows";
 import { streamChat, buildSystemPrompt } from "@/lib/claude";
 import { executeAction } from "@/lib/actions";
 import type { PendingAction } from "@/lib/types";
+import { logError } from "@/lib/error-logger";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -166,6 +167,7 @@ export async function POST(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Internal server error";
+    logError("api/workflows/[id]/run", errorMessage, { workflowId: params.id });
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

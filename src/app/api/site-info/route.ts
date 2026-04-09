@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { discoverPlugins } from "@/lib/plugin-discovery";
+import { logError } from "@/lib/error-logger";
 
 export async function GET() {
   try {
@@ -37,6 +38,7 @@ export async function GET() {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to fetch site info";
+    logError("api/site-info", errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
