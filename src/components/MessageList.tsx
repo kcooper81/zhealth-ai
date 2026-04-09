@@ -125,6 +125,11 @@ const WORKSPACE_EMPTY: Record<Workspace, { heading: string; description: string 
     description:
       "I can search contacts, manage tags, view your pipeline, and run reports. What do you need?",
   },
+  lms: {
+    heading: "LMS Workspace",
+    description:
+      "I can manage courses, students, enrollments, create coupons, and pull completion reports.",
+  },
   analytics: {
     heading: "Analytics Workspace",
     description:
