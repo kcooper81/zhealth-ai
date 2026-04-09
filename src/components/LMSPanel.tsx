@@ -209,7 +209,6 @@ export default function LMSPanel({
           >
             <GraduationCap
               size={16}
-              className="flex-shrink-0"
               className="flex-shrink-0 text-pink-500"
             />
             <div className="flex-1 min-w-0">

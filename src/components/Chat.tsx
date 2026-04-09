@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import type { ChatMessage, Conversation, PendingAction, Workspace } from "@/lib/types";
+import type { ChatMessage, Conversation, PendingAction, Workspace, FileAttachment } from "@/lib/types";
 import type { Job } from "@/lib/jobs";
 import {
   createJob,
@@ -268,18 +268,27 @@ export default function Chat() {
 
   // --- Message sending (with jobs integration) ---
   const handleSend = useCallback(
-    async (text: string) => {
+    async (text: string, files?: FileAttachment[]) => {
       let convId = currentConversationId;
       if (!convId) {
         convId = createConversation(text);
       }
 
-      // Add user message
+      // Add user message (store file metadata without base64 data for display)
+      const displayFiles = files?.map((f) => ({
+        id: f.id,
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        preview: f.preview,
+      }));
+
       const userMsg: ChatMessage = {
         id: generateId(),
         role: "user",
         content: text,
         timestamp: new Date().toISOString(),
+        files: displayFiles,
       };
       addMessage(convId, userMsg);
 
@@ -321,6 +330,7 @@ export default function Chat() {
             conversationId: convId,
             model: selectedModel,
             workspace,
+            files: files,
           }),
         });
 
@@ -790,7 +800,7 @@ export default function Chat() {
 
         {/* Input */}
         <InputArea
-          onSend={(text: string) => handleSend(text)}
+          onSend={(text: string, files?: FileAttachment[]) => handleSend(text, files)}
           isStreaming={isStreaming}
           onCancelStream={handleCancelStream}
           modelName={selectedModel}

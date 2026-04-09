@@ -133,7 +133,8 @@ export async function POST(request: NextRequest) {
             (text: string) => {
               const chunk = JSON.stringify({ type: "token", text });
               controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
-            }
+            },
+            requestFiles
           );
 
           const { message, pendingAction } = parseActions(result.content);
