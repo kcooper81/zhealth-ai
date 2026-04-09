@@ -69,6 +69,7 @@ export default function Chat() {
   // --- Workspace panel state ---
   const [showWorkspacePanel, setShowWorkspacePanel] = useState(() => workspace !== "all");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [dateRange, setDateRange] = useState("7d");
 
   // When workspace changes, show/hide workspace panel
@@ -660,8 +661,9 @@ export default function Chat() {
         onWorkspaceChange={(ws) => {
           setWorkspace(ws);
           setCurrentConversationId(null);
-          setSelectedPageId(null); // clear page context
-          setSelectedContactId(null); // clear contact context
+          setSelectedPageId(null);
+          setSelectedContactId(null);
+          setSelectedCourseId(null);
         }}
         conversations={conversations}
         currentConversationId={currentConversationId}
@@ -695,6 +697,8 @@ export default function Chat() {
         onSelectPage={setSelectedPageId}
         selectedContactId={selectedContactId}
         onSelectContact={handleSelectContact}
+        selectedCourseId={selectedCourseId}
+        onSelectCourse={(course) => setSelectedCourseId(course.id)}
         onQuickAction={handleQuickAction}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}

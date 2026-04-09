@@ -7,6 +7,7 @@ import { X, Loader } from "./icons";
 import PageSelector from "./PageSelector";
 import CRMPanel from "./CRMPanel";
 import AnalyticsPanel from "./AnalyticsPanel";
+import LMSPanel from "./LMSPanel";
 
 type SidebarPage = {
   id: number;
@@ -29,6 +30,9 @@ interface WorkspacePanelProps {
   // CRM
   selectedContactId: number | null;
   onSelectContact: (contact: { id: number; name: string; email: string }) => void;
+  // LMS
+  selectedCourseId?: number | null;
+  onSelectCourse?: (course: { id: number; name: string }) => void;
   // Analytics
   onQuickAction: (action: string) => void;
   dateRange: string;
@@ -46,6 +50,8 @@ export default function WorkspacePanel({
   onSelectPage,
   selectedContactId,
   onSelectContact,
+  selectedCourseId,
+  onSelectCourse,
   onQuickAction,
   dateRange,
   onDateRangeChange,
@@ -118,6 +124,15 @@ export default function WorkspacePanel({
                 onSelectContact={onSelectContact}
                 selectedContactId={selectedContactId}
                 accentColor={workspaceConfig.color}
+              />
+            )}
+
+            {workspace === "lms" && onSelectCourse && (
+              <LMSPanel
+                onSelectCourse={onSelectCourse}
+                selectedCourseId={selectedCourseId || null}
+                accentColor={workspaceConfig.color}
+                onQuickAction={onQuickAction}
               />
             )}
 
