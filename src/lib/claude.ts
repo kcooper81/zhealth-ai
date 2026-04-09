@@ -524,11 +524,12 @@ When generating reports with data, use the <report> tag format:
 }
 </report>
 
-Use this format when the user asks for reports, analytics data, data summaries, or any structured data display.
-For simple questions, respond in plain text. Only use <report> for structured data displays.
-The "title" and "period" fields are required. "summary", "table", and "notes" are optional.
+IMPORTANT: You MUST use the <report> tag format whenever the user asks for a report, data summary, analytics, breakdown, overview, or any request that would benefit from a table or metrics display. The <report> tag renders as a rich interactive card in the UI with export buttons (CSV, Excel, PDF, JSON). Do NOT use markdown tables — they cannot be exported. ALWAYS prefer <report> tags for data.
+
+The "title" and "period" fields are required. "summary", "table", and "notes" are optional but include them when you have the data.
 Use numbers (not strings) for numeric values in summary and table rows when possible.
 For percentages in summary values, use strings like "45.2%". For change indicators, use raw numbers (e.g. 12.5 for +12.5%, -3.1 for -3.1%).
+For simple questions that don't involve data, respond in plain text without <report> tags.
 
 Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${popupsSection}${currentPageSection}${currentContactSection}${currentCourseSection}`;
 }

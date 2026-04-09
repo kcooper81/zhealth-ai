@@ -42,18 +42,34 @@ function escapeCsvCell(value: string | number): string {
   return str;
 }
 
-function downloadCSV(headers: string[], rows: (string | number)[][], filename: string) {
-  const csv = [
-    headers.map(escapeCsvCell).join(","),
-    ...rows.map((r) => r.map(escapeCsvCell).join(",")),
-  ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
+function downloadFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadCSV(headers: string[], rows: (string | number)[][], filename: string) {
+  const csv = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((r) => r.map(escapeCsvCell).join(",")),
+  ].join("\n");
+  downloadFile(csv, filename, "text/csv");
+}
+
+function downloadTSV(headers: string[], rows: (string | number)[][], filename: string) {
+  const tsv = [
+    headers.join("\t"),
+    ...rows.map((r) => r.map((c) => String(c).replace(/\t/g, " ")).join("\t")),
+  ].join("\n");
+  downloadFile(tsv, filename, "text/tab-separated-values");
+}
+
+function downloadJSON(data: ReportData, filename: string) {
+  downloadFile(JSON.stringify(data, null, 2), filename, "application/json");
 }
 
 function downloadPdfReport(data: ReportData, filename: string) {
@@ -148,6 +164,19 @@ function downloadPdfReport(data: ReportData, filename: string) {
     printWindow.focus();
     printWindow.print();
   }, 500);
+}
+
+function ExportButton({ label, title, onClick }: { label: string; title: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors border border-gray-200 dark:border-gray-700"
+      title={title}
+    >
+      <Download size={11} />
+      {label}
+    </button>
+  );
 }
 
 function ChangeIndicator({ change, label }: { change: number; label?: string }) {
@@ -252,31 +281,43 @@ export default function ReportCard({ data }: ReportCardProps) {
       )}
 
       {/* Export buttons */}
-      <div className="px-4 pt-2 pb-3 border-t border-gray-100 dark:border-gray-700/40 flex items-center gap-2">
+      <div className="px-4 pt-2 pb-3 border-t border-gray-100 dark:border-gray-700/40 flex items-center gap-1.5 flex-wrap">
         {data.table && data.table.headers.length > 0 && (
-          <button
+          <ExportButton
+            label="CSV"
+            title="Download as CSV (spreadsheet)"
             onClick={() => {
               const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
               downloadCSV(data.table!.headers, data.table!.rows, `${slug}.csv`);
             }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
-            title="Download as CSV"
-          >
-            <Download size={13} />
-            <span>Download CSV</span>
-          </button>
+          />
         )}
-        <button
+        {data.table && data.table.headers.length > 0 && (
+          <ExportButton
+            label="Excel"
+            title="Download as TSV (opens in Excel)"
+            onClick={() => {
+              const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+              downloadTSV(data.table!.headers, data.table!.rows, `${slug}.tsv`);
+            }}
+          />
+        )}
+        <ExportButton
+          label="PDF"
+          title="Download as PDF"
           onClick={() => {
             const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
             downloadPdfReport(data, `${slug}.pdf`);
           }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
-          title="Download as PDF"
-        >
-          <Download size={13} />
-          <span>Download PDF</span>
-        </button>
+        />
+        <ExportButton
+          label="JSON"
+          title="Download raw data as JSON"
+          onClick={() => {
+            const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+            downloadJSON(data, `${slug}.json`);
+          }}
+        />
       </div>
     </div>
   );
