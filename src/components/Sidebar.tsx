@@ -39,7 +39,7 @@ function getPinnedIds(): Set<string> {
 }
 
 function savePinnedIds(ids: Set<string>) {
-  localStorage.setItem(PINNED_KEY, JSON.stringify([...ids]));
+  localStorage.setItem(PINNED_KEY, JSON.stringify(Array.from(ids)));
 }
 
 // ---------------------------------------------------------------------------
