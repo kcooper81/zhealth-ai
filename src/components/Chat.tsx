@@ -27,6 +27,7 @@ import SettingsPanel from "./SettingsPanel";
 import { ActiveJobsBar, JobsPanel } from "./JobsPanel";
 import JobIndicator from "./JobIndicator";
 import { Menu, Loader, Document, X } from "./icons";
+import type { ReportData } from "@/lib/types";
 
 type SidebarPage = {
   id: number;
@@ -367,8 +368,13 @@ export default function Chat() {
               if (data.type === "token") {
                 streamStarted = true;
                 accumulated += data.text;
-                // Strip <action> blocks from display — only show the plain language part
-                const displayText = accumulated.replace(/<action>[\s\S]*?<\/action>/g, "").replace(/<action>[\s\S]*/g, "").trim();
+                // Strip <action> and <report> blocks from display — only show the plain language part
+                const displayText = accumulated
+                  .replace(/<action>[\s\S]*?<\/action>/g, "")
+                  .replace(/<action>[\s\S]*/g, "")
+                  .replace(/<report>[\s\S]*?<\/report>/g, "")
+                  .replace(/<report>[\s\S]*/g, "")
+                  .trim();
                 updateLastAssistantMessage(convId, displayText || "Working on it...");
               } else if (data.type === "done") {
                 if (data.message) {
@@ -376,6 +382,22 @@ export default function Chat() {
                 }
                 if (data.pendingAction) {
                   setPendingAction(data.pendingAction);
+                }
+                if (data.reportData) {
+                  // Store reportData on the assistant message
+                  setConversations((prev) =>
+                    prev.map((c) => {
+                      if (c.id !== convId) return c;
+                      const msgs = [...c.messages];
+                      for (let i = msgs.length - 1; i >= 0; i--) {
+                        if (msgs[i].role === "assistant") {
+                          msgs[i] = { ...msgs[i], reportData: data.reportData as ReportData };
+                          break;
+                        }
+                      }
+                      return { ...c, messages: msgs };
+                    })
+                  );
                 }
               } else if (data.type === "error") {
                 throw new Error(data.error || "Stream error");

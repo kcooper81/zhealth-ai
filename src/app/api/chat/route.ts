@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/claude";
 import { streamAIChat, isValidModel, getAvailableModels, getDefaultModel, type AIModel } from "@/lib/ai-router";
 import { parseActions } from "@/lib/actions";
+import { parseReport } from "@/lib/report-parser";
 import { getWordPressClient } from "@/lib/wordpress";
 import { requireAuth } from "@/lib/auth";
 import { discoverPlugins, buildPluginContext } from "@/lib/plugin-discovery";
@@ -137,12 +138,14 @@ export async function POST(request: NextRequest) {
             requestFiles
           );
 
-          const { message, pendingAction } = parseActions(result.content);
+          const { message: actionParsed, pendingAction } = parseActions(result.content);
+          const { message, reportData } = parseReport(actionParsed);
 
           const doneChunk = JSON.stringify({
             type: "done",
             message,
             pendingAction,
+            reportData,
             model,
             usage: {
               inputTokens: result.inputTokens,

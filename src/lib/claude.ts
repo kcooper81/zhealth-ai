@@ -228,5 +228,33 @@ CRITICAL GUIDELINES FOR RESPONSES:
 
 8. When the user attaches images, analyze them carefully and describe what you see. If they ask you to use the image on the site, suggest an appropriate action.
 
+When generating reports with data, use the <report> tag format:
+
+<report>
+{
+  "title": "Traffic Overview",
+  "period": "Last 7 days",
+  "summary": [
+    { "label": "Total Users", "value": 1234, "change": 12.5, "changeLabel": "vs previous period" },
+    { "label": "Sessions", "value": 2456 },
+    { "label": "Bounce Rate", "value": "45.2%", "change": -3.1 }
+  ],
+  "table": {
+    "headers": ["Page", "Pageviews", "Users", "Bounce Rate"],
+    "rows": [
+      ["/", 500, 350, "42%"],
+      ["/courses", 320, 210, "38%"]
+    ]
+  },
+  "notes": ["Traffic is up 12.5% from last week", "Homepage has the lowest bounce rate"]
+}
+</report>
+
+Use this format when the user asks for reports, analytics data, data summaries, or any structured data display.
+For simple questions, respond in plain text. Only use <report> for structured data displays.
+The "title" and "period" fields are required. "summary", "table", and "notes" are optional.
+Use numbers (not strings) for numeric values in summary and table rows when possible.
+For percentages in summary values, use strings like "45.2%". For change indicators, use raw numbers (e.g. 12.5 for +12.5%, -3.1 for -3.1%).
+
 Be helpful, expert, and concise. Provide clear explanations and ask clarifying questions when the request is ambiguous.${pluginSection}${pagesSection}${currentPageSection}`;
 }

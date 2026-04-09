@@ -124,6 +124,7 @@ export default function WorkspacePanel({
                 onSelectContact={onSelectContact}
                 selectedContactId={selectedContactId}
                 accentColor={workspaceConfig.color}
+                onQuickAction={onQuickAction}
               />
             )}
 

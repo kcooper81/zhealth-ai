@@ -5,6 +5,7 @@ import type { ChatMessage, PendingAction, ActionResult } from "@/lib/types";
 import { renderMarkdown } from "@/lib/markdown";
 import { ThumbsUp, ThumbsDown, Check, X, AlertCircle, Document, ExternalLink, AIBrain, Copy } from "./icons";
 import FilePreview from "./FilePreview";
+import ReportCard from "./ReportCard";
 
 interface MessageProps {
   message: ChatMessage;
@@ -78,6 +79,11 @@ export default function Message({
                 className="markdown-body text-[15px] leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
               />
+            )}
+
+            {/* Report card */}
+            {!isUser && message.reportData && (
+              <ReportCard data={message.reportData} />
             )}
 
             {/* Typing indicator — 3 dots while thinking, nothing once text is streaming */}

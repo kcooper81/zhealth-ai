@@ -15,25 +15,25 @@ const QUICK_REPORTS = [
     id: "traffic",
     label: "Traffic Overview",
     icon: Globe,
-    prompt: "Show me a traffic overview for the selected date range",
+    prompt: "Generate a traffic overview report for the last 7 days",
   },
   {
     id: "top-pages",
     label: "Top Pages",
     icon: BarChart,
-    prompt: "What are the top performing pages by traffic for the selected date range?",
+    prompt: "Show me the top 20 pages by pageviews for the last 7 days as a report",
   },
   {
     id: "bounce-rate",
-    label: "Bounce Rate Issues",
+    label: "Bounce Rate Analysis",
     icon: Activity,
-    prompt: "Which pages have the highest bounce rates and need attention?",
+    prompt: "Generate a bounce rate analysis report highlighting pages that need improvement",
   },
   {
-    id: "search-console",
-    label: "Search Console",
+    id: "sources",
+    label: "Traffic Sources",
     icon: Search,
-    prompt: "Show me Search Console data: top queries, impressions, and click-through rates",
+    prompt: "Generate a traffic sources report showing where our visitors come from for the last 7 days",
   },
 ];
 

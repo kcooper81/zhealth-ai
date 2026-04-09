@@ -55,11 +55,11 @@ export function getQuickActions(workspace: Workspace): string[] {
       ];
     case "crm":
       return [
-        "How many contacts do we have?",
-        "Show tag breakdown with counts",
-        "Pull a revenue report for this month",
+        "Generate a contact growth report for the last 30 days",
+        "Show me a tag breakdown report with contact counts",
+        "Generate a revenue report for this month",
         "Find all contacts tagged R-Phase",
-        "Show pipeline status",
+        "Show the pipeline status as a report",
         "Who are our newest contacts?",
       ];
     case "lms":
@@ -73,12 +73,12 @@ export function getQuickActions(workspace: Workspace): string[] {
       ];
     case "analytics":
       return [
-        "What are our top pages this week?",
-        "Show traffic overview",
-        "Which pages have the highest bounce rate?",
-        "Compare traffic this week vs last week",
-        "What are our top referral sources?",
-        "Show conversion funnel",
+        "Generate a traffic overview report for the last 7 days",
+        "Show me the top 20 pages by pageviews for the last 7 days as a report",
+        "Generate a bounce rate analysis report highlighting pages that need improvement",
+        "Compare traffic this week vs last week as a report",
+        "Generate a traffic sources report showing where our visitors come from",
+        "Show a business overview report combining all services",
       ];
     case "all":
     default:

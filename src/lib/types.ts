@@ -104,6 +104,7 @@ export interface ChatMessage {
   files?: FileAttachment[];
   pendingAction?: PendingAction | null;
   actionResult?: ActionResult | null;
+  reportData?: ReportData | null;
 }
 
 export type Workspace = 'all' | 'website' | 'crm' | 'analytics' | 'lms';
@@ -158,11 +159,28 @@ export interface PageSnapshot {
   snapshotAt: string;
 }
 
+export interface ReportData {
+  title: string;
+  period: string;
+  summary?: Array<{
+    label: string;
+    value: string | number;
+    change?: number;
+    changeLabel?: string;
+  }>;
+  table?: {
+    headers: string[];
+    rows: Array<Array<string | number>>;
+  };
+  notes?: string[];
+}
+
 export interface StreamChunk {
   type: "token" | "done" | "error";
   text?: string;
   message?: string;
   pendingAction?: PendingAction | null;
+  reportData?: ReportData | null;
   usage?: { inputTokens: number; outputTokens: number };
   error?: string;
 }
