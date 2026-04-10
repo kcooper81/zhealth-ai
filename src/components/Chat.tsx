@@ -646,21 +646,43 @@ export default function Chat() {
                   updateLastAssistantMessage(convId, data.message);
                 }
                 if (data.pendingAction) {
-                  setPendingAction(data.pendingAction);
-                  // Also store pendingAction on the assistant message so inline ActionCard renders
-                  setConversations((prev) =>
-                    prev.map((c) => {
-                      if (c.id !== convId) return c;
-                      const msgs = [...c.messages];
-                      for (let i = msgs.length - 1; i >= 0; i--) {
-                        if (msgs[i].role === "assistant") {
-                          msgs[i] = { ...msgs[i], pendingAction: data.pendingAction };
-                          break;
+                  const pa = data.pendingAction as PendingAction;
+                  // Read-only actions auto-execute without confirmation
+                  const READ_ONLY_ACTIONS = [
+                    "list_pages", "get_pages", "get_page",
+                    "get_post", "list_popups", "get_popup",
+                    "list_products", "get_product",
+                    "elementor_get_structure",
+                    "keap_list_contacts", "keap_get_contact",
+                    "keap_list_tags", "keap_list_campaigns",
+                    "keap_list_opportunities", "keap_list_orders",
+                    "keap_list_emails", "keap_get_email", "keap_get_email_opt_status",
+                    "thinkific_list_courses", "thinkific_get_course",
+                    "thinkific_list_students", "thinkific_get_student",
+                    "thinkific_list_enrollments", "thinkific_list_orders",
+                    "thinkific_list_coupons", "thinkific_course_report",
+                    "thinkific_lms_overview",
+                  ];
+                  if (READ_ONLY_ACTIONS.includes(pa.type)) {
+                    // Auto-execute and send result back to AI
+                    autoExecuteAction(convId, pa);
+                  } else {
+                    setPendingAction(pa);
+                    // Store pendingAction on the assistant message so inline ActionCard renders
+                    setConversations((prev) =>
+                      prev.map((c) => {
+                        if (c.id !== convId) return c;
+                        const msgs = [...c.messages];
+                        for (let i = msgs.length - 1; i >= 0; i--) {
+                          if (msgs[i].role === "assistant") {
+                            msgs[i] = { ...msgs[i], pendingAction: pa };
+                            break;
+                          }
                         }
-                      }
-                      return { ...c, messages: msgs };
-                    })
-                  );
+                        return { ...c, messages: msgs };
+                      })
+                    );
+                  }
                 }
                 if (data.reportData) {
                   // Store reportData on the assistant message
@@ -875,6 +897,68 @@ export default function Chat() {
       focusInput();
     }
   }, [showSettings, showWorkflows, showShortcuts, focusInput]);
+
+  // --- Auto-execute read-only actions and send result back to AI ---
+  const autoExecuteAction = useCallback(
+    async (convId: string, action: PendingAction) => {
+      // Mark message as executing
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== convId) return c;
+          const msgs = c.messages.map((m) =>
+            m.role === "assistant" && !m.actionResult && !m.actionExecuting
+              ? { ...m, pendingAction: null, actionExecuting: action.summary }
+              : m
+          );
+          return { ...c, messages: msgs };
+        })
+      );
+
+      try {
+        const response = await fetch("/api/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actionId: action.id, action }),
+        });
+        const result = await response.json();
+
+        // Clear executing state (don't show result card for read-only — AI will respond)
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== convId) return c;
+            const msgs = c.messages.map((m) =>
+              m.actionExecuting === action.summary
+                ? { ...m, actionExecuting: undefined }
+                : m
+            );
+            return { ...c, messages: msgs };
+          })
+        );
+
+        // Send result back to AI as a follow-up message
+        const resultSummary = result.success
+          ? JSON.stringify(result.result || {}).slice(0, 2000)
+          : `Error: ${result.error || "Unknown error"}`;
+
+        // Automatically send the result to the AI for interpretation
+        handleSend(`[Action result for "${action.type}"]: ${resultSummary}\n\nPlease interpret this data and respond to my original request.`);
+      } catch (err) {
+        // Clear executing state on error
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== convId) return c;
+            const msgs = c.messages.map((m) =>
+              m.actionExecuting === action.summary
+                ? { ...m, actionExecuting: undefined, actionResult: { success: false, error: "Network error" } }
+                : m
+            );
+            return { ...c, messages: msgs };
+          })
+        );
+      }
+    },
+    [setConversations, handleSend]
+  );
 
   // --- Actions ---
   const handleConfirmAction = useCallback(

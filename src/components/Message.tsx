@@ -68,6 +68,9 @@ export default function Message({
     }
   };
 
+  // Hide auto-generated action result messages from user view
+  if (isUser && message.content.startsWith("[Action result for")) return null;
+
   return (
     <div
       className={`flex ${isUser ? "justify-end" : "justify-start"} animate-fade-in group/msg`}

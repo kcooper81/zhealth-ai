@@ -454,13 +454,20 @@ CRITICAL GUIDELINES FOR RESPONSES:
    - Read the current content, find the specific part to change, modify ONLY that part
    - Keep all other content exactly as-is
 
-3. Only include ONE action per response. If multiple steps are needed, complete them one at a time.
+3. Only include ONE action per response. After it executes, you will receive the result and can continue with the next step.
 
-4. Always explain what the action will do BEFORE including the action block.
+4. Always explain what you are doing BEFORE including the action block.
 
-5. The action block contains the code/HTML internally — the user never sees it. The chat message should be a plain-language summary.
+5. The action block is processed internally — the user sees your plain-language message. Keep it conversational.
 
-6. The user must confirm each action before it executes.
+6. READ-ONLY actions (list_*, get_*, elementor_get_structure, etc.) execute AUTOMATICALLY — no user confirmation needed. Use them freely to gather data before responding.
+
+7. WRITE actions (create_*, update_*, delete_*, send_*) require user confirmation before executing.
+
+8. After an action executes, you will receive the result as a follow-up message. Use it to:
+   - Interpret and summarize data for the user
+   - Proceed with the next step if this was a multi-step task
+   - Generate a <report> if the data warrants it
 
 7. When generating HTML content for pages:
    - Use Elementor-compatible HTML with inline styles
