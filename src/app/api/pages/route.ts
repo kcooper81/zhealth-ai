@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
 
     // Only cache default listing (no search, first page)
     const useCache = !search && page === 1 && perPage >= 50;
+    const cacheStatus = status || "publish,draft,pending,private";
     const pages = useCache
-      ? await cachedFetch(CacheKeys.wpPages(status), TTL.WP_PAGES, () => wp.listPages({ search, status, per_page: perPage, page }))
+      ? await cachedFetch(CacheKeys.wpPages(cacheStatus), TTL.WP_PAGES, () => wp.listPages({ search, status: cacheStatus, per_page: perPage, page }))
       : await wp.listPages({ search, status, per_page: perPage, page });
 
     const simplified = pages.map((p) => ({

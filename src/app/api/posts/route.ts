@@ -16,8 +16,9 @@ export async function GET(request: NextRequest) {
     const page = Number(searchParams.get("page")) || 1;
 
     const useCache = !search && page === 1 && perPage >= 50;
+    const cacheStatus = status || "publish,draft,pending,private";
     const posts = useCache
-      ? await cachedFetch(CacheKeys.wpPosts(status), TTL.WP_POSTS, () => wp.listPosts({ search, status, per_page: perPage, page }))
+      ? await cachedFetch(CacheKeys.wpPosts(cacheStatus), TTL.WP_POSTS, () => wp.listPosts({ search, status: cacheStatus, per_page: perPage, page }))
       : await wp.listPosts({ search, status, per_page: perPage, page });
 
     const simplified = posts.map((p) => ({

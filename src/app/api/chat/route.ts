@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
     // Only fetch WordPress context for website/all workspaces — not for CRM/analytics
     const needsWpContext = workspace === "all" || workspace === "website";
 
-    // Wrap context fetching with a 8s timeout to prevent hanging
-    const withTimeout = <T>(p: Promise<T>, fallback: T, ms = 8000): Promise<T> =>
+    // Wrap context fetching with a 4s timeout — must be fast on Vercel hobby plan (10s limit)
+    const withTimeout = <T>(p: Promise<T>, fallback: T, ms = 4000): Promise<T> =>
       Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 
     try {
@@ -165,11 +165,13 @@ export async function POST(request: NextRequest) {
     let currentContact: { id: number; name: string; email: string; tags: string[] } | undefined;
     if (contactId && isKeapConfigured()) {
       try {
-        const contact = await getContact(contactId);
-        const name = `${contact.given_name || ""} ${contact.family_name || ""}`.trim() || "Unknown";
-        const email = contact.email_addresses?.[0]?.email || "";
-        const tags = (contact.tag_ids || []).map((t) => String(t));
-        currentContact = { id: contactId, name, email, tags };
+        const contact = await withTimeout(getContact(contactId), null as any);
+        if (contact) {
+          const name = `${contact.given_name || ""} ${contact.family_name || ""}`.trim() || "Unknown";
+          const email = contact.email_addresses?.[0]?.email || "";
+          const tags = (contact.tag_ids || []).map((t) => String(t));
+          currentContact = { id: contactId, name, email, tags };
+        }
       } catch (err) {
         logWarn("api/chat", "Failed to fetch contact", { contactId, error: err instanceof Error ? err.message : String(err) });
       }
@@ -179,16 +181,18 @@ export async function POST(request: NextRequest) {
     let currentCourse: { id: number; name: string; status: string; enrollmentCount: number } | undefined;
     if (courseId && isThinkificConfigured()) {
       try {
-        const [course, enrollments] = await Promise.all([
+        const [course, enrollments] = await withTimeout(Promise.all([
           getCourse(courseId),
           listEnrollments({ course_id: courseId, limit: 1 }).catch(() => ({ meta: { pagination: { total_items: 0 } } })),
-        ]);
-        currentCourse = {
-          id: courseId,
-          name: course.name,
-          status: course.status,
-          enrollmentCount: (enrollments as any).meta?.pagination?.total_items || 0,
-        };
+        ]), [null, { meta: { pagination: { total_items: 0 } } }] as any);
+        if (course) {
+          currentCourse = {
+            id: courseId,
+            name: course.name,
+            status: course.status,
+            enrollmentCount: (enrollments as any)?.meta?.pagination?.total_items || 0,
+          };
+        }
       } catch (err) {
         logWarn("api/chat", "Failed to fetch course", { courseId, error: err instanceof Error ? err.message : String(err) });
       }
@@ -200,7 +204,8 @@ export async function POST(request: NextRequest) {
       try {
         const accessToken = (authSession as any)?.accessToken;
         if (accessToken) {
-          const overview = await cachedFetch(CacheKeys.ga4Overview("website", "7d"), TTL.GA4_OVERVIEW, () => getTrafficOverview(accessToken, "website", "7d"));
+          const overview = await withTimeout(cachedFetch(CacheKeys.ga4Overview("website", "7d"), TTL.GA4_OVERVIEW, () => getTrafficOverview(accessToken, "website", "7d")), null as any);
+          if (!overview) throw new Error("GA4 timeout");
           const avgMins = Math.floor(overview.avgSessionDuration / 60);
           const avgSecs = Math.round(overview.avgSessionDuration % 60);
           analyticsDataContext = `\n\nCurrent GA4 data (last 7 days):
