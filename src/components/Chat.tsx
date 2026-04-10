@@ -1269,6 +1269,49 @@ export default function Chat() {
 
         {/* Thinking indicator removed — Message.tsx already shows dots inside the message bubble */}
 
+        {/* Status indicator — shows what's happening */}
+        {(() => {
+          const activeJobs = jobs.filter(isJobActive);
+          const executingMsg = messages.find((m) => m.actionExecuting && !m.actionResult);
+          if (executingMsg) {
+            return (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800/40">
+                <div className="w-3.5 h-3.5 border-2 border-brand-blue border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                <span className="text-xs text-blue-600 dark:text-blue-400 truncate">{executingMsg.actionExecuting}</span>
+              </div>
+            );
+          }
+          if (pendingAction) {
+            return (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-100 dark:border-amber-800/40">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                <span className="text-xs text-amber-600 dark:text-amber-400">Waiting for confirmation: {pendingAction.summary}</span>
+              </div>
+            );
+          }
+          if (isStreaming) {
+            return (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-brand-blue animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-brand-blue animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-brand-blue animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+                <span className="text-xs text-gray-400 dark:text-gray-500">AI is responding...</span>
+              </div>
+            );
+          }
+          if (activeJobs.length > 0) {
+            return (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800/40">
+                <div className="w-3.5 h-3.5 border-2 border-brand-blue border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                <span className="text-xs text-blue-600 dark:text-blue-400 truncate">{activeJobs[0].title}</span>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
         {/* Input */}
         <InputArea
           onSend={(text: string, files?: FileAttachment[]) => handleSend(text, files)}
