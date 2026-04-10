@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
         if (contact) {
           const name = `${contact.given_name || ""} ${contact.family_name || ""}`.trim() || "Unknown";
           const email = contact.email_addresses?.[0]?.email || "";
-          const tags = (contact.tag_ids || []).map((t) => String(t));
+          const tags = (contact.tag_ids || []).map((t: number) => String(t));
           currentContact = { id: contactId, name, email, tags };
         }
       } catch (err) {
