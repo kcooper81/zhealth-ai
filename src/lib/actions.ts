@@ -71,9 +71,172 @@ export function getSnapshot(key: string): PageSnapshot | undefined {
   return snapshots.get(key);
 }
 
+// ---------------------------------------------------------------------------
+// Action parameter validation
+// ---------------------------------------------------------------------------
+//
+// Manifest of required fields per action type. Only actions that mutate data
+// or look something up by ID are listed here — pure list/search reads have no
+// strictly required fields and are skipped (the underlying APIs default to
+// "list everything"). When the model emits an action with a missing or
+// wrong-typed required field we return a clean validation error to the user
+// instead of letting the request hit WordPress / Keap / Thinkific and come
+// back with a cryptic 400.
+
+type FieldType = "string" | "number" | "array" | "object" | "nonempty-array";
+type FieldSpec = { name: string; type: FieldType };
+
+const ACTION_REQUIRED_FIELDS: Record<string, FieldSpec[]> = {
+  // ---- WordPress ----
+  get_page: [{ name: "id", type: "number" }],
+  create_page: [{ name: "title", type: "string" }],
+  update_page: [{ name: "id", type: "number" }],
+  delete_page: [{ name: "id", type: "number" }],
+  get_post: [{ name: "id", type: "number" }],
+  create_post: [{ name: "title", type: "string" }],
+  update_post: [{ name: "id", type: "number" }],
+  delete_post: [{ name: "id", type: "number" }],
+  get_product: [{ name: "id", type: "number" }],
+  update_seo: [{ name: "postId", type: "number" }],
+  upload_media: [
+    { name: "url", type: "string" },
+    { name: "filename", type: "string" },
+  ],
+  update_product: [{ name: "id", type: "number" }],
+  create_redirect: [
+    { name: "from", type: "string" },
+    { name: "to", type: "string" },
+  ],
+
+  // ---- Elementor popups ----
+  get_popup: [{ name: "id", type: "number" }],
+  create_popup: [{ name: "title", type: "string" }],
+  update_popup: [{ name: "id", type: "number" }],
+  update_popup_conditions: [{ name: "popupId", type: "number" }],
+  popup_update_widget: [
+    { name: "popupId", type: "number" },
+    { name: "widgetPath", type: "string" },
+    { name: "changes", type: "object" },
+  ],
+  delete_popup: [{ name: "id", type: "number" }],
+
+  // ---- Elementor pages ----
+  elementor_get_structure: [{ name: "pageId", type: "number" }],
+  elementor_update_widget: [
+    { name: "pageId", type: "number" },
+    { name: "widgetPath", type: "string" },
+    { name: "changes", type: "object" },
+  ],
+  elementor_add_section: [
+    { name: "pageId", type: "number" },
+    { name: "position", type: "number" },
+    { name: "sectionData", type: "object" },
+  ],
+  elementor_remove_section: [
+    { name: "pageId", type: "number" },
+    { name: "sectionIndex", type: "number" },
+  ],
+
+  // ---- Keap CRM ----
+  keap_get_contact: [{ name: "id", type: "number" }],
+  keap_update_contact: [{ name: "id", type: "number" }],
+  keap_apply_tag: [
+    { name: "tagId", type: "number" },
+    { name: "contactIds", type: "nonempty-array" },
+  ],
+  keap_remove_tag: [
+    { name: "tagId", type: "number" },
+    { name: "contactIds", type: "nonempty-array" },
+  ],
+  keap_create_tag: [{ name: "name", type: "string" }],
+  keap_add_to_campaign: [
+    { name: "campaignId", type: "number" },
+    { name: "sequenceId", type: "number" },
+    { name: "contactId", type: "number" },
+  ],
+  keap_update_opportunity_stage: [
+    { name: "opportunityId", type: "number" },
+    { name: "stageId", type: "number" },
+  ],
+  keap_get_email: [{ name: "id", type: "number" }],
+  keap_get_email_opt_status: [{ name: "contact_id", type: "number" }],
+  keap_send_email: [
+    { name: "contacts", type: "nonempty-array" },
+    { name: "subject", type: "string" },
+    { name: "html_content", type: "string" },
+  ],
+
+  // ---- Thinkific LMS ----
+  thinkific_get_course: [{ name: "id", type: "number" }],
+  thinkific_update_course: [{ name: "id", type: "number" }],
+  thinkific_get_student: [{ name: "id", type: "number" }],
+  thinkific_create_student: [
+    { name: "first_name", type: "string" },
+    { name: "last_name", type: "string" },
+    { name: "email", type: "string" },
+  ],
+  thinkific_create_enrollment: [
+    { name: "user_id", type: "number" },
+    { name: "course_id", type: "number" },
+  ],
+  thinkific_update_enrollment: [{ name: "id", type: "number" }],
+  thinkific_create_coupon: [{ name: "code", type: "string" }],
+  thinkific_course_report: [{ name: "course_id", type: "number" }],
+};
+
+export function validateActionParams(action: PendingAction): string | null {
+  const required = ACTION_REQUIRED_FIELDS[action.type];
+  if (!required) return null;
+
+  const params = (action.params || {}) as Record<string, unknown>;
+
+  for (const field of required) {
+    const value = params[field.name];
+
+    if (value === undefined || value === null || value === "") {
+      return `Missing required parameter "${field.name}" for action "${action.type}".`;
+    }
+
+    switch (field.type) {
+      case "string":
+        if (typeof value !== "string" || value.trim() === "") {
+          return `Parameter "${field.name}" for action "${action.type}" must be a non-empty string.`;
+        }
+        break;
+      case "number":
+        if (typeof value !== "number" || Number.isNaN(value)) {
+          return `Parameter "${field.name}" for action "${action.type}" must be a number.`;
+        }
+        break;
+      case "array":
+        if (!Array.isArray(value)) {
+          return `Parameter "${field.name}" for action "${action.type}" must be an array.`;
+        }
+        break;
+      case "nonempty-array":
+        if (!Array.isArray(value) || value.length === 0) {
+          return `Parameter "${field.name}" for action "${action.type}" must be a non-empty array.`;
+        }
+        break;
+      case "object":
+        if (typeof value !== "object" || Array.isArray(value)) {
+          return `Parameter "${field.name}" for action "${action.type}" must be an object.`;
+        }
+        break;
+    }
+  }
+
+  return null;
+}
+
 export async function executeAction(
   action: PendingAction
 ): Promise<ActionResult> {
+  const validationError = validateActionParams(action);
+  if (validationError) {
+    return { success: false, error: validationError };
+  }
+
   const wp = getWordPressClient();
 
   try {
@@ -771,11 +934,13 @@ export async function executeAction(
       }
       case "keap_list_emails": {
         const emailParams = action.params as { contact_id?: number; email?: string; since_sent_date?: string; limit?: number };
+        // listEmails now defaults to sent_date DESCENDING and limit 200, so we
+        // pass through user params and let the wrapper apply sane defaults.
         const emails = await keap.listEmails({
           contact_id: emailParams.contact_id,
           email: emailParams.email,
           since_sent_date: emailParams.since_sent_date,
-          limit: emailParams.limit || 50,
+          limit: emailParams.limit ?? 200,
         });
         return {
           success: true,

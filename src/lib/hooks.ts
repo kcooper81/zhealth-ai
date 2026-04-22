@@ -41,6 +41,11 @@ export function useScrollToBottom(
 
 /**
  * Register global keyboard shortcuts.
+ *
+ * Inside editable targets (input, textarea, contenteditable) we only fire
+ * shortcuts that have a Ctrl/Cmd modifier or are Escape. Otherwise plain
+ * keystrokes like `?` or `/` get swallowed by preventDefault and the user
+ * can't actually type them.
  */
 export function useKeyboardShortcuts(
   handlers: Record<string, (e: KeyboardEvent) => void>
@@ -53,10 +58,21 @@ export function useKeyboardShortcuts(
       if (e.shiftKey) key += "shift+";
       key += e.key.toLowerCase();
 
-      if (handlers[key]) {
-        e.preventDefault();
-        handlers[key](e);
-      }
+      if (!handlers[key]) return;
+
+      // If the user is typing in an editable element, only allow modifier
+      // shortcuts and Escape through. Plain-key shortcuts (e.g. "shift+?",
+      // "/", "j") must not steal characters from the input.
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (isEditable && !meta && e.key !== "Escape") return;
+
+      e.preventDefault();
+      handlers[key](e);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

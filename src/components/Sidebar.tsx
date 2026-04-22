@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import type { Conversation, Workspace, QuickAction } from "@/lib/types";
 import { getWorkspace } from "@/lib/workspaces";
 import { notify } from "@/lib/notifications";
+import { logClientError } from "@/lib/client-logger";
 import {
   Plus,
   Search,
@@ -272,7 +273,7 @@ export default function Sidebar({
       .then((data: Array<{ id: string; name: string; icon: string }>) =>
         setSidebarWorkflows(data.slice(0, 4))
       )
-      .catch(() => {});
+      .catch((err) => logClientError("Sidebar.fetchWorkflows", "Failed to load workflows", err));
   }, []);
 
   const togglePin = useCallback((convId: string) => {

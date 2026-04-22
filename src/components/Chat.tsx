@@ -14,6 +14,7 @@ import {
   trimJobHistory,
 } from "@/lib/jobs";
 import { useLocalStorage, useKeyboardShortcuts } from "@/lib/hooks";
+import { logClientError } from "@/lib/client-logger";
 import Sidebar from "./Sidebar";
 import WorkspacePanel from "./WorkspacePanel";
 import MessageList from "./MessageList";
@@ -112,7 +113,7 @@ export default function Chat() {
       .then((data: QuickAction[]) => {
         if (Array.isArray(data)) setQuickActions(data);
       })
-      .catch(() => {});
+      .catch((err) => logClientError("Chat.fetchQuickActions", "Failed to load quick actions", err));
   }, [workspace]);
 
   useEffect(() => {
@@ -163,14 +164,9 @@ export default function Chat() {
     return () => { mounted = false; clearInterval(interval); };
   }, []);
 
-  // --- Client-side error logging helper ---
-  const logClientError = useCallback((source: string, message: string, details?: unknown) => {
-    fetch("/api/logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level: "error", source, message, details }),
-    }).catch(() => {});
-  }, []);
+  // logClientError is imported from @/lib/client-logger so Sidebar/CommandPanel
+  // can share the same helper. Kept as a no-op local alias for any in-file
+  // references that haven't been ported yet.
 
   // --- Database sync: load conversations from Supabase on mount ---
   useEffect(() => {
@@ -221,7 +217,9 @@ export default function Chat() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).catch(() => {});
+      }).catch((err) =>
+        logClientError("Chat.persistPreference", "Failed to save preference", { data, err })
+      );
     },
     []
   );
@@ -267,7 +265,9 @@ export default function Chat() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).catch(() => {});
+      }).catch((err) =>
+        logClientError("Chat.persistConversationToDb", "Failed to update conversation", { dbId, err })
+      );
     },
     []
   );
@@ -409,7 +409,9 @@ export default function Chat() {
             );
           }
         })
-        .catch(() => {});
+        .catch((err) =>
+          logClientError("Chat.createConversation", "Failed to create conversation in DB", { id, err })
+        );
 
       return id;
     },
@@ -497,7 +499,9 @@ export default function Chat() {
       }
       // Persist to database
       const dbId = idMapRef.current[id] || id;
-      fetch(`/api/conversations/${dbId}`, { method: "DELETE" }).catch(() => {});
+      fetch(`/api/conversations/${dbId}`, { method: "DELETE" }).catch((err) =>
+        logClientError("Chat.deleteConversation", "Failed to delete conversation in DB", { dbId, err })
+      );
     },
     [currentConversationId, setConversations, setCurrentConversationId]
   );
@@ -722,7 +726,9 @@ export default function Chat() {
                     .then((res) => {
                       if (res && res.ok) notify("info", "Report saved to library");
                     })
-                    .catch(() => {});
+                    .catch((err) =>
+                      logClientError("Chat.saveReport", "Failed to save report to library", err)
+                    );
                 }
               } else if (data.type === "error") {
                 throw new Error(data.error || "Stream error");
@@ -840,7 +846,9 @@ export default function Chat() {
             )
           );
         })
-        .catch(() => {});
+        .catch((err) =>
+          logClientError("Chat.handleSelectConversation", "Failed to load conversation", { dbId, err })
+        );
     },
     [conversations, setCurrentConversationId, setConversations]
   );

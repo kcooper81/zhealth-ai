@@ -337,13 +337,21 @@ export async function listEmails(params?: {
   contact_id?: number;
   email?: string;
   since_sent_date?: string;
+  ordered?: boolean;
 }): Promise<{ emails: KeapEmail[]; count: number }> {
+  // Default to most-recent-first with a healthy page size. Without this,
+  // Keap returns the oldest emails by ID which for long-lived accounts
+  // means decade-old onboarding sequences instead of anything useful.
   const qs = new URLSearchParams();
-  if (params?.limit) qs.set("limit", String(params.limit));
+  qs.set("limit", String(params?.limit ?? 200));
   if (params?.offset) qs.set("offset", String(params.offset));
   if (params?.contact_id) qs.set("contact_id", String(params.contact_id));
   if (params?.email) qs.set("email", params.email);
   if (params?.since_sent_date) qs.set("since_sent_date", params.since_sent_date);
+  if (params?.ordered !== false) {
+    qs.set("order", "sent_date");
+    qs.set("order_direction", "DESCENDING");
+  }
 
   const data = await keapFetch(`/emails?${qs}`);
   return { emails: data.emails || [], count: data.count || 0 };
@@ -427,7 +435,9 @@ You can manage the Keap (Infusionsoft) CRM system. Available actions:
 - **Campaigns**: List campaigns, add contacts to campaign sequences for automated email workflows.
 - **Pipeline**: View opportunities in the sales pipeline, create new opportunities, move them between stages.
 - **Orders**: View order history, filter by contact or date range.
-- **Email**: List sent emails (subject, dates, recipients), check contact opt-in status, send emails to contacts. Note: open/click tracking is NOT available via the Keap API — it's only in the Keap admin UI.
+- **Email**: List sent emails (subject, dates, recipients), check contact opt-in status, send emails to contacts.
+
+**IMPORTANT email data limitation:** The Keap REST API \`/emails\` endpoint only returns emails that were logged into Communication History — typically one-off emails synced via the Keap mailbox sync (IMAP). It does **NOT** return broadcast emails or campaign automation emails sent through Keap's marketing tools. If the user asks about email volume, recent campaigns, or broadcast performance and the only data you see is years old or sparse, do not confidently report "no emails were sent." Instead, tell the user: "The Keap REST API only exposes manually-logged or mailbox-synced emails, not marketing broadcasts or campaign sends. For full broadcast statistics, check the Keap dashboard directly." Open/click tracking is also NOT available via the API — it's only in the Keap admin UI.
 
 When the user asks about contacts, tags, campaigns, pipeline, orders, revenue, or CRM tasks, use the Keap integration.
 Action types for Keap:

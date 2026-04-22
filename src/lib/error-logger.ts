@@ -1,6 +1,15 @@
 // ---------------------------------------------------------------------------
-// Error Logger — in-memory ring buffer with optional Supabase persistence
+// Error Logger — in-memory ring buffer + Supabase persistence
 // ---------------------------------------------------------------------------
+//
+// The in-memory ring buffer powers the live error panel in the UI. Supabase
+// persistence (table: error_logs) makes errors survive serverless cold starts
+// and queryable historically. If the error_logs table is missing or the
+// Supabase write fails for any reason we log to console and keep going — we
+// must NEVER throw from here, since a throw would itself trigger error
+// reporting and recurse infinitely.
+
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 export interface ErrorLog {
   id: string;
@@ -19,6 +28,11 @@ const MAX_LOGS = 200;
 let logs: ErrorLog[] = [];
 const listeners = new Set<Listener>();
 
+// Recursion guard: while we are mid-write to Supabase, any error from the
+// write itself must not re-enter addLog. Without this a transient DB failure
+// would create an infinite loop of "failed to log error" entries.
+let isPersistingError = false;
+
 function emit() {
   const copy = [...logs];
   listeners.forEach((fn) => fn(copy));
@@ -26,6 +40,35 @@ function emit() {
 
 function generateId(): string {
   return `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function persistToSupabase(entry: ErrorLog): void {
+  if (!isSupabaseConfigured || isPersistingError) return;
+  isPersistingError = true;
+  // Fire-and-forget; never await, never throw.
+  supabase
+    .from("error_logs")
+    .insert({
+      level: entry.level,
+      source: entry.source,
+      message: entry.message,
+      details: entry.details ?? null,
+      user_id: entry.userId ?? null,
+      workspace: entry.workspace ?? null,
+    })
+    .then(({ error }) => {
+      if (error) {
+        // Drop quietly. PGRST205 means the error_logs table doesn't exist
+        // yet — the migration in db-schema.sql hasn't been run. Other errors
+        // are also dropped because surfacing them would defeat the purpose
+        // of a logger that has to keep working even when storage is broken.
+        console.error("[error-logger] supabase write failed:", error.message);
+      }
+    })
+    .catch(() => {})
+    .then(() => {
+      isPersistingError = false;
+    });
 }
 
 function addLog(
@@ -48,6 +91,7 @@ function addLog(
   };
   logs = [...logs.slice(-(MAX_LOGS - 1)), entry];
   emit();
+  persistToSupabase(entry);
 }
 
 // ---------------------------------------------------------------------------

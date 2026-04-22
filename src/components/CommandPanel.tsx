@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import type { QuickAction, Workspace } from "@/lib/types";
 import { getWorkspace, getQuickActions as getDefaultQuickActions } from "@/lib/workspaces";
 import { useClickOutside } from "@/lib/hooks";
+import { logClientError } from "@/lib/client-logger";
 import { X, Search, Zap, Workflow, BarChart, Settings, ChevronRight } from "./icons";
 
 interface CommandPanelProps {
@@ -47,7 +48,7 @@ export default function CommandPanel({
     fetch("/api/workflows")
       .then((r) => (r.ok ? r.json() : []))
       .then((data: WorkflowItem[]) => setWorkflows(data))
-      .catch(() => {});
+      .catch((err) => logClientError("CommandPanel.fetchWorkflows", "Failed to load workflows", err));
   }, [show]);
 
   const workspaceConfig = getWorkspace(workspace);

@@ -198,12 +198,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Pre-fetch real GA4 data when analytics workspace is active
+    // Pre-fetch real GA4 data when analytics workspace is active.
+    //
+    // If the fetch fails (timeout, error, missing access token) we MUST tell
+    // the model the data is unavailable. Otherwise the static
+    // getAnalyticsContext() block tells the model it has GA4 access, the
+    // user asks about traffic, and the model invents numbers. The explicit
+    // "GA4_DATA_UNAVAILABLE" marker below instructs the model to refuse
+    // numeric answers and ask the user to retry.
     let analyticsDataContext = "";
+    const UNAVAILABLE_MARKER = `\n\nGA4_DATA_UNAVAILABLE: Real-time traffic numbers could not be fetched for this request. Do NOT cite any traffic, user count, session, pageview, or bounce-rate figures. Tell the user that live analytics data is temporarily unavailable and to try again in a moment, or to check the GA4 dashboard directly. Do not fabricate numbers under any circumstances.`;
     if ((workspace === "analytics" || workspace === "all") && isAnalyticsConfigured()) {
-      try {
-        const accessToken = (authSession as any)?.accessToken;
-        if (accessToken) {
+      const accessToken = (authSession as any)?.accessToken;
+      if (!accessToken) {
+        analyticsDataContext = UNAVAILABLE_MARKER;
+        logWarn("api/chat", "GA4 pre-fetch skipped — no access token in session");
+      } else {
+        try {
           const overview = await withTimeout(cachedFetch(CacheKeys.ga4Overview("website", "7d"), TTL.GA4_OVERVIEW, () => getTrafficOverview(accessToken, "website", "7d")), null as any);
           if (!overview) throw new Error("GA4 timeout");
           const avgMins = Math.floor(overview.avgSessionDuration / 60);
@@ -215,9 +226,10 @@ export async function POST(request: NextRequest) {
 - Bounce Rate: ${(overview.bounceRate * 100).toFixed(1)}%
 - Avg Session Duration: ${avgMins}m ${avgSecs}s
 Use these REAL numbers when the user asks about traffic. Do not fabricate data.`;
+        } catch (err) {
+          analyticsDataContext = UNAVAILABLE_MARKER;
+          logWarn("api/chat", "GA4 pre-fetch failed", { error: err instanceof Error ? err.message : String(err) });
         }
-      } catch (err) {
-        logWarn("api/chat", "GA4 pre-fetch failed", { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
