@@ -341,8 +341,18 @@ function parseDateRange(range: string): { startDate: string; endDate: string } {
       return { startDate: "30daysAgo", endDate };
     case "90d":
       return { startDate: "90daysAgo", endDate };
+    case "12mo":
+      return { startDate: "365daysAgo", endDate };
+    case "ytd": {
+      const now = new Date();
+      const start = `${now.getFullYear()}-01-01`;
+      return { startDate: start, endDate };
+    }
+    case "all":
+      // GA4 retention varies; 14 months covers default Universal Property settings safely
+      return { startDate: "420daysAgo", endDate };
     default:
-      return { startDate: "7daysAgo", endDate };
+      return { startDate: "30daysAgo", endDate };
   }
 }
 

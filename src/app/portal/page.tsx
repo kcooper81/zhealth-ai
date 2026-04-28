@@ -132,7 +132,7 @@ export default async function PortalOverviewPage() {
           <StatusCard
             title="WordPress site"
             href="/portal/wp"
-            status="soon"
+            status={wp.ok ? "ok" : "error"}
             description="zhealtheducation.com — content, lead gen, trainer pages"
             stats={wp.ok ? wp.stats : []}
             errorMessage={!wp.ok ? wp.error : undefined}
