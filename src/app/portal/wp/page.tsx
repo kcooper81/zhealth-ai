@@ -61,6 +61,16 @@ async function loadWPContent() {
 async function loadGA4(rangeKey: string) {
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
+  const sessionError = session?.error;
+
+  if (sessionError === "RefreshAccessTokenError") {
+    return {
+      ok: false as const,
+      reason: "expired" as const,
+      error:
+        "Your Google session expired and could not be auto-refreshed. Sign out and back in to reconnect Analytics.",
+    };
+  }
   if (!accessToken) {
     return {
       ok: false as const,
@@ -264,10 +274,12 @@ export default async function WPPortalPage({
                 GA4 data unavailable
               </div>
               <p className="mt-2 text-xs text-rose-800 dark:text-rose-300">{ga.error}</p>
-              {ga.reason === "no-token" && (
+              {(ga.reason === "no-token" || ga.reason === "expired") && (
                 <p className="mt-3 text-xs text-rose-700 dark:text-rose-400">
-                  Sign out and sign back in. The Google OAuth flow asks for{" "}
-                  <code>analytics.readonly</code> scope; some old sessions don&apos;t have it.
+                  Sign out and sign back in.{" "}
+                  {ga.reason === "expired"
+                    ? "Your refresh token expired or was revoked."
+                    : "The Google OAuth flow asks for analytics.readonly scope; some old sessions don't have it."}
                 </p>
               )}
             </Card>
