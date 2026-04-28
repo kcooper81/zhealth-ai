@@ -71,6 +71,8 @@ export async function listContacts(params?: {
   family_name?: string;
   order?: string;
   order_direction?: "ASCENDING" | "DESCENDING";
+  since?: string;
+  until?: string;
 }): Promise<{ contacts: KeapContact[]; count: number }> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
@@ -80,6 +82,8 @@ export async function listContacts(params?: {
   if (params?.family_name) qs.set("family_name", params.family_name);
   if (params?.order) qs.set("order", params.order);
   if (params?.order_direction) qs.set("order_direction", params.order_direction);
+  if (params?.since) qs.set("since", params.since);
+  if (params?.until) qs.set("until", params.until);
 
   const data = await keapFetch(`/contacts?${qs}`);
   return { contacts: data.contacts || [], count: data.count || 0 };

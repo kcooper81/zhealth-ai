@@ -94,24 +94,25 @@ export default async function PortalOverviewPage() {
   });
 
   return (
-    <main className="mx-auto max-w-6xl px-8 py-10">
-      <header className="mb-8">
+    <main className="mx-auto max-w-7xl px-8 py-12">
+      <header className="mb-12">
         <div className="flex items-baseline justify-between">
-          <h1 className="text-3xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-            Portal Overview
+          <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+            Z-Health Portal
           </h1>
           <span className="text-xs text-gray-400 dark:text-gray-500">Updated {updatedAt} PT</span>
         </div>
-        <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Live status of every system in the Z-Health stack. Click any card to drill in.
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-gray-600 dark:text-gray-400">
+          Live status of every system in the Z-Health stack. Click any card to drill into
+          inventories, flows, and reports.
         </p>
       </header>
 
-      <section className="mb-10">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+      <section className="mb-12">
+        <h2 className="mb-5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Connected systems
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <StatusCard
             title="Keap CRM"
             href="/portal/keap"

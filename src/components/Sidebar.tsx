@@ -25,6 +25,7 @@ import {
 import ConversationMenu from "./ConversationMenu";
 import WorkspaceSelector from "./WorkspaceSelector";
 import UserProfile from "./UserProfile";
+import ModeSwitcher from "./portal/ModeSwitcher";
 
 // ---------------------------------------------------------------------------
 // Pinned conversations (localStorage)
@@ -449,6 +450,9 @@ export default function Sidebar({
           </div>
         ) : (
           <>
+            {/* Mode switcher: Chat / Portal */}
+            <ModeSwitcher tone="dark" />
+
             {/* Workspace selector */}
             <div className="px-3 pb-3 flex-shrink-0">
               <WorkspaceSelector
