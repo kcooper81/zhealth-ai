@@ -393,7 +393,11 @@ export async function getAccountInfo(): Promise<{
   name: string;
   email: string;
   phone?: string;
+  phone_ext?: string;
   address?: any;
+  website?: string;
+  time_zone?: string;
+  logo_url?: string;
 }> {
   return keapFetch("/account/profile");
 }

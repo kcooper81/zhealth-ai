@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import Link from "next/link";
 import type { Conversation, Workspace, QuickAction } from "@/lib/types";
 import { getWorkspace } from "@/lib/workspaces";
 import { notify } from "@/lib/notifications";
@@ -615,6 +616,14 @@ export default function Sidebar({
                   </span>
                 )}
               </button>
+              <Link
+                href="/portal"
+                onClick={() => onCloseSidebar()}
+                className="relative w-11 h-11 rounded-lg flex items-center justify-center text-gray-500 hover:bg-white/10 active:bg-white/20 hover:text-gray-300 transition-colors flex-shrink-0 touch-target"
+                title="Team Portal"
+              >
+                <Layers size={18} />
+              </Link>
             </div>
           </>
         )}
