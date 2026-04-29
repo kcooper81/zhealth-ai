@@ -25,7 +25,7 @@ const PORTAL_ITEMS: NavItem[] = [
   { href: "/portal/keap", label: "Keap CRM", icon: Users, status: "live" },
   { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
   { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
-  { href: "/portal/analytics", label: "Analytics", icon: BarChart, status: "soon" },
+  { href: "/portal/analytics", label: "Analytics", icon: BarChart, status: "live" },
 ];
 
 function statusDot(status?: NavItem["status"]) {
