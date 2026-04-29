@@ -6,6 +6,7 @@ import { getServerSession } from "@/lib/auth";
 import { listContacts, listTags, listCampaigns, listOpportunities } from "@/lib/keap";
 import { getLMSOverview, listCourses, listOrders, listEnrollments } from "@/lib/thinkific";
 import { getTrafficOverviewWithComparison, getTrafficSources } from "@/lib/google-analytics";
+import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -37,7 +38,10 @@ async function loadOverviewData(searchParams: Record<string, string | string[] |
   const accessToken = session?.accessToken;
   const sessionError = session?.error;
 
-  // Parallel fetch across all systems
+  const rangeSeg = rangeCacheSegment(range);
+  const priorSeg = rangeCacheSegment({ key: `prior-${range.key}`, from: range.prior.from, to: range.prior.to });
+
+  // Parallel fetch across all systems — all cached via lib/cache (Supabase L2)
   const [
     keapContactsTotal,
     keapContactsInPeriod,
@@ -51,22 +55,50 @@ async function loadOverviewData(searchParams: Record<string, string | string[] |
     thinkificOverview,
     ga4,
   ] = await Promise.all([
-    listContacts({ limit: 1 }).catch(() => ({ count: 0, contacts: [] })),
-    listContacts({ limit: 1, since: range.from.toISOString(), until: range.to.toISOString() }).catch(() => ({ count: 0, contacts: [] })),
-    listContacts({ limit: 1, since: range.prior.from.toISOString(), until: range.prior.to.toISOString() }).catch(() => ({ count: 0, contacts: [] })),
-    listTags({ limit: 1 }).catch(() => ({ count: 0, tags: [] })),
-    listCampaigns({ limit: 200 }).catch(() => ({ count: 0, campaigns: [] })),
-    listOpportunities({ limit: 200 }).catch(() => ({ count: 0, opportunities: [] })),
-    listCourses({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-    listOrders({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-    listEnrollments({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-    getLMSOverview().catch(() => null),
+    cachedFetch("keap:contacts:total", TTL.KEAP_STATS, () =>
+      listContacts({ limit: 1 }).catch(() => ({ count: 0, contacts: [] }))
+    ),
+    cachedFetch(`keap:contacts:in-period:${rangeSeg}`, TTL.KEAP_STATS, () =>
+      listContacts({ limit: 1, since: range.from.toISOString(), until: range.to.toISOString() }).catch(
+        () => ({ count: 0, contacts: [] })
+      )
+    ),
+    cachedFetch(`keap:contacts:in-period:${priorSeg}`, TTL.KEAP_STATS, () =>
+      listContacts({ limit: 1, since: range.prior.from.toISOString(), until: range.prior.to.toISOString() }).catch(
+        () => ({ count: 0, contacts: [] })
+      )
+    ),
+    cachedFetch("keap:tags:count", TTL.KEAP_TAGS, () =>
+      listTags({ limit: 1 }).catch(() => ({ count: 0, tags: [] }))
+    ),
+    cachedFetch("keap:campaigns:200", TTL.KEAP_CAMPAIGNS, () =>
+      listCampaigns({ limit: 200 }).catch(() => ({ count: 0, campaigns: [] }))
+    ),
+    cachedFetch("keap:opportunities:200", TTL.KEAP_OPPORTUNITIES, () =>
+      listOpportunities({ limit: 200 }).catch(() => ({ count: 0, opportunities: [] }))
+    ),
+    cachedFetch("thinkific:courses:250", TTL.THINKIFIC_COURSES, () =>
+      listCourses({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } }))
+    ),
+    cachedFetch("thinkific:orders:250", TTL.THINKIFIC_ORDERS, () =>
+      listOrders({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } }))
+    ),
+    cachedFetch("thinkific:enrollments:250", TTL.THINKIFIC_ENROLLMENTS, () =>
+      listEnrollments({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } }))
+    ),
+    cachedFetch("thinkific:overview", TTL.THINKIFIC_OVERVIEW, () =>
+      getLMSOverview().catch(() => null)
+    ),
     (async () => {
       if (!accessToken || sessionError) return null;
       try {
         const [overview, sources] = await Promise.all([
-          getTrafficOverviewWithComparison(accessToken, "website", rangeKey),
-          getTrafficSources(accessToken, "website", rangeKey, 5),
+          cachedFetch(`ga4:overview-with-comparison:website:${rangeKey}`, TTL.GA4_OVERVIEW, () =>
+            getTrafficOverviewWithComparison(accessToken, "website", rangeKey)
+          ),
+          cachedFetch(`ga4:sources:website:${rangeKey}:5`, TTL.GA4_REPORTS, () =>
+            getTrafficSources(accessToken, "website", rangeKey, 5)
+          ),
         ]);
         return { overview, sources };
       } catch {

@@ -6,6 +6,7 @@ import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { cachedFetch, TTL } from "@/lib/cache";
 import {
   getTrafficOverviewWithComparison,
   getTopPages,
@@ -25,17 +26,26 @@ function basicAuth(): string {
   return "Basic " + Buffer.from(`${WP_USER}:${WP_PASS}`).toString("base64");
 }
 
-async function loadWPContent() {
+async function fetchWPContent() {
   const auth = basicAuth();
   if (!auth) return { ok: false as const, error: "WP credentials missing" };
 
   try {
     const headers = { Authorization: auth };
-    const [postsR, pagesR, mediaR, usersR, plugins] = await Promise.all([
-      fetch(`${SITE_URL}/wp-json/wp/v2/posts?per_page=1`, { headers, next: { revalidate: 0 } }),
-      fetch(`${SITE_URL}/wp-json/wp/v2/pages?per_page=1`, { headers, next: { revalidate: 0 } }),
-      fetch(`${SITE_URL}/wp-json/wp/v2/media?per_page=1`, { headers, next: { revalidate: 0 } }),
-      fetch(`${SITE_URL}/wp-json/wp/v2/users?per_page=1&context=edit`, { headers, next: { revalidate: 0 } }),
+    const [postsTotal, pagesTotal, mediaTotal, usersTotal, plugins] = await Promise.all([
+      fetch(`${SITE_URL}/wp-json/wp/v2/posts?per_page=1`, { headers, next: { revalidate: 0 } }).then(
+        (r) => parseInt(r.headers.get("x-wp-total") || "0", 10)
+      ),
+      fetch(`${SITE_URL}/wp-json/wp/v2/pages?per_page=1`, { headers, next: { revalidate: 0 } }).then(
+        (r) => parseInt(r.headers.get("x-wp-total") || "0", 10)
+      ),
+      fetch(`${SITE_URL}/wp-json/wp/v2/media?per_page=1`, { headers, next: { revalidate: 0 } }).then(
+        (r) => parseInt(r.headers.get("x-wp-total") || "0", 10)
+      ),
+      fetch(`${SITE_URL}/wp-json/wp/v2/users?per_page=1&context=edit`, {
+        headers,
+        next: { revalidate: 0 },
+      }).then((r) => parseInt(r.headers.get("x-wp-total") || "0", 10)),
       fetch(`${SITE_URL}/wp-json/wp/v2/plugins`, { headers, next: { revalidate: 0 } }).then((r) =>
         r.ok ? r.json() : []
       ),
@@ -43,10 +53,10 @@ async function loadWPContent() {
     return {
       ok: true as const,
       counts: {
-        posts: parseInt(postsR.headers.get("x-wp-total") || "0", 10),
-        pages: parseInt(pagesR.headers.get("x-wp-total") || "0", 10),
-        media: parseInt(mediaR.headers.get("x-wp-total") || "0", 10),
-        users: parseInt(usersR.headers.get("x-wp-total") || "0", 10),
+        posts: postsTotal,
+        pages: pagesTotal,
+        media: mediaTotal,
+        users: usersTotal,
       },
       plugins: Array.isArray(plugins) ? plugins : [],
     };
@@ -56,6 +66,10 @@ async function loadWPContent() {
       error: e instanceof Error ? e.message : "WP fetch failed",
     };
   }
+}
+
+async function loadWPContent() {
+  return cachedFetch("wp:content-overview", TTL.WP_COUNTS, fetchWPContent);
 }
 
 async function loadGA4(rangeKey: string) {
@@ -81,11 +95,25 @@ async function loadGA4(rangeKey: string) {
   }
   try {
     const [overview, topPages, sources, daily, highBounce] = await Promise.all([
-      getTrafficOverviewWithComparison(accessToken, "website", rangeKey),
-      getTopPages(accessToken, "website", rangeKey, 15).catch(() => []),
-      getTrafficSources(accessToken, "website", rangeKey, 12).catch(() => []),
-      getTrafficByDay(accessToken, "website", rangeKey).catch(() => []),
-      getHighBouncePages(accessToken, "website", rangeKey, 50).catch(() => []),
+      cachedFetch(
+        `ga4:overview-with-comparison:website:${rangeKey}`,
+        TTL.GA4_OVERVIEW,
+        () => getTrafficOverviewWithComparison(accessToken, "website", rangeKey)
+      ),
+      cachedFetch(`ga4:top-pages:website:${rangeKey}:15`, TTL.GA4_REPORTS, () =>
+        getTopPages(accessToken, "website", rangeKey, 15).catch(() => [])
+      ),
+      cachedFetch(`ga4:sources:website:${rangeKey}:12`, TTL.GA4_REPORTS, () =>
+        getTrafficSources(accessToken, "website", rangeKey, 12).catch(() => [])
+      ),
+      cachedFetch(`ga4:daily:website:${rangeKey}`, TTL.GA4_REPORTS, () =>
+        getTrafficByDay(accessToken, "website", rangeKey).catch(() => [])
+      ),
+      cachedFetch(
+        `ga4:high-bounce:website:${rangeKey}:50`,
+        TTL.GA4_REPORTS,
+        () => getHighBouncePages(accessToken, "website", rangeKey, 50).catch(() => [])
+      ),
     ]);
     return { ok: true as const, overview, topPages, sources, daily, highBounce };
   } catch (e) {

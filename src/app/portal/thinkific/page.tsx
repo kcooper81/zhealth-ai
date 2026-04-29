@@ -6,6 +6,7 @@ import BarList from "@/components/portal/BarList";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, monthKey, pctChange } from "@/lib/time-range";
+import { cachedFetch, TTL } from "@/lib/cache";
 import {
   listCourses,
   listOrders,
@@ -52,13 +53,36 @@ async function loadThinkificData(searchParams: Record<string, string | string[] 
   try {
     const [overview, allCourses, ordersPage1, ordersPage2, products, recentEnrollments, coupons] =
       await Promise.all([
-        getLMSOverview().catch(() => null),
-        listCourses({ limit: 250 }),
-        listOrders({ limit: 250, page: 1 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-        listOrders({ limit: 250, page: 2 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-        listProducts({ limit: 250 }).catch(() => ({ items: [] })),
-        listEnrollments({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-        listCoupons({ limit: 250 }).catch(() => ({ items: [] })),
+        cachedFetch("thinkific:overview", TTL.THINKIFIC_OVERVIEW, () =>
+          getLMSOverview().catch(() => null)
+        ),
+        cachedFetch("thinkific:courses:250", TTL.THINKIFIC_COURSES, () =>
+          listCourses({ limit: 250 })
+        ),
+        cachedFetch("thinkific:orders:p1:250", TTL.THINKIFIC_ORDERS, () =>
+          listOrders({ limit: 250, page: 1 }).catch(() => ({
+            items: [],
+            meta: { pagination: { total_items: 0 } },
+          }))
+        ),
+        cachedFetch("thinkific:orders:p2:250", TTL.THINKIFIC_ORDERS, () =>
+          listOrders({ limit: 250, page: 2 }).catch(() => ({
+            items: [],
+            meta: { pagination: { total_items: 0 } },
+          }))
+        ),
+        cachedFetch("thinkific:products:250", TTL.THINKIFIC_PRODUCTS, () =>
+          listProducts({ limit: 250 }).catch(() => ({ items: [] }))
+        ),
+        cachedFetch("thinkific:enrollments:250", TTL.THINKIFIC_ENROLLMENTS, () =>
+          listEnrollments({ limit: 250 }).catch(() => ({
+            items: [],
+            meta: { pagination: { total_items: 0 } },
+          }))
+        ),
+        cachedFetch("thinkific:coupons:250", TTL.THINKIFIC_COUPONS, () =>
+          listCoupons({ limit: 250 }).catch(() => ({ items: [] }))
+        ),
       ]);
 
     const allOrders = [...ordersPage1.items, ...ordersPage2.items];

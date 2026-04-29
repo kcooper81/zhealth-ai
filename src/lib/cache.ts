@@ -21,13 +21,49 @@ export const TTL = {
   WP_POSTS: 5 * 60,        // 5 minutes — posts list
   WP_POPUPS: 5 * 60,       // 5 minutes — popups list
   WP_PLUGINS: 30 * 60,     // 30 minutes — plugin discovery
+  WP_COUNTS: 10 * 60,      // 10 minutes — header-total counts
   KEAP_TAGS: 30 * 60,      // 30 minutes — tags list
   KEAP_STATS: 10 * 60,     // 10 minutes — contact count, pipeline stats
   KEAP_CONTACTS: 5 * 60,   // 5 minutes — contacts list (default view)
+  KEAP_CAMPAIGNS: 15 * 60, // 15 minutes — campaigns list
+  KEAP_EMAILS: 5 * 60,     // 5 minutes — recent emails
+  KEAP_OPPORTUNITIES: 15 * 60, // 15 minutes — opportunities list
+  KEAP_ACCOUNT: 24 * 60 * 60, // 24h — account profile
   THINKIFIC_COURSES: 15 * 60,  // 15 minutes
   THINKIFIC_OVERVIEW: 15 * 60, // 15 minutes
+  THINKIFIC_ORDERS: 5 * 60,    // 5 minutes — orders move fast
+  THINKIFIC_ENROLLMENTS: 5 * 60, // 5 minutes
+  THINKIFIC_USERS: 30 * 60,    // 30 minutes — students roster
+  THINKIFIC_PRODUCTS: 30 * 60, // 30 minutes
+  THINKIFIC_COUPONS: 30 * 60,  // 30 minutes
   GA4_OVERVIEW: 10 * 60,   // 10 minutes — per date range
+  GA4_REPORTS: 10 * 60,    // 10 minutes — top-pages, sources, daily, etc.
 } as const;
+
+// ---------------------------------------------------------------------------
+// Helpers for building cache keys
+// ---------------------------------------------------------------------------
+
+/** A day-bucketed key segment, used for "today's snapshot" caches */
+export function dayKey(d: Date = new Date()): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Stable cache-key segment for a TimeRange. For preset ranges (7d, 30d, etc.)
+ * this includes today's date so caches naturally roll forward at midnight.
+ * For custom ranges it pins to the explicit from/to dates.
+ */
+export function rangeCacheSegment(range: {
+  key: string;
+  from: Date;
+  to: Date;
+}): string {
+  if (range.key === "custom") {
+    return `custom:${range.from.toISOString().slice(0, 10)}:${range.to.toISOString().slice(0, 10)}`;
+  }
+  return `${range.key}:${dayKey()}`;
+}
 
 // ---------------------------------------------------------------------------
 // Core API

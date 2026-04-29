@@ -6,6 +6,7 @@ import BarList from "@/components/portal/BarList";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, isoDate, monthKey, pctChange } from "@/lib/time-range";
+import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
   listContacts,
   listTags,
@@ -48,6 +49,8 @@ function fmtMoney(cents: number): string {
 
 async function loadKeapData(searchParams: Record<string, string | string[] | undefined>) {
   const range = parseTimeRange(searchParams);
+  const rangeSeg = rangeCacheSegment(range);
+  const priorSeg = rangeCacheSegment({ key: `prior-${range.key}`, from: range.prior.from, to: range.prior.to });
 
   try {
     const [
@@ -64,33 +67,49 @@ async function loadKeapData(searchParams: Record<string, string | string[] | und
       ordersPriorRange,
       tagSample,
     ] = await Promise.all([
-      getAccountInfo().catch(() => null),
-      listContacts({ limit: 1 }),
-      listTags({ limit: 1 }),
-      listCampaigns({ limit: 200 }),
-      listContacts({ limit: 1, since: isoDate(range.from), until: isoDate(range.to) }).catch(
-        () => ({ count: 0, contacts: [] })
+      cachedFetch("keap:account-info", TTL.KEAP_ACCOUNT, () =>
+        getAccountInfo().catch(() => null)
       ),
-      listContacts({
-        limit: 1,
-        since: isoDate(range.prior.from),
-        until: isoDate(range.prior.to),
-      }).catch(() => ({ count: 0, contacts: [] })),
-      listPipelineStages().catch(() => []),
-      listOpportunities({ limit: 200 }).catch(() => ({ opportunities: [], count: 0 })),
-      listEmails({ limit: 100, since_sent_date: isoDate(range.from) }).catch(() => ({
-        emails: [],
-        count: 0,
-      })),
-      listOrders({ limit: 100, since: isoDate(range.from), until: isoDate(range.to) }).catch(
-        () => ({ orders: [], count: 0 })
+      cachedFetch("keap:contacts:total", TTL.KEAP_STATS, () => listContacts({ limit: 1 })),
+      cachedFetch("keap:tags:count", TTL.KEAP_TAGS, () => listTags({ limit: 1 })),
+      cachedFetch("keap:campaigns:200", TTL.KEAP_CAMPAIGNS, () => listCampaigns({ limit: 200 })),
+      cachedFetch(`keap:contacts:in-period:${rangeSeg}`, TTL.KEAP_STATS, () =>
+        listContacts({ limit: 1, since: isoDate(range.from), until: isoDate(range.to) }).catch(
+          () => ({ count: 0, contacts: [] })
+        )
       ),
-      listOrders({
-        limit: 100,
-        since: isoDate(range.prior.from),
-        until: isoDate(range.prior.to),
-      }).catch(() => ({ orders: [], count: 0 })),
-      listTags({ limit: 200 }),
+      cachedFetch(`keap:contacts:in-period:${priorSeg}`, TTL.KEAP_STATS, () =>
+        listContacts({
+          limit: 1,
+          since: isoDate(range.prior.from),
+          until: isoDate(range.prior.to),
+        }).catch(() => ({ count: 0, contacts: [] }))
+      ),
+      cachedFetch("keap:pipeline-stages", TTL.KEAP_OPPORTUNITIES, () =>
+        listPipelineStages().catch(() => [])
+      ),
+      cachedFetch("keap:opportunities:200", TTL.KEAP_OPPORTUNITIES, () =>
+        listOpportunities({ limit: 200 }).catch(() => ({ opportunities: [], count: 0 }))
+      ),
+      cachedFetch(`keap:emails:since:${rangeSeg}`, TTL.KEAP_EMAILS, () =>
+        listEmails({ limit: 100, since_sent_date: isoDate(range.from) }).catch(() => ({
+          emails: [],
+          count: 0,
+        }))
+      ),
+      cachedFetch(`keap:orders:in-period:${rangeSeg}`, TTL.KEAP_STATS, () =>
+        listOrders({ limit: 100, since: isoDate(range.from), until: isoDate(range.to) }).catch(
+          () => ({ orders: [], count: 0 })
+        )
+      ),
+      cachedFetch(`keap:orders:in-period:${priorSeg}`, TTL.KEAP_STATS, () =>
+        listOrders({
+          limit: 100,
+          since: isoDate(range.prior.from),
+          until: isoDate(range.prior.to),
+        }).catch(() => ({ orders: [], count: 0 }))
+      ),
+      cachedFetch("keap:tags:200", TTL.KEAP_TAGS, () => listTags({ limit: 200 })),
     ]);
 
     return {

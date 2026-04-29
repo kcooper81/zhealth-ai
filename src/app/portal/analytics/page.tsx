@@ -7,6 +7,7 @@ import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
   getTrafficOverview,
   getTopPages,
@@ -48,6 +49,7 @@ function pct(n: number, of: number): string {
 async function loadAnalytics(searchParams: Record<string, string | string[] | undefined>) {
   const range = parseTimeRange(searchParams);
   const rangeKey = range.key === "custom" ? "30d" : range.key;
+  const rangeSeg = rangeCacheSegment(range);
 
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
@@ -63,22 +65,64 @@ async function loadAnalytics(searchParams: Record<string, string | string[] | un
 
   const [keapContactsTotal, keapEmails, keapTagsAll, thinkificCourses, thinkificOrders, thinkificEnrollments, thinkificUsersP1, thinkificUsersP2, ga4] =
     await Promise.all([
-      listContacts({ limit: 1 }).catch(() => ({ count: 0, contacts: [] })),
-      listEmails({ limit: 30, since_sent_date: range.from.toISOString() }).catch(() => ({ emails: [] as any[], count: 0 })),
-      listTags({ limit: 50 }).catch(() => ({ tags: [], count: 0 })),
-      listCourses({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-      listOrders({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-      listEnrollments({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-      listUsers({ limit: 250, page: 1 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
-      listUsers({ limit: 250, page: 2 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } })),
+      cachedFetch("keap:contacts:total", TTL.KEAP_STATS, () =>
+        listContacts({ limit: 1 }).catch(() => ({ count: 0, contacts: [] }))
+      ),
+      cachedFetch(`keap:emails:since:${rangeSeg}:30`, TTL.KEAP_EMAILS, () =>
+        listEmails({ limit: 30, since_sent_date: range.from.toISOString() }).catch(() => ({
+          emails: [] as any[],
+          count: 0,
+        }))
+      ),
+      cachedFetch("keap:tags:50", TTL.KEAP_TAGS, () =>
+        listTags({ limit: 50 }).catch(() => ({ tags: [], count: 0 }))
+      ),
+      cachedFetch("thinkific:courses:250", TTL.THINKIFIC_COURSES, () =>
+        listCourses({ limit: 250 }).catch(() => ({
+          items: [],
+          meta: { pagination: { total_items: 0 } },
+        }))
+      ),
+      cachedFetch("thinkific:orders:250", TTL.THINKIFIC_ORDERS, () =>
+        listOrders({ limit: 250 }).catch(() => ({
+          items: [],
+          meta: { pagination: { total_items: 0 } },
+        }))
+      ),
+      cachedFetch("thinkific:enrollments:250", TTL.THINKIFIC_ENROLLMENTS, () =>
+        listEnrollments({ limit: 250 }).catch(() => ({
+          items: [],
+          meta: { pagination: { total_items: 0 } },
+        }))
+      ),
+      cachedFetch("thinkific:users:p1:250", TTL.THINKIFIC_USERS, () =>
+        listUsers({ limit: 250, page: 1 }).catch(() => ({
+          items: [],
+          meta: { pagination: { total_items: 0 } },
+        }))
+      ),
+      cachedFetch("thinkific:users:p2:250", TTL.THINKIFIC_USERS, () =>
+        listUsers({ limit: 250, page: 2 }).catch(() => ({
+          items: [],
+          meta: { pagination: { total_items: 0 } },
+        }))
+      ),
       (async () => {
         if (!accessToken || sessionError) return ga4Empty;
         try {
           const [overview, topPages, sources, daily] = await Promise.all([
-            getTrafficOverview(accessToken, "website", rangeKey),
-            getTopPages(accessToken, "website", rangeKey, 50),
-            getTrafficSources(accessToken, "website", rangeKey, 20),
-            getTrafficByDay(accessToken, "website", rangeKey),
+            cachedFetch(`ga4:overview:website:${rangeKey}`, TTL.GA4_OVERVIEW, () =>
+              getTrafficOverview(accessToken, "website", rangeKey)
+            ),
+            cachedFetch(`ga4:top-pages:website:${rangeKey}:50`, TTL.GA4_REPORTS, () =>
+              getTopPages(accessToken, "website", rangeKey, 50)
+            ),
+            cachedFetch(`ga4:sources:website:${rangeKey}:20`, TTL.GA4_REPORTS, () =>
+              getTrafficSources(accessToken, "website", rangeKey, 20)
+            ),
+            cachedFetch(`ga4:daily:website:${rangeKey}`, TTL.GA4_REPORTS, () =>
+              getTrafficByDay(accessToken, "website", rangeKey)
+            ),
           ]);
           return { overview, topPages, sources, daily };
         } catch {
@@ -101,11 +145,16 @@ async function loadAnalytics(searchParams: Record<string, string | string[] | un
   });
 
   // New Keap contacts in period (separate API call to use Keap's date filter)
-  const keapContactsInPeriod = await listContacts({
-    limit: 1,
-    since: range.from.toISOString(),
-    until: range.to.toISOString(),
-  }).catch(() => ({ count: 0, contacts: [] }));
+  const keapContactsInPeriod = await cachedFetch(
+    `keap:contacts:in-period:${rangeSeg}`,
+    TTL.KEAP_STATS,
+    () =>
+      listContacts({
+        limit: 1,
+        since: range.from.toISOString(),
+        until: range.to.toISOString(),
+      }).catch(() => ({ count: 0, contacts: [] }))
+  );
 
   // ---- Build Thinkific student email set (for Keap intersection) ----
   const thinkificUsers = [...thinkificUsersP1.items, ...thinkificUsersP2.items];
@@ -120,7 +169,11 @@ async function loadAnalytics(searchParams: Record<string, string | string[] | un
   const tagConversions = await Promise.all(
     tagSample.map(async (t: any) => {
       try {
-        const result = await getContactsWithTag(t.id, { limit: 50 });
+        const result = await cachedFetch(
+          `keap:contacts-with-tag:${t.id}:50`,
+          TTL.KEAP_TAGS,
+          () => getContactsWithTag(t.id, { limit: 50 })
+        );
         const contactsInThinkific = result.contacts.filter((c: any) => {
           const email = (c.email_addresses?.[0]?.email || "").toLowerCase().trim();
           return email && thinkificStudentEmails.has(email);
@@ -148,7 +201,11 @@ async function loadAnalytics(searchParams: Record<string, string | string[] | un
       const email = (o.user_email || "").toLowerCase().trim();
       if (!email) return { order: o, keap: null as any };
       try {
-        const lookup = await listContacts({ email, limit: 1 });
+        const lookup = await cachedFetch(
+          `keap:contact-by-email:${email}`,
+          TTL.KEAP_CONTACTS,
+          () => listContacts({ email, limit: 1 })
+        );
         return { order: o, keap: lookup.contacts[0] || null };
       } catch {
         return { order: o, keap: null };
