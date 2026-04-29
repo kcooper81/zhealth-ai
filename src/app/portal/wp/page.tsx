@@ -4,6 +4,7 @@ import Section, { Card } from "@/components/portal/Section";
 import BarList from "@/components/portal/BarList";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
+import WPAuditView from "@/components/portal/WPAuditView";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
@@ -70,6 +71,100 @@ async function fetchWPContent() {
 
 async function loadWPContent() {
   return cachedFetch("wp:content-overview", TTL.WP_COUNTS, fetchWPContent);
+}
+
+type WPCategory = { id: number; name: string; slug: string; count: number };
+type WPTag = WPCategory;
+type WPUser = { id: number; name: string; slug: string; roles: string[]; email?: string };
+type WPPlugin = { plugin: string; status: string; name: string; version: string; description?: { raw?: string } };
+type WPType = { name: string; slug: string; rest_base: string; viewable: boolean };
+
+async function fetchWPAudit() {
+  const auth = basicAuth();
+  if (!auth) return { ok: false as const, error: "WP credentials missing" };
+  const headers = { Authorization: auth };
+
+  try {
+    const [categories, tags, users, types, postsTotal, pagesTotal, draftPostsTotal, draftPagesTotal] =
+      await Promise.all([
+        fetch(`${SITE_URL}/wp-json/wp/v2/categories?per_page=100&hide_empty=false&orderby=count&order=desc`, {
+          headers,
+          next: { revalidate: 0 },
+        }).then((r) => (r.ok ? (r.json() as Promise<WPCategory[]>) : Promise.resolve([] as WPCategory[]))),
+        fetch(`${SITE_URL}/wp-json/wp/v2/tags?per_page=100&hide_empty=false&orderby=count&order=desc`, {
+          headers,
+          next: { revalidate: 0 },
+        }).then((r) => (r.ok ? (r.json() as Promise<WPTag[]>) : Promise.resolve([] as WPTag[]))),
+        fetch(`${SITE_URL}/wp-json/wp/v2/users?per_page=100&context=edit`, {
+          headers,
+          next: { revalidate: 0 },
+        }).then((r) => (r.ok ? (r.json() as Promise<WPUser[]>) : Promise.resolve([] as WPUser[]))),
+        fetch(`${SITE_URL}/wp-json/wp/v2/types?context=edit`, {
+          headers,
+          next: { revalidate: 0 },
+        }).then((r) => (r.ok ? r.json() : Promise.resolve({}))),
+        fetch(`${SITE_URL}/wp-json/wp/v2/posts?status=publish&per_page=1`, { headers, next: { revalidate: 0 } }).then(
+          (r) => parseInt(r.headers.get("x-wp-total") || "0", 10)
+        ),
+        fetch(`${SITE_URL}/wp-json/wp/v2/pages?status=publish&per_page=1`, { headers, next: { revalidate: 0 } }).then(
+          (r) => parseInt(r.headers.get("x-wp-total") || "0", 10)
+        ),
+        fetch(`${SITE_URL}/wp-json/wp/v2/posts?status=draft&per_page=1&context=edit`, {
+          headers,
+          next: { revalidate: 0 },
+        }).then((r) => parseInt(r.headers.get("x-wp-total") || "0", 10)),
+        fetch(`${SITE_URL}/wp-json/wp/v2/pages?status=draft&per_page=1&context=edit`, {
+          headers,
+          next: { revalidate: 0 },
+        }).then((r) => parseInt(r.headers.get("x-wp-total") || "0", 10)),
+      ]);
+
+    // Get counts per custom post type
+    const typeEntries = Object.values(types as Record<string, WPType>);
+    const typeCounts = await Promise.all(
+      typeEntries
+        .filter((t) => t.rest_base && !["posts", "pages", "media"].includes(t.rest_base) && !t.rest_base.includes("font"))
+        .map(async (t) => {
+          try {
+            const r = await fetch(`${SITE_URL}/wp-json/wp/v2/${t.rest_base}?per_page=1&context=edit`, {
+              headers,
+              next: { revalidate: 0 },
+            });
+            return {
+              type: t.name,
+              slug: t.slug,
+              rest_base: t.rest_base,
+              count: r.ok ? parseInt(r.headers.get("x-wp-total") || "0", 10) : null,
+            };
+          } catch {
+            return { type: t.name, slug: t.slug, rest_base: t.rest_base, count: null };
+          }
+        })
+    );
+
+    return {
+      ok: true as const,
+      categories,
+      tags,
+      users,
+      typeCounts,
+      counts: {
+        publishedPosts: postsTotal,
+        publishedPages: pagesTotal,
+        draftPosts: draftPostsTotal,
+        draftPages: draftPagesTotal,
+      },
+    };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "WP audit fetch failed",
+    };
+  }
+}
+
+async function loadWPAudit() {
+  return cachedFetch("wp:audit-snapshot", TTL.WP_COUNTS, fetchWPAudit);
 }
 
 async function loadGA4(rangeKey: string) {
@@ -148,7 +243,7 @@ export default async function WPPortalPage({
   const range = parseTimeRange(searchParams);
   const rangeKey = range.key === "custom" ? "30d" : range.key;
 
-  const [wp, ga] = await Promise.all([loadWPContent(), loadGA4(rangeKey)]);
+  const [wp, ga, audit] = await Promise.all([loadWPContent(), loadGA4(rangeKey), loadWPAudit()]);
 
   const updatedAt = new Date().toLocaleString("en-US", {
     timeZone: "America/Los_Angeles",
@@ -231,6 +326,7 @@ export default async function WPPortalPage({
       <Tabs
         tabs={[
           { id: "overview", label: "Overview" },
+          { id: "audit", label: "Audit" },
           { id: "traffic", label: "Traffic" },
           { id: "content", label: "Content" },
           { id: "plugins", label: "Plugins", badge: wp.ok ? wp.plugins.length : 0 },
@@ -293,6 +389,10 @@ export default async function WPPortalPage({
               </Card>
             )}
           </Section>
+        </TabPanel>
+
+        <TabPanel id="audit">
+          <WPAuditView wp={wp} ga={ga} audit={audit} />
         </TabPanel>
 
         <TabPanel id="traffic">
