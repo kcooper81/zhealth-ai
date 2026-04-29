@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from "./icons";
 import ModeSwitcher from "./portal/ModeSwitcher";
+import SyncBadge from "./portal/SyncBadge";
 
 type NavItem = {
   href: string;
@@ -112,7 +113,9 @@ export default function PortalSidebar() {
         </ul>
       </nav>
 
-      <div className="border-t border-gray-200/70 px-4 py-3 text-[10px] tracking-wide text-gray-500 dark:border-white/5 dark:text-gray-500">
+      <SyncBadge />
+
+      <div className="border-t border-gray-200/70 px-4 py-2.5 text-[10px] tracking-wide text-gray-500 dark:border-white/5 dark:text-gray-500">
         Internal · @zhealth.net only
       </div>
     </aside>

@@ -183,6 +183,45 @@ export async function cachedFetch<T>(
   return data;
 }
 
+/**
+ * Bypasses the read and always calls the fetcher. Writes the result to cache.
+ * Used by the background sync job to refresh entries before they expire.
+ */
+export async function cacheRefresh<T>(
+  key: string,
+  ttlSeconds: number,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  const data = await fetcher();
+  await cacheSet(key, data, ttlSeconds);
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Sync metadata — when did the background sync last run, per system
+// ---------------------------------------------------------------------------
+
+const SYNC_TTL = 7 * 24 * 60 * 60; // sync-meta entries last a week
+
+export type SyncSystem = "keap" | "thinkific" | "wp" | "all";
+
+export type SyncMeta = {
+  system: SyncSystem;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  refreshed: number;
+  errors: string[];
+};
+
+export async function setSyncMeta(meta: SyncMeta): Promise<void> {
+  await cacheSet(`meta:last-sync:${meta.system}`, meta, SYNC_TTL);
+}
+
+export async function getSyncMeta(system: SyncSystem): Promise<SyncMeta | null> {
+  return cacheGet<SyncMeta>(`meta:last-sync:${system}`);
+}
+
 // ---------------------------------------------------------------------------
 // Cache key builders (centralized to avoid typos)
 // ---------------------------------------------------------------------------
