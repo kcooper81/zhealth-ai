@@ -175,6 +175,30 @@ export async function removeTagFromContacts(
   }
 }
 
+/**
+ * Fetch all tags (up to `max`) with their contact counts in parallel.
+ * Used by the Course Registration report to rank tags by membership.
+ *
+ * Each per-tag call returns {count} via getContactsWithTag(tagId, { limit: 1 }).
+ */
+export async function getTagsWithCounts(max = 200): Promise<
+  Array<KeapTag & { contactCount: number }>
+> {
+  const list = await listTags({ limit: max });
+  const withCounts = await Promise.all(
+    list.tags.map(async (t) => {
+      try {
+        const result = await getContactsWithTag(t.id, { limit: 1 });
+        return { ...t, contactCount: result.count };
+      } catch {
+        return { ...t, contactCount: 0 };
+      }
+    })
+  );
+  // Default sort: most contacts first
+  return withCounts.sort((a, b) => b.contactCount - a.contactCount);
+}
+
 export async function getContactsWithTag(
   tagId: number,
   params?: { limit?: number; offset?: number }

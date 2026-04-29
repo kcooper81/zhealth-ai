@@ -87,6 +87,37 @@ async function loadThinkificData(searchParams: Record<string, string | string[] 
 
     const allOrders = [...ordersPage1.items, ...ordersPage2.items];
 
+    // Thinkific's /courses endpoint does NOT return user_count/status/price.
+    // Fetch true enrollment count per course via /enrollments?query[course_id]=X
+    // (one call per course; cached individually for 30 min).
+    const courseEnrollmentCounts = new Map<number, number>();
+    await Promise.all(
+      allCourses.items.map(async (c) => {
+        try {
+          const result = await cachedFetch(
+            `thinkific:course-enroll-count:${c.id}`,
+            TTL.THINKIFIC_COURSES,
+            async () => {
+              const r = await listEnrollments({ course_id: c.id, limit: 1 });
+              return r.meta.pagination.total_items ?? 0;
+            }
+          );
+          courseEnrollmentCounts.set(c.id, result);
+        } catch {
+          courseEnrollmentCounts.set(c.id, 0);
+        }
+      })
+    );
+
+    // Build a course → product → price lookup so we can show price even
+    // though /courses no longer returns it.
+    const productByCourseId = new Map<number, any>();
+    for (const p of products.items) {
+      for (const cid of p.related_course_ids || []) {
+        productByCourseId.set(cid, p);
+      }
+    }
+
     return {
       ok: true as const,
       range,
@@ -94,6 +125,8 @@ async function loadThinkificData(searchParams: Record<string, string | string[] 
       overview,
       courses: allCourses.items,
       coursesTotal: allCourses.meta.pagination.total_items,
+      courseEnrollmentCounts,
+      productByCourseId,
       ordersTotal: ordersPage1.meta.pagination.total_items,
       orders: allOrders,
       products: products.items,
@@ -174,8 +207,17 @@ export default async function ThinkificPortalPage({
   });
 
   // ---- Computed metrics ----
-  const publishedCourses = data.courses.filter((c) => c.status === "published").length;
-  const draftCourses = data.courses.filter((c) => c.status !== "published").length;
+  // Thinkific's /courses endpoint omits status; derive it from the linked product.
+  const enrollCount = (courseId: number) => data.courseEnrollmentCounts.get(courseId) ?? 0;
+  const productStatus = (courseId: number) =>
+    data.productByCourseId.get(courseId)?.status || null;
+  const productPrice = (courseId: number) =>
+    data.productByCourseId.get(courseId)?.price || null;
+
+  const publishedCourses = data.courses.filter(
+    (c) => productStatus(c.id) === "published"
+  ).length;
+  const draftCourses = data.courses.length - publishedCourses;
 
   const completedOrdersInPeriod = ordersInPeriod.filter((o) =>
     STATUS_OK.includes((o.status || "").toLowerCase())
@@ -208,10 +250,10 @@ export default async function ThinkificPortalPage({
 
   // ---- Top courses by enrollment ----
   const topCoursesByEnrollment = [...data.courses]
-    .sort((a, b) => (b.user_count ?? 0) - (a.user_count ?? 0))
+    .sort((a, b) => enrollCount(b.id) - enrollCount(a.id))
     .slice(0, 10);
 
-  const dormantCourses = data.courses.filter((c) => (c.user_count ?? 0) === 0);
+  const dormantCourses = data.courses.filter((c) => enrollCount(c.id) === 0);
 
   // ---- Course completion rate (sample-based) ----
   const enrollmentsByCourse = new Map<number, { total: number; completed: number; courseName: string }>();
@@ -360,8 +402,8 @@ export default async function ThinkificPortalPage({
                 color="green"
                 items={topCoursesByEnrollment.map((c) => ({
                   label: c.name,
-                  value: c.user_count ?? 0,
-                  sublabel: c.status === "published" ? undefined : "draft",
+                  value: enrollCount(c.id),
+                  sublabel: productStatus(c.id) ? undefined : "no linked product",
                 }))}
               />
             </Card>
@@ -483,8 +525,8 @@ export default async function ThinkificPortalPage({
                 color="blue"
                 items={topCoursesByEnrollment.map((c) => ({
                   label: c.name,
-                  value: c.user_count ?? 0,
-                  sublabel: c.chapter_count ? `${c.chapter_count} chapters` : undefined,
+                  value: enrollCount(c.id),
+                  sublabel: productPrice(c.id) ? `$${productPrice(c.id)}` : undefined,
                 }))}
               />
             </Card>
@@ -527,7 +569,7 @@ export default async function ThinkificPortalPage({
                     <li key={c.id} className="flex items-center justify-between text-gray-700 dark:text-gray-300">
                       <span className="truncate">{c.name}</span>
                       <span className="ml-3 flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                        {c.status}
+                        {productStatus(c.id) || "no product"}
                       </span>
                     </li>
                   ))}
@@ -543,7 +585,7 @@ export default async function ThinkificPortalPage({
         </TabPanel>
 
         <TabPanel id="courses">
-          <Section title="Course catalog" description={`Showing ${data.courses.length} of ${data.coursesTotal}.`}>
+          <Section title="Course catalog" description={`Showing ${data.courses.length} of ${data.coursesTotal}. Status and price are derived from the linked Thinkific product.`}>
             <Card padded={false}>
               <table className="w-full text-sm">
                 <thead className="border-b border-gray-200/70 dark:border-white/5">
@@ -551,34 +593,40 @@ export default async function ThinkificPortalPage({
                     <th className="px-5 py-3">ID</th>
                     <th className="px-5 py-3">Name</th>
                     <th className="px-5 py-3">Status</th>
-                    <th className="px-5 py-3">Students</th>
-                    <th className="px-5 py-3">Chapters</th>
+                    <th className="px-5 py-3">Enrollments</th>
                     <th className="px-5 py-3">Price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {[...data.courses]
-                    .sort((a, b) => (b.user_count ?? 0) - (a.user_count ?? 0))
-                    .map((c) => (
+                    .sort((a, b) => enrollCount(b.id) - enrollCount(a.id))
+                    .map((c) => {
+                      const status = productStatus(c.id);
+                      const price = productPrice(c.id);
+                      return (
                       <tr key={c.id} className="text-gray-700 dark:text-gray-300">
                         <td className="px-5 py-3 font-mono text-xs text-gray-500">{c.id}</td>
                         <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{c.name}</td>
                         <td className="px-5 py-3 text-xs">
-                          <span
-                            className={
-                              c.status === "published"
-                                ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                : "rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-white/5 dark:text-gray-300"
-                            }
-                          >
-                            {c.status}
-                          </span>
+                          {status ? (
+                            <span
+                              className={
+                                status === "published"
+                                  ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                  : "rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-white/5 dark:text-gray-300"
+                              }
+                            >
+                              {status}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 dark:text-gray-600">no product</span>
+                          )}
                         </td>
-                        <td className="px-5 py-3 text-xs tabular-nums">{c.user_count?.toLocaleString() ?? "—"}</td>
-                        <td className="px-5 py-3 text-xs tabular-nums">{c.chapter_count ?? "—"}</td>
-                        <td className="px-5 py-3 text-xs tabular-nums">{c.price || "—"}</td>
+                        <td className="px-5 py-3 text-xs tabular-nums">{enrollCount(c.id).toLocaleString()}</td>
+                        <td className="px-5 py-3 text-xs tabular-nums">{price ? `$${price}` : "—"}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                 </tbody>
               </table>
             </Card>

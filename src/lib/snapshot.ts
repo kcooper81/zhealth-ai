@@ -31,6 +31,7 @@ import {
   listOrders as listKeapOrders,
   getAccountInfo,
   getContactsWithTag,
+  getTagsWithCounts,
 } from "./keap";
 import {
   listCourses,
@@ -173,6 +174,17 @@ export async function refreshKeap(): Promise<{ refreshed: number; errors: string
   }
 
   await Promise.allSettled(tasks);
+
+  // Warm the full tag-counts ranking used by /portal/keap "Tag counts" tab.
+  // Heavy: ~200 sub-calls. Cached for 30 min so cron carries this once a day.
+  try {
+    await cacheRefresh("keap:tags:counts:200", TTL.KEAP_TAGS, () =>
+      getTagsWithCounts(200).catch(() => [])
+    );
+    refreshed += 1;
+  } catch (e) {
+    errors.push(`keap:tags-counts: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   // Warm top-tag contact samples (used by /portal/analytics audience tab)
   try {

@@ -5,6 +5,7 @@ import Section, { Card } from "@/components/portal/Section";
 import BarList from "@/components/portal/BarList";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
+import TagCountsTable from "@/components/portal/TagCountsTable";
 import { parseTimeRange, isoDate, monthKey, pctChange } from "@/lib/time-range";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
@@ -16,6 +17,7 @@ import {
   listEmails,
   listOrders,
   getAccountInfo,
+  getTagsWithCounts,
 } from "@/lib/keap";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +114,13 @@ async function loadKeapData(searchParams: Record<string, string | string[] | und
       cachedFetch("keap:tags:200", TTL.KEAP_TAGS, () => listTags({ limit: 200 })),
     ]);
 
+    // Fetch all tag counts (paid for once per cache TTL — heavy but cached for 30 min)
+    const tagsWithCounts = await cachedFetch(
+      "keap:tags:counts:200",
+      TTL.KEAP_TAGS,
+      () => getTagsWithCounts(200).catch(() => [])
+    );
+
     return {
       ok: true as const,
       range,
@@ -131,6 +140,7 @@ async function loadKeapData(searchParams: Record<string, string | string[] | und
         ordersPriorCount: ordersPriorRange.count,
       },
       tags: tagSample.tags,
+      tagsWithCounts,
       campaigns: campaignsAll.campaigns ?? [],
       pipelineStages: Array.isArray(pipelineStages) ? pipelineStages : [],
       opportunities: opportunities.opportunities ?? [],
@@ -301,6 +311,7 @@ export default async function KeapPortalPage({
         tabs={[
           { id: "overview", label: "Overview" },
           { id: "reports", label: "Reports" },
+          { id: "tag-counts", label: "Tag counts" },
           { id: "tags", label: "Tags", badge: data.counts.tags },
           { id: "campaigns", label: "Campaigns", badge: data.counts.campaigns },
           { id: "pipeline", label: "Pipeline", badge: data.opportunities.length },
@@ -497,6 +508,15 @@ export default async function KeapPortalPage({
               </Card>
             </Section>
           )}
+        </TabPanel>
+
+        <TabPanel id="tag-counts">
+          <Section
+            title="Tag counts — course registrations and beyond"
+            description={`Live contact counts for the first ${data.tagsWithCounts.length} tags out of ${data.counts.tags.toLocaleString()} total. Use the search and quick filters to find your course-registration tags wherever they live in the tag tree.`}
+          >
+            <TagCountsTable tags={data.tagsWithCounts} />
+          </Section>
         </TabPanel>
 
         <TabPanel id="tags">
