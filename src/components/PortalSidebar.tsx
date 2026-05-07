@@ -19,9 +19,11 @@ import {
   FileText,
   Zap,
   Search,
+  AIBrain,
 } from "./icons";
 import ModeSwitcher from "./portal/ModeSwitcher";
 import SyncBadge from "./portal/SyncBadge";
+import UserMenu from "./portal/UserMenu";
 
 type NavItem = {
   href: string;
@@ -56,7 +58,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Summaries",
     items: [
-      { href: "/portal/reports/weekly", label: "Weekly", icon: BarChart, status: "live" },
+      { href: "/portal/reports/weekly", label: "Weekly digest", icon: BarChart, status: "live" },
     ],
   },
   {
@@ -72,8 +74,9 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "Setup",
+    title: "Tools",
     items: [
+      { href: "/chat", label: "AI chat", icon: AIBrain, status: "live" },
       { href: "/portal/reports/setup", label: "Tracking setup", icon: Settings, status: "live" },
     ],
   },
@@ -196,9 +199,7 @@ export default function PortalSidebar() {
 
       <SyncBadge />
 
-      <div className="border-t border-gray-200/70 px-4 py-2.5 text-[10px] tracking-wide text-gray-500 dark:border-white/5 dark:text-gray-500">
-        Internal · @zhealth.net only
-      </div>
+      <UserMenu />
     </aside>
   );
 }
