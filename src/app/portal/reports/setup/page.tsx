@@ -6,6 +6,7 @@
  */
 import Section, { Card } from "@/components/portal/Section";
 import CodeBlock from "@/components/portal/CodeBlock";
+import TrackingInstaller from "@/components/portal/TrackingInstaller";
 
 export const metadata = { title: "Tracking Setup — Z-Health Portal" };
 
@@ -14,194 +15,6 @@ const GA4_WEBSITE = "G-2BGQW8MGVJ";
 // We mirror the website ID so cross-domain user_id matching works.
 const GA4_LMS_NOTE = "Use the same G-2BGQW8MGVJ on Thinkific so a single user is one user across both domains. (You can keep a separate property for the LMS if you also need it; this just adds a second tag.)";
 
-const WP_GTM_HEAD = `<!-- Google Tag Manager — already on the site (GTM-57LMTDX) -->
-<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer','GTM-57LMTDX');</script>`;
-
-const WP_DATALAYER_BOOTSTRAP = `<script>
-// Bootstrap dataLayer with page context Keap + GA4 can use.
-window.dataLayer = window.dataLayer || [];
-
-(function () {
-  var url = new URL(window.location.href);
-  var landingPath = url.pathname;
-  var landingTitle = document.title;
-
-  // Persist first-touch source for the session
-  var SS_KEY = 'zh_first_touch';
-  var stored = sessionStorage.getItem(SS_KEY);
-  if (!stored) {
-    stored = JSON.stringify({
-      utm_source:   url.searchParams.get('utm_source')   || '',
-      utm_medium:   url.searchParams.get('utm_medium')   || '',
-      utm_campaign: url.searchParams.get('utm_campaign') || '',
-      utm_term:     url.searchParams.get('utm_term')     || '',
-      utm_content:  url.searchParams.get('utm_content')  || '',
-      promo_id:     url.searchParams.get('promo')        || url.searchParams.get('promo_id') || '',
-      landing_path: landingPath,
-      landing_title: landingTitle,
-      ts: Date.now()
-    });
-    sessionStorage.setItem(SS_KEY, stored);
-  }
-  var first = JSON.parse(stored);
-
-  window.dataLayer.push({
-    event: 'page_context',
-    landing_path: landingPath,
-    landing_title: landingTitle,
-    utm_source:   first.utm_source,
-    utm_medium:   first.utm_medium,
-    utm_campaign: first.utm_campaign,
-    utm_term:     first.utm_term,
-    utm_content:  first.utm_content,
-    promo_id:     first.promo_id
-  });
-})();
-</script>`;
-
-const WP_EVENT_DELEGATION = `<script>
-// Event delegation — fires GA4 events for CTA clicks, form submits,
-// outbound links, and Thinkific enroll links. Add this once site-wide.
-window.dataLayer = window.dataLayer || [];
-
-(function () {
-  function pushEvent(name, params) {
-    var first = {};
-    try { first = JSON.parse(sessionStorage.getItem('zh_first_touch') || '{}'); } catch(e){}
-    window.dataLayer.push(Object.assign({
-      event: name,
-      landing_path: first.landing_path || location.pathname,
-      utm_source: first.utm_source || '',
-      utm_medium: first.utm_medium || '',
-      utm_campaign: first.utm_campaign || '',
-      promo_id: first.promo_id || ''
-    }, params || {}));
-  }
-
-  // 1. Any element with [data-cta] or .cta button → cta_click
-  document.addEventListener('click', function (e) {
-    var t = e.target.closest('[data-cta], .elementor-button, a.cta, button.cta');
-    if (!t) return;
-    pushEvent('cta_click', {
-      cta_id:    t.getAttribute('data-cta') || t.id || '',
-      cta_text:  (t.innerText || '').trim().slice(0, 80),
-      cta_href:  t.getAttribute('href') || '',
-      cta_class: t.className || ''
-    });
-  }, true);
-
-  // 2. Outbound link → outbound_click (and a higher-signal enroll_click
-  // for links to courses.zhealtheducation.com or thinkific.com)
-  document.addEventListener('click', function (e) {
-    var a = e.target.closest('a[href]');
-    if (!a) return;
-    var href = a.getAttribute('href') || '';
-    var isAbs = /^https?:\\/\\//i.test(href);
-    if (!isAbs) return;
-    var sameHost = a.hostname === location.hostname;
-    if (sameHost) return;
-    var name = 'outbound_click';
-    var extra = { destination_host: a.hostname, destination_url: href };
-    if (/courses\\.zhealtheducation\\.com|\\.thinkific\\.com/i.test(a.hostname)) {
-      name = 'enroll_click';
-      // Try to read course slug from /courses/<slug> or /enrollments/<id>
-      var m = href.match(/\\/courses\\/([^/?#]+)/i);
-      if (m) extra.course_slug = m[1];
-    }
-    pushEvent(name, extra);
-  }, true);
-
-  // 3. Form submit → form_submit (with form id + lead_magnet hint)
-  document.addEventListener('submit', function (e) {
-    var f = e.target;
-    if (!f || f.tagName !== 'FORM') return;
-    pushEvent('form_submit', {
-      form_id:   f.id || '',
-      form_name: f.getAttribute('name') || '',
-      form_action: f.getAttribute('action') || '',
-      lead_magnet: f.getAttribute('data-lead-magnet') || ''
-    });
-  }, true);
-})();
-</script>`;
-
-const WP_PHP_PLUGIN = `<?php
-/**
- * Plugin Name: Z-Health Tracking Helpers
- * Description: Auto-attaches UTM parameters to outbound links pointing at
- *              courses.zhealtheducation.com so cross-domain attribution
- *              survives WordPress → Thinkific. Also injects the dataLayer
- *              bootstrap + event delegation in <head>.
- * Version: 1.0
- *
- * Drop into wp-content/mu-plugins/ (auto-loads, no activation needed)
- * or upload as a regular plugin and activate.
- */
-
-if (!defined('ABSPATH')) exit;
-
-// 1. Inject the dataLayer bootstrap + event delegation in <head>
-add_action('wp_head', function () {
-  // Pull values from the currently-rendered post for richer events.
-  $post_id = get_the_ID();
-  $post_type = $post_id ? get_post_type($post_id) : '';
-  $promo_id = $post_id ? (string) get_post_meta($post_id, 'zh_promo_id', true) : '';
-  ?>
-  <script>
-    window.zhPageContext = {
-      page_id: <?php echo $post_id ? (int) $post_id : 'null'; ?>,
-      page_type: <?php echo wp_json_encode($post_type); ?>,
-      promo_id: <?php echo wp_json_encode($promo_id); ?>
-    };
-  </script>
-  <?php
-}, 1);
-
-// 2. Auto-tag outbound Thinkific links with utm_* params so each LP is
-// attributable on the Thinkific side. Keeps any existing utm_* on the link.
-add_filter('the_content', function ($content) {
-  if (is_admin() || empty($content)) return $content;
-
-  return preg_replace_callback(
-    '/<a\\s+([^>]*?)href=([\"\\\'])((https?:)?\\/\\/(courses\\.zhealtheducation\\.com|[a-z0-9.-]+\\.thinkific\\.com)[^\"\\\']*)\\2([^>]*)>/i',
-    function ($m) {
-      $pre = $m[1];
-      $q   = $m[2];
-      $url = $m[3];
-      $post= $m[6];
-
-      $parts = wp_parse_url($url);
-      parse_str($parts['query'] ?? '', $qs);
-
-      // Only set if not already specified on the link
-      $defaults = [
-        'utm_source'   => 'zhealtheducation',
-        'utm_medium'   => 'website',
-        'utm_campaign' => sanitize_title(get_the_title() ?: 'site'),
-        'utm_content'  => 'inline-link'
-      ];
-      foreach ($defaults as $k => $v) {
-        if (!isset($qs[$k]) || $qs[$k] === '') $qs[$k] = $v;
-      }
-
-      $newQuery = http_build_query($qs);
-      $rebuilt =
-        (isset($parts['scheme']) ? $parts['scheme'] . ':' : '') .
-        '//' . $parts['host'] .
-        ($parts['path'] ?? '') .
-        '?' . $newQuery .
-        (isset($parts['fragment']) ? '#' . $parts['fragment'] : '');
-
-      return '<a ' . $pre . 'href=' . $q . esc_url($rebuilt) . $q . $post . '>';
-    },
-    $content
-  );
-}, 50);
-`;
 
 const THINKIFIC_HEAD = `<!-- Z-Health: capture UTM + landing context that came in from the website
      and forward standard ecommerce events to GA4. Paste into Thinkific:
@@ -356,32 +169,17 @@ export default function TrackingSetupPage() {
       </Section>
 
       <Section
-        title="Step 2 · Push events into the dataLayer (WordPress)"
-        description="Two scripts in <head>. The first builds session context (UTM, landing path); the second wires CTA clicks, form submits, and outbound enrollment links."
+        title="Step 2 · Install tracking on WordPress"
+        description="One click pushes the canonical tracking snippet into the WP site as an Elementor Custom Code in <head>, and purges the SiteGround cache so it goes live immediately. No copy-paste needed."
       >
-        <div className="space-y-4">
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Bootstrap (paste in &lt;head&gt;)</h3>
-            <CodeBlock language="html" code={WP_DATALAYER_BOOTSTRAP} />
-          </div>
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Event delegation (paste below the bootstrap)</h3>
-            <CodeBlock language="html" code={WP_EVENT_DELEGATION} />
-          </div>
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-              GTM is already loaded site-wide — for reference
-            </h3>
-            <CodeBlock language="html" code={WP_GTM_HEAD} />
-          </div>
-        </div>
-      </Section>
-
-      <Section
-        title="Step 3 · Auto-tag outbound Thinkific links (WP plugin)"
-        description="Drop into wp-content/mu-plugins/ (auto-loads). Rewrites every WordPress link pointing at courses.zhealtheducation.com or *.thinkific.com to carry utm_source / utm_medium / utm_campaign so attribution survives the domain hop."
-      >
-        <CodeBlock filename="wp-content/mu-plugins/zh-tracking.php" language="php" code={WP_PHP_PLUGIN} />
+        <TrackingInstaller />
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-500">
+          The script captures session UTM/landing context, fires custom GA4
+          dataLayer events for CTA / form / outbound / enroll, and auto-tags
+          outbound Thinkific links with utm_*. To customize, edit
+          <code className="mx-1 rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-white/10">src/lib/wp-tracking-installer.ts</code>
+          and click <strong>Re-push to WP</strong>.
+        </p>
       </Section>
 
       <Section
