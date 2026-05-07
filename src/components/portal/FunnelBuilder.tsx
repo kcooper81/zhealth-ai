@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Modal from "./Modal";
 import { ChevronDown, Plus, X, Funnel as FunnelIcon, Search, Check } from "@/components/icons";
+import { describeStep } from "@/lib/funnel-config";
 
 type EventOption = { value: string; label: string; description: string };
 
@@ -132,14 +133,12 @@ export default function FunnelBuilder({ pageGroups, eventCatalog, initial, open,
 
     setSaving(true);
     try {
-      const stepObjs = steps.map((ev) => {
-        const cataloged = eventCatalog.find((c) => c.value === ev);
-        return {
-          name: cataloged?.label || ev,
-          eventName: ev,
-          pageMatch: ON_PAGE_EVENTS.has(ev) ? entry.trim() : undefined,
-        };
-      });
+      const trimmedEntry = entry.trim();
+      const stepObjs = steps.map((ev) => ({
+        name: describeStep(ev, ON_PAGE_EVENTS.has(ev) ? trimmedEntry : null),
+        eventName: ev,
+        pageMatch: ON_PAGE_EVENTS.has(ev) ? trimmedEntry : undefined,
+      }));
       const r = await fetch("/api/portal/funnels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

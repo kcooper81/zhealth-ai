@@ -5,7 +5,7 @@
  * alongside the built-in presets.
  */
 import { cacheGet, cacheSet } from "./cache";
-import { type FunnelDefinition, type FunnelStep } from "./funnel-config";
+import { FUNNELS, type FunnelDefinition, type FunnelStep } from "./funnel-config";
 
 const STORE_KEY = "saved-funnels:list";
 const STORE_TTL = 365 * 24 * 60 * 60; // effectively forever (1 year)
@@ -81,4 +81,52 @@ export async function deleteFunnel(id: string): Promise<{ ok: boolean }> {
 export async function getFunnel(id: string): Promise<SavedFunnel | null> {
   const all = await listSavedFunnels();
   return all.find((f) => f.id === id) || null;
+}
+
+/**
+ * Seed the built-in preset funnels into the saved store. Used on first
+ * load so the team has all of them as editable custom funnels (with
+ * predictable seed-prefixed IDs so re-seeding is idempotent).
+ *
+ * `mode: "if-empty"` only seeds when no saved funnels exist yet.
+ * `mode: "force"` re-creates any seed-prefixed funnels (resets to defaults).
+ */
+export async function seedBuiltInFunnels(
+  mode: "if-empty" | "force" = "if-empty"
+): Promise<{ seeded: number }> {
+  const all = await listSavedFunnels();
+  if (mode === "if-empty" && all.length > 0) return { seeded: 0 };
+
+  // Map built-in def → SavedFunnel format. Prefix id with "seed-" so we
+  // can identify (and replace) seeded funnels on later re-seeds without
+  // touching user-created customs.
+  const now = new Date().toISOString();
+  const fromBuiltIn = (def: FunnelDefinition): SavedFunnel => {
+    // Derive the entryPath from the first step's pageMatch (presets always
+    // use a pageMatch on step 1; if not, default to "/")
+    const entryPath = def.steps.find((s) => s.pageMatch)?.pageMatch || "/";
+    return {
+      id: `seed-${def.id}`,
+      label: def.label,
+      description: def.description,
+      property: def.property,
+      steps: def.steps,
+      entryPath,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  if (mode === "force") {
+    // Drop any existing seed-* funnels, then re-add fresh seeds + keep user customs
+    const userCustoms = all.filter((f) => !f.id.startsWith("seed-"));
+    const seeds = FUNNELS.map(fromBuiltIn);
+    const next = [...seeds, ...userCustoms];
+    await cacheSet(STORE_KEY, next, STORE_TTL);
+    return { seeded: seeds.length };
+  } else {
+    const seeds = FUNNELS.map(fromBuiltIn);
+    await cacheSet(STORE_KEY, seeds, STORE_TTL);
+    return { seeded: seeds.length };
+  }
 }

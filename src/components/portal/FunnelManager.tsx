@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import FunnelBuilder, { FunnelBuilderTrigger, type PageGroup, type SavedFunnelInput } from "./FunnelBuilder";
-import { Edit, X, Plus } from "@/components/icons";
+import { Edit, X, RotateCw } from "@/components/icons";
 
 type EventOption = { value: string; label: string; description: string };
 
@@ -15,17 +15,20 @@ type SavedFunnel = SavedFunnelInput & {
 
 type Props = {
   savedFunnels: SavedFunnel[];
-  presetCount: number;
   pageGroups: Record<PageGroup, GroupedPage[]>;
   eventCatalog: EventOption[];
 };
 
 type GroupedPage = { path: string; label: string; sublabel?: string };
 
-export default function FunnelManager({ savedFunnels, presetCount, pageGroups, eventCatalog }: Props) {
+export default function FunnelManager({ savedFunnels, pageGroups, eventCatalog }: Props) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<SavedFunnel | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  const seedCount = savedFunnels.filter((f) => f.id.startsWith("seed-")).length;
+  const customCount = savedFunnels.length - seedCount;
 
   const onClose = () => {
     setOpen(false);
@@ -54,6 +57,23 @@ export default function FunnelManager({ savedFunnels, presetCount, pageGroups, e
     }
   };
 
+  const onResetDefaults = async () => {
+    if (!confirm("Restore the default built-in funnel reports? Any seed-* funnels will be reset; your own custom funnels are preserved.")) return;
+    setResetting(true);
+    try {
+      const r = await fetch("/api/portal/funnels/seed?mode=force", { method: "POST" });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || `Reset failed (${r.status})`);
+      }
+      window.location.reload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Reset failed");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <>
       <div className="rounded-2xl border border-gray-200/70 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1f1f22]">
@@ -63,11 +83,24 @@ export default function FunnelManager({ savedFunnels, presetCount, pageGroups, e
               Funnel reports
             </h3>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {presetCount} built-in preset{presetCount === 1 ? "" : "s"}
-              {savedFunnels.length > 0 && ` · ${savedFunnels.length} custom`}
+              {savedFunnels.length} total
+              {seedCount > 0 && ` · ${seedCount} from defaults`}
+              {customCount > 0 && ` · ${customCount} your own`}
             </p>
           </div>
-          <FunnelBuilderTrigger onClick={() => { setEditing(null); setOpen(true); }} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onResetDefaults}
+              disabled={resetting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+              title="Restore the default built-in funnel reports (your own customs are preserved)"
+            >
+              <RotateCw size={11} />
+              <span>{resetting ? "Resetting…" : "Restore defaults"}</span>
+            </button>
+            <FunnelBuilderTrigger onClick={() => { setEditing(null); setOpen(true); }} />
+          </div>
         </div>
 
         {savedFunnels.length === 0 ? (
@@ -84,7 +117,18 @@ export default function FunnelManager({ savedFunnels, presetCount, pageGroups, e
             {savedFunnels.map((f) => (
               <li key={f.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-gray-900 dark:text-gray-100">{f.label}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{f.label}</span>
+                    {f.id.startsWith("seed-") ? (
+                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-gray-700 dark:bg-white/5 dark:text-gray-400">
+                        Default
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                        Custom
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                     <span className="font-mono">{f.entryPath}</span>
                     <span>·</span>

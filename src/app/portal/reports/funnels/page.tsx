@@ -15,14 +15,13 @@ import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import { getFunnelSteps, getPagesWithEntrances } from "@/lib/google-analytics";
 import {
-  FUNNELS,
   FUNNEL_EVENT_CATALOG,
   type FunnelDefinition,
 } from "@/lib/funnel-config";
 import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
 import { getAllWPPages, getAllWPPosts } from "@/lib/wp-content-list";
 import { listCourses } from "@/lib/thinkific";
-import { listSavedFunnels } from "@/lib/saved-funnels";
+import { listSavedFunnels, seedBuiltInFunnels } from "@/lib/saved-funnels";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
@@ -33,6 +32,10 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
 
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
+
+  // 0. Auto-seed built-in presets on first load so the team has all of
+  //    them as editable custom funnels right away.
+  await seedBuiltInFunnels("if-empty").catch(() => null);
 
   // 1. Load saved customs + page lists in parallel
   const [saved, wpPages, wpPosts, lmsCourses, gaWebPages, gaLmsPages] = await Promise.all([
@@ -58,8 +61,8 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
       : Promise.resolve([] as Array<{ path: string; pageviews: number }>),
   ]);
 
-  // 2. Combine presets + saved customs into one list to render
-  const allFunnels: FunnelDefinition[] = [...FUNNELS, ...saved];
+  // 2. Saved is the only source — built-ins are seeded into it on first load
+  const allFunnels: FunnelDefinition[] = saved;
 
   // 3. Fetch GA4 funnel data for each
   const funnelResults = await Promise.all(
@@ -123,7 +126,6 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
     range,
     accessToken: !!accessToken,
     funnels: funnelResults,
-    presetCount: FUNNELS.length,
     saved,
     pageGroups,
   };
@@ -173,7 +175,6 @@ export default async function FunnelsReportPage({
             createdAt: f.createdAt,
             updatedAt: f.updatedAt,
           }))}
-          presetCount={data.presetCount}
           pageGroups={data.pageGroups}
           eventCatalog={FUNNEL_EVENT_CATALOG}
         />
@@ -184,8 +185,6 @@ export default async function FunnelsReportPage({
           const top = steps[0]?.users ?? 0;
           const last = steps[steps.length - 1]?.users ?? 0;
           const overallCvr = top > 0 ? (last / top) * 100 : 0;
-          const isCustom = funnel.id.startsWith("custom-");
-
           return (
             <Section
               key={funnel.id}
@@ -198,15 +197,6 @@ export default async function FunnelsReportPage({
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     <span>{funnel.property === "lms" ? "LMS" : "Website"}</span>
-                    {isCustom ? (
-                      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
-                        Custom
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-white/5 dark:text-gray-400">
-                        Preset
-                      </span>
-                    )}
                   </div>
                   <div className="text-sm">
                     Overall conversion:{" "}

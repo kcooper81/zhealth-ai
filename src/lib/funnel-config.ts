@@ -25,6 +25,32 @@ export type FunnelDefinition = {
 };
 
 /**
+ * Generate a human-readable step name from an event + (optional) entry path.
+ * "page_view" + "/lower-back" → "Landed on /lower-back"
+ * "purchase" + null → "Purchased"
+ *
+ * Used by both the URL-built funnels and the saved-custom-funnel save path
+ * so that step labels in the report match the descriptive style of the
+ * built-in presets instead of "page_view" / "cta_click" / etc.
+ */
+export function describeStep(eventName: string, entryPath?: string | null): string {
+  const onPage = entryPath ? ` on ${entryPath}` : "";
+  switch (eventName) {
+    case "page_view":      return entryPath ? `Landed on ${entryPath}` : "Page view";
+    case "session_start":  return entryPath ? `New session starting on ${entryPath}` : "New session start";
+    case "cta_click":      return entryPath ? `Clicked a CTA${onPage}` : "Clicked a CTA";
+    case "form_submit":    return entryPath ? `Submitted a form${onPage}` : "Submitted a form";
+    case "outbound_click": return entryPath ? `Clicked an outbound link${onPage}` : "Clicked an outbound link";
+    case "enroll_click":   return "Clicked an enroll link";
+    case "course_view":    return "Viewed a course page";
+    case "begin_checkout": return "Began Thinkific checkout";
+    case "sign_up_view":   return "Visited Thinkific signup page";
+    case "purchase":       return "Purchased";
+    default:               return eventName;
+  }
+}
+
+/**
  * Catalog of events the user can choose from when building a custom funnel.
  * Anything fired by the WP/Thinkific tracking snippet is on this list.
  */
@@ -75,14 +101,11 @@ export function buildFunnelFromEntry(opts: {
   // Events that should be scoped to the entry page (vs anywhere on site)
   const onPageEvents = new Set(["page_view", "session_start", "cta_click", "form_submit", "outbound_click"]);
 
-  const steps: FunnelStep[] = events.map((ev) => {
-    const cataloged = FUNNEL_EVENT_CATALOG.find((c) => c.value === ev);
-    return {
-      name: cataloged?.label || ev,
-      eventName: ev,
-      pageMatch: onPageEvents.has(ev) ? entryPath : undefined,
-    };
-  });
+  const steps: FunnelStep[] = events.map((ev) => ({
+    name: describeStep(ev, onPageEvents.has(ev) ? entryPath : null),
+    eventName: ev,
+    pageMatch: onPageEvents.has(ev) ? entryPath : undefined,
+  }));
 
   return {
     id: `custom-${entryPath.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "root"}`,
