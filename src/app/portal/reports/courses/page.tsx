@@ -26,6 +26,7 @@ import {
   listProducts,
   listEnrollments,
 } from "@/lib/thinkific";
+import { CoursesTable } from "@/components/portal/ReportTables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -255,49 +256,11 @@ export default async function CoursesReportPage({
 
       <Section
         id="section-per-course"
-        title="Per-course rollup"
-        description="Sorted by revenue in window."
+        title={`Per-course rollup (${data.courses.length})`}
+        description="Search course name or slug. Click headers to sort. Chips narrow to common cases."
         action={<ExportButton targetId="section-per-course" filename="courses-rollup" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Course</th>
-                  <th className="px-5 py-3 text-right">Price</th>
-                  <th className="px-5 py-3 text-right">Views</th>
-                  <th className="px-5 py-3 text-right">Checkouts</th>
-                  <th className="px-5 py-3 text-right">Orders</th>
-                  <th className="px-5 py-3 text-right">Enrolls</th>
-                  <th className="px-5 py-3 text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {data.courses.map((c) => (
-                  <tr key={c.id} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-3">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{c.name}</div>
-                      <div className="text-xs text-gray-500">
-                        <span className="font-mono">{c.slug}</span>
-                        <span className="mx-1.5">·</span>
-                        <span>{c.status}</span>
-                        <span className="mx-1.5">·</span>
-                        <span>{c.enrollmentsAll.toLocaleString()} all-time enrolls</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.price > 0 ? fmtMoney(c.price) : <span className="text-gray-400">—</span>}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.courseViews.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.checkouts.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.ordersInWindow.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.enrollmentsInWindow.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums font-semibold">{c.revenueInWindow > 0 ? fmtMoney(c.revenueInWindow) : <span className="text-gray-400">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <CoursesTable rows={data.courses} />
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">

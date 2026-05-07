@@ -20,6 +20,7 @@ import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import { getEventCounts, getEcommerce } from "@/lib/google-analytics";
 import { listEmails } from "@/lib/keap";
+import { EmailsTable } from "@/components/portal/ReportTables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -242,47 +243,17 @@ export default async function EmailsReportPage({
 
       <Section
         id="section-broadcasts"
-        title="Broadcasts in window"
-        description="From Keap, sorted newest first. Inferred campaign comes from subject pattern; tweak inferCampaign() in source to refine."
+        title={`Broadcasts in window (${data.emails.length})`}
+        description="Search subject or inferred campaign. Click headers to sort. Chips narrow to common cases."
         action={<ExportButton targetId="section-broadcasts" filename="emails-broadcasts" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Subject</th>
-                  <th className="px-5 py-3">Sent</th>
-                  <th className="px-5 py-3">Inferred campaign</th>
-                  <th className="px-5 py-3 text-right">Sessions</th>
-                  <th className="px-5 py-3 text-right">Enroll clicks</th>
-                  <th className="px-5 py-3 text-right">Purchases</th>
-                  <th className="px-5 py-3 text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {data.emails.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-500">
-                      No Keap email broadcasts in window.
-                    </td>
-                  </tr>
-                )}
-                {data.emails.slice(0, 50).map((e) => (
-                  <tr key={e.id} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{e.subject}</td>
-                    <td className="px-5 py-3 text-xs">{e.sent_date ? new Date(e.sent_date).toLocaleDateString() : "—"}</td>
-                    <td className="px-5 py-3 font-mono text-xs">{e.inferredCampaign}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{e.emailSessions.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{e.enrollClicks.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{e.purchases.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{e.revenue > 0 ? fmtMoney(e.revenue) : <span className="text-gray-400">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        {data.emails.length === 0 ? (
+          <Card>
+            <p className="text-sm text-gray-500">No Keap email broadcasts in window.</p>
+          </Card>
+        ) : (
+          <EmailsTable rows={data.emails} />
+        )}
       </Section>
 
       </div>

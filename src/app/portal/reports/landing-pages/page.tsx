@@ -21,6 +21,7 @@ import {
 } from "@/lib/google-analytics";
 import { listAllContactsInRange } from "@/lib/keap";
 import { LANDING_PAGE_TAG_MAP, findLandingPageRow } from "@/lib/landing-page-tag-map";
+import { LandingPagesFunnelTable } from "@/components/portal/ReportTables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -229,58 +230,30 @@ export default async function LandingPagesReportPage({
 
       <Section
         id="section-funnel"
-        title="Per-page funnel"
-        description="Mapped landing pages first (rows tied to a Keap tag), then by pageviews."
+        title={`Per-page funnel (${data.funnel.length})`}
+        description="Search by title or path. Click headers to sort. Use the chips to narrow."
         action={<ExportButton targetId="section-funnel" filename="landing-pages-funnel" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Page</th>
-                  <th className="px-5 py-3 text-right">Views</th>
-                  <th className="px-5 py-3 text-right">CTA</th>
-                  <th className="px-5 py-3 text-right">Forms</th>
-                  <th className="px-5 py-3 text-right">Leads (window)</th>
-                  <th className="px-5 py-3 text-right">Enroll</th>
-                  <th className="px-5 py-3 text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {data.funnel.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-500">
-                      No GA4 page data yet.
-                    </td>
-                  </tr>
-                )}
-                {data.funnel.slice(0, 80).map((r, i) => {
-                  const cvr = r.pageviews > 0 ? (r.formSubmits / r.pageviews) * 100 : 0;
-                  return (
-                    <tr key={`${r.page}-${i}`} className="text-gray-700 dark:text-gray-300">
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{r.label}</div>
-                        <div className="text-xs text-gray-500">
-                          {r.lp ? <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">Mapped · tag {r.lp.tagId}</span> : <span className="text-gray-400">{r.page}</span>}
-                          {cvr > 0 && (
-                            <span className="ml-2 text-[10px] text-gray-500">{cvr.toFixed(2)}% form CVR</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-right tabular-nums">{r.pageviews.toLocaleString()}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{r.ctaClicks.toLocaleString()}</td>
-                      <td className="px-5 py-3 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-400">{r.formSubmits.toLocaleString()}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{r.lp ? r.keapTagged.toLocaleString() : <span className="text-gray-400">—</span>}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{r.enrollClicks.toLocaleString()}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{r.revenue > 0 ? fmtMoney(r.revenue) : <span className="text-gray-400">—</span>}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        {data.funnel.length === 0 ? (
+          <Card>
+            <p className="text-sm text-gray-500">No GA4 page data yet.</p>
+          </Card>
+        ) : (
+          <LandingPagesFunnelTable
+            rows={data.funnel.map((r) => ({
+              page: r.page,
+              label: r.label,
+              pageviews: r.pageviews,
+              ctaClicks: r.ctaClicks,
+              formSubmits: r.formSubmits,
+              enrollClicks: r.enrollClicks,
+              keapTagged: r.keapTagged,
+              hasMappedTag: !!r.lp,
+              mappedTagId: r.lp?.tagId,
+              revenue: r.revenue,
+            }))}
+          />
+        )}
       </Section>
 
       <Section

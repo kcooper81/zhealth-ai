@@ -21,6 +21,7 @@ import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange } from "@/lib/time-range";
 import { cachedFetch, TTL } from "@/lib/cache";
 import { listCampaigns } from "@/lib/keap";
+import { CampaignsTable } from "@/components/portal/ReportTables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -152,36 +153,11 @@ export default async function CampaignsReportPage({
 
       <Section
         id="section-rollup"
-        title="All campaigns"
-        description={`${data.campaigns.length.toLocaleString()} sequences ranked by current active reach.`}
+        title={`All campaigns (${data.campaigns.length})`}
+        description="Search campaign name. Click headers to sort. Chips narrow to common cases."
         action={<ExportButton targetId="section-rollup" filename="campaigns-rollup" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Campaign</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-right">Active</th>
-                  <th className="px-5 py-3 text-right">Completed</th>
-                  <th className="px-5 py-3 text-right">Lifetime reach</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {data.campaigns.map((c) => (
-                  <tr key={c.id} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{c.name}</td>
-                    <td className="px-5 py-3 text-xs">{c.status}</td>
-                    <td className="px-5 py-3 text-right tabular-nums font-semibold">{c.activeContacts.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.completedContactCount.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.historicalContactCount.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <CampaignsTable rows={data.campaigns} />
       </Section>
 
       </div>

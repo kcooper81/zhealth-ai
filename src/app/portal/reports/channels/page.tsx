@@ -19,6 +19,7 @@ import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import { getChannelRollup, getEcommerce } from "@/lib/google-analytics";
 import { listAllContactsInRange } from "@/lib/keap";
 import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
+import { ChannelPivotTable } from "@/components/portal/ReportTables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -241,55 +242,19 @@ export default async function ChannelsReportPage({
 
       <Section
         id="section-pivot"
-        title="Channel pivot"
-        description={`Source × Medium × Campaign for ${data.range.label.toLowerCase()}. Sorted by sessions.`}
+        title={`Channel pivot (${data.channels.length})`}
+        description={`Search source / medium / campaign. Click headers to sort. ${data.range.label}.`}
         action={<ExportButton targetId="section-pivot" filename="channels-pivot" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Source</th>
-                  <th className="px-5 py-3">Medium</th>
-                  <th className="px-5 py-3">Campaign</th>
-                  <th className="px-5 py-3 text-right">Sessions</th>
-                  <th className="px-5 py-3 text-right">Users</th>
-                  <th className="px-5 py-3 text-right">Conversions</th>
-                  <th className="px-5 py-3 text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {data.channels.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-sm text-gray-500">
-                      {data.accessToken ? "No GA4 channel data yet for this window." : "Sign in to GA4 to populate."}
-                    </td>
-                  </tr>
-                )}
-                {data.channels.map((c: any, i: number) => (
-                  <tr key={`${c.source}-${c.medium}-${c.campaign}-${i}`} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{c.source}</td>
-                    <td className="px-5 py-3 text-xs">{c.medium}</td>
-                    <td className="px-5 py-3 text-xs">{c.campaign}</td>
-                    <td className="px-5 py-3 text-right tabular-nums font-semibold">{c.sessions.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.users.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.conversions ? c.conversions.toLocaleString() : <span className="text-gray-400">0</span>}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">
-                      {c.revenue > 0 ? (
-                        fmtMoney(c.revenue)
-                      ) : c.revenueAttributed ? (
-                        <span className="text-gray-400">$0</span>
-                      ) : (
-                        <span className="text-gray-300" title="No revenue could be attributed to this channel — likely missing utm_campaign on outbound links">unattributed</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        {data.channels.length === 0 ? (
+          <Card>
+            <p className="text-sm text-gray-500">
+              {data.accessToken ? "No GA4 channel data yet for this window." : "Sign in to GA4 to populate."}
+            </p>
+          </Card>
+        ) : (
+          <ChannelPivotTable rows={data.channels} />
+        )}
       </Section>
 
       <Section
