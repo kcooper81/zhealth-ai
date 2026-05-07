@@ -1,16 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ChevronDown, Plus, X, Funnel as FunnelIcon } from "@/components/icons";
+import { ChevronDown, Plus, X, Funnel as FunnelIcon, Search } from "@/components/icons";
 
 type EventOption = { value: string; label: string; description: string };
 
+export type PageGroup =
+  | "Mapped landing pages"
+  | "WordPress pages"
+  | "WordPress posts"
+  | "Thinkific courses"
+  | "Recent GA4 traffic";
+
+type GroupedPage = { path: string; label: string; sublabel?: string };
+
 type Props = {
-  /** Pre-known landing pages from the LP map, shown at the top of the dropdown. */
-  knownPages: Array<{ path: string; label: string }>;
-  /** GA4 top-pages in window (suggested entries). */
-  topPages: Array<{ path: string; pageviews: number }>;
+  /** Pages grouped by source (mapped LPs / WP pages / WP posts / Thinkific / GA4 top). */
+  pageGroups: Record<PageGroup, GroupedPage[]>;
   /** Catalog of events the user can pick at each step. */
   eventCatalog: EventOption[];
   /** Current entry path from URL params, or null. */
@@ -23,9 +30,21 @@ type Props = {
 
 const DEFAULT_STEPS = ["page_view", "cta_click", "form_submit", "enroll_click", "begin_checkout", "purchase"];
 
+const GROUP_ORDER: PageGroup[] = [
+  "Mapped landing pages",
+  "WordPress pages",
+  "WordPress posts",
+  "Thinkific courses",
+  "Recent GA4 traffic",
+];
+
+/** Heuristic: anything pointing at a Thinkific URL/path is "lms", everything else is "website". */
+function detectProperty(path: string): "website" | "lms" {
+  return /\/courses\/|thinkific\.com/i.test(path) ? "lms" : "website";
+}
+
 export default function FunnelBuilder({
-  knownPages,
-  topPages,
+  pageGroups,
   eventCatalog,
   currentEntry,
   currentSteps,
@@ -36,10 +55,33 @@ export default function FunnelBuilder({
 
   const [entry, setEntry] = useState(currentEntry || "");
   const [property, setProperty] = useState<"website" | "lms">(currentProperty);
+  const [autoProperty, setAutoProperty] = useState(true);
   const [steps, setSteps] = useState<string[]>(
     currentSteps && currentSteps.length > 0 ? currentSteps : DEFAULT_STEPS
   );
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Auto-detect property when entry changes (unless user manually overrode it)
+  useEffect(() => {
+    if (autoProperty && entry) {
+      const detected = detectProperty(entry);
+      if (detected !== property) setProperty(detected);
+    }
+  }, [entry, autoProperty]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   const apply = () => {
     const params = new URLSearchParams(Array.from(search.entries()));
@@ -65,15 +107,9 @@ export default function FunnelBuilder({
     window.location.assign(`${pathname}${qs ? `?${qs}` : ""}`);
   };
 
-  const updateStep = (idx: number, value: string) => {
-    setSteps((s) => s.map((v, i) => (i === idx ? value : v)));
-  };
-  const removeStep = (idx: number) => {
-    setSteps((s) => s.filter((_, i) => i !== idx));
-  };
-  const addStep = () => {
-    setSteps((s) => [...s, "purchase"]);
-  };
+  const updateStep = (idx: number, value: string) => setSteps((s) => s.map((v, i) => (i === idx ? value : v)));
+  const removeStep = (idx: number) => setSteps((s) => s.filter((_, i) => i !== idx));
+  const addStep = () => setSteps((s) => [...s, "purchase"]);
   const moveStep = (idx: number, dir: -1 | 1) => {
     setSteps((s) => {
       const next = [...s];
@@ -84,22 +120,23 @@ export default function FunnelBuilder({
     });
   };
 
-  // Combine known pages + GA4 top pages, dedup by path
-  const seen = new Set<string>();
-  const allPages: Array<{ path: string; label: string; sublabel?: string }> = [];
-  for (const lp of knownPages) {
-    if (seen.has(lp.path)) continue;
-    seen.add(lp.path);
-    allPages.push({ path: lp.path, label: lp.label, sublabel: lp.path });
-  }
-  for (const p of topPages.slice(0, 30)) {
-    if (seen.has(p.path)) continue;
-    seen.add(p.path);
-    allPages.push({ path: p.path, label: p.path, sublabel: `${p.pageviews.toLocaleString()} views` });
-  }
+  // Filter pages by typed text against path / label / sublabel
+  const filteredGroups = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return pageGroups;
+    const out = {} as Record<PageGroup, GroupedPage[]>;
+    for (const g of GROUP_ORDER) {
+      out[g] = (pageGroups[g] || []).filter((p) =>
+        [p.path, p.label, p.sublabel || ""].some((s) => s.toLowerCase().includes(q))
+      );
+    }
+    return out;
+  }, [filter, pageGroups]);
+
+  const visibleCount = GROUP_ORDER.reduce((sum, g) => sum + (filteredGroups[g]?.length || 0), 0);
 
   return (
-    <div className="rounded-2xl border border-gray-200/70 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1f1f22]">
+    <div ref={wrapperRef} className="rounded-2xl border border-gray-200/70 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1f1f22]">
       <div className="mb-4 flex items-center gap-2">
         <FunnelIcon size={16} className="text-brand-blue" />
         <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Build a custom funnel</h3>
@@ -112,66 +149,110 @@ export default function FunnelBuilder({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Entry-page selector */}
-        <div>
+        <div className="relative">
           <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Entry page (path)
           </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={entry}
-              onChange={(e) => setEntry(e.target.value)}
-              placeholder="/lower-back  or  /blog/your-post-slug"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-sm font-mono text-gray-900 dark:border-white/10 dark:bg-[#19191c] dark:text-gray-100"
-              onFocus={() => setOpen(true)}
-            />
-            <button
-              type="button"
-              onClick={() => setOpen((o) => !o)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
-            >
-              <ChevronDown size={14} />
-            </button>
-            {open && allPages.length > 0 && (
-              <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200/80 bg-white shadow-xl ring-1 ring-black/5 dark:border-white/10 dark:bg-[#1f1f22] dark:ring-white/10">
-                <ul className="py-1">
-                  {allPages.map((p) => (
-                    <li key={p.path}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEntry(p.path);
-                          setOpen(false);
-                        }}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-white/5"
-                      >
-                        <span className="text-gray-900 dark:text-gray-100">{p.label}</span>
-                        {p.sublabel && (
-                          <span className="font-mono text-[11px] text-gray-500">{p.sublabel}</span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+          <input
+            type="text"
+            value={entry}
+            onChange={(e) => setEntry(e.target.value)}
+            placeholder="/lower-back, /blog/post-slug, /courses/i-phase…"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-sm font-mono text-gray-900 dark:border-white/10 dark:bg-[#19191c] dark:text-gray-100"
+            onFocus={() => setOpen(true)}
+          />
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="absolute right-2 top-[33px] text-gray-500"
+          >
+            <ChevronDown size={14} />
+          </button>
+
+          {open && (
+            <div className="absolute z-30 mt-1 max-h-[460px] w-full overflow-hidden rounded-lg border border-gray-200/80 bg-white shadow-xl ring-1 ring-black/5 dark:border-white/10 dark:bg-[#1f1f22] dark:ring-white/10">
+              <div className="flex items-center gap-2 border-b border-gray-200/60 bg-gray-50/50 px-3 py-2 dark:border-white/5 dark:bg-white/[0.02]">
+                <Search size={12} className="text-gray-400" />
+                <input
+                  type="text"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder={`Filter ${visibleCount} pages…`}
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400 dark:text-gray-100"
+                  autoFocus
+                />
               </div>
-            )}
-          </div>
+              <div className="max-h-[400px] overflow-y-auto">
+                {GROUP_ORDER.map((g) => {
+                  const items = filteredGroups[g] || [];
+                  if (items.length === 0) return null;
+                  return (
+                    <div key={g}>
+                      <div className="sticky top-0 bg-gray-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:bg-[#19191c] dark:text-gray-400">
+                        {g} <span className="ml-1 text-gray-400">({items.length})</span>
+                      </div>
+                      <ul>
+                        {items.slice(0, 100).map((p) => (
+                          <li key={`${g}-${p.path}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEntry(p.path);
+                                setOpen(false);
+                                setFilter("");
+                              }}
+                              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50 dark:hover:bg-white/5"
+                            >
+                              <span className="truncate text-gray-900 dark:text-gray-100">{p.label}</span>
+                              {p.sublabel && (
+                                <span className="ml-2 flex-shrink-0 truncate font-mono text-[11px] text-gray-500" style={{ maxWidth: "55%" }}>
+                                  {p.sublabel}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+                {visibleCount === 0 && (
+                  <p className="px-3 py-6 text-center text-xs text-gray-500">
+                    No pages match &ldquo;{filter}&rdquo;. You can also type the path manually in the input above.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           <p className="mt-1 text-[11px] text-gray-500">
-            Pick a known LP from the list, type any GA4 pagePath, or use a partial like <code>/blog</code> to match a section.
+            Pick from any WP page/post, Thinkific course, or LP from the catalog. Type a partial like <code>/blog</code> to capture a section.
           </p>
         </div>
 
         {/* Property selector */}
         <div>
-          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            GA4 property
+          <label className="mb-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            <span>GA4 property</span>
+            <label className="flex items-center gap-1 text-[10px] normal-case font-normal tracking-normal text-gray-500">
+              <input
+                type="checkbox"
+                checked={autoProperty}
+                onChange={(e) => setAutoProperty(e.target.checked)}
+                className="h-3 w-3"
+              />
+              Auto-detect from path
+            </label>
           </label>
           <div className="flex gap-2">
             {(["website", "lms"] as const).map((opt) => (
               <button
                 key={opt}
                 type="button"
-                onClick={() => setProperty(opt)}
+                onClick={() => {
+                  setAutoProperty(false);
+                  setProperty(opt);
+                }}
                 className={[
                   "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
                   property === opt
@@ -184,7 +265,7 @@ export default function FunnelBuilder({
             ))}
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
-            Use <strong>website</strong> for funnels starting on zhealtheducation.com, <strong>LMS</strong> when starting on a Thinkific page.
+            Auto switches to LMS when the entry path matches <code>/courses/</code> or <code>thinkific.com</code>.
           </p>
         </div>
       </div>
@@ -267,8 +348,7 @@ export default function FunnelBuilder({
           </button>
         )}
         <p className="ml-auto text-[11px] text-gray-500">
-          Steps tagged on-page (page_view, cta_click, form_submit) are filtered to your entry path.
-          Downstream steps (enroll, checkout, purchase) match anywhere.
+          On-page steps (page_view, cta_click, form_submit) auto-filter to your entry path.
         </p>
       </div>
     </div>

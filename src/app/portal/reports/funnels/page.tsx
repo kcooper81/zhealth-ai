@@ -12,7 +12,7 @@
 import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
-import FunnelBuilder from "@/components/portal/FunnelBuilder";
+import FunnelBuilder, { type PageGroup } from "@/components/portal/FunnelBuilder";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
@@ -24,6 +24,8 @@ import {
   type FunnelDefinition,
 } from "@/lib/funnel-config";
 import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
+import { getAllWPPages, getAllWPPosts } from "@/lib/wp-content-list";
+import { listCourses } from "@/lib/thinkific";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
@@ -64,8 +66,9 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
     activeFunnels = FUNNELS;
   }
 
-  // Fetch funnel data for each active funnel + the page list for the picker
-  const [funnelResults, pagesForPicker] = await Promise.all([
+  // Fetch funnel data + every entry-page candidate (WP pages, WP posts,
+  // Thinkific courses, GA4 top pages from both properties).
+  const [funnelResults, wpPages, wpPosts, lmsCourses, gaWebPages, gaLmsPages] = await Promise.all([
     Promise.all(
       activeFunnels.map(async (f) => {
         if (!accessToken) {
@@ -90,6 +93,11 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
         }
       })
     ),
+    getAllWPPages().catch(() => []),
+    getAllWPPosts().catch(() => []),
+    cachedFetch("thinkific:courses:250", TTL.THINKIFIC_COURSES, () =>
+      listCourses({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } }))
+    ),
     accessToken
       ? cachedFetch(`ga4:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
           getPagesWithEntrances(accessToken, "website", rangeKey, 100).catch(() => [])
@@ -97,7 +105,53 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
           (pages as any[]).map((p) => ({ path: p.page, pageviews: p.pageviews }))
         )
       : Promise.resolve([] as Array<{ path: string; pageviews: number }>),
+    accessToken
+      ? cachedFetch(`ga4:pages:lms:${rangeKey}`, TTL.GA4_REPORTS, () =>
+          getPagesWithEntrances(accessToken, "lms", rangeKey, 100).catch(() => [])
+        ).then((pages) =>
+          (pages as any[]).map((p) => ({ path: p.page, pageviews: p.pageviews }))
+        )
+      : Promise.resolve([] as Array<{ path: string; pageviews: number }>),
   ]);
+
+  // Build grouped, dedup'd list for the picker
+  const seen = new Set<string>();
+  const dedupAdd = (group: PageGroup, path: string, label: string, sublabel?: string) => {
+    const k = `${group}::${path}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    pageGroups[group].push({ path, label, sublabel });
+  };
+  const pageGroups: Record<PageGroup, Array<{ path: string; label: string; sublabel?: string }>> = {
+    "Mapped landing pages": [],
+    "WordPress pages": [],
+    "WordPress posts": [],
+    "Thinkific courses": [],
+    "Recent GA4 traffic": [],
+  };
+
+  // 1. Known landing pages (top of dropdown — highest signal)
+  for (const lp of LANDING_PAGE_TAG_MAP) {
+    dedupAdd("Mapped landing pages", lp.path, lp.label, `tag ${lp.tagId}`);
+  }
+  // 2. All WP pages
+  for (const p of wpPages) {
+    dedupAdd("WordPress pages", p.path, p.title || p.path, p.path);
+  }
+  // 3. All WP posts
+  for (const p of wpPosts) {
+    dedupAdd("WordPress posts", p.path, p.title || p.path, p.path);
+  }
+  // 4. Thinkific courses (path = /courses/<slug>)
+  for (const c of (lmsCourses as any).items || []) {
+    if (c.slug) {
+      dedupAdd("Thinkific courses", `/courses/${c.slug}`, c.name || c.slug, `slug ${c.slug}`);
+    }
+  }
+  // 5. GA4 top pages — only ones not already in the list above
+  for (const p of [...gaWebPages, ...gaLmsPages]) {
+    dedupAdd("Recent GA4 traffic", p.path, p.path, `${p.pageviews.toLocaleString()} views`);
+  }
 
   return {
     range,
@@ -107,7 +161,7 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
     currentEntry: entry || null,
     currentSteps: stepsParam ? stepsParam.split(",").map((s) => s.trim()).filter(Boolean) : null,
     currentProperty: propertyParam || ("website" as const),
-    pagesForPicker,
+    pageGroups,
   };
 }
 
@@ -119,8 +173,6 @@ export default async function FunnelsReportPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const data = await loadFunnels(searchParams);
-
-  const knownPages = LANDING_PAGE_TAG_MAP.map((lp) => ({ path: lp.path, label: lp.label }));
 
   return (
     <main className="mx-auto max-w-7xl px-8 py-12">
@@ -149,8 +201,7 @@ export default async function FunnelsReportPage({
 
       <div className="mb-10">
         <FunnelBuilder
-          knownPages={knownPages}
-          topPages={data.pagesForPicker}
+          pageGroups={data.pageGroups}
           eventCatalog={FUNNEL_EVENT_CATALOG}
           currentEntry={data.currentEntry}
           currentSteps={data.currentSteps}
