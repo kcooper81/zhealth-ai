@@ -248,6 +248,253 @@ export async function getHighBouncePages(
     .slice(0, 15);
 }
 
+// ---- Custom events + cross-stitch ----
+
+/**
+ * Count occurrences of any GA4 event(s), broken out by an arbitrary set
+ * of dimensions. Powers the Channels / Landing Pages / Funnels reports.
+ *
+ * Pass eventName to scope to one event (recommended) — or omit to count
+ * all events (heavy and rarely useful).
+ */
+export async function getEventCounts(
+  accessToken: string,
+  property: GA4Property,
+  dateRange: string,
+  eventName: string,
+  dimensions: string[] = [],
+  limit: number = 100
+): Promise<Array<{ dims: Record<string, string>; eventCount: number; users: number }>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [
+      { name: "eventName" },
+      ...dimensions.map((d) => ({ name: d })),
+    ],
+    metrics: [{ name: "eventCount" }, { name: "totalUsers" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        stringFilter: { matchType: "EXACT", value: eventName },
+      },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => {
+    const dimVals: string[] = (row.dimensionValues || []).map((v: any) => v.value || "");
+    const dims: Record<string, string> = {};
+    dimensions.forEach((d, i) => {
+      dims[d] = dimVals[i + 1] || ""; // [0] is eventName
+    });
+    return {
+      dims,
+      eventCount: parseInt(row.metricValues?.[0]?.value || "0"),
+      users: parseInt(row.metricValues?.[1]?.value || "0"),
+    };
+  });
+}
+
+/**
+ * Aggregate ecommerce purchase metrics — total purchases, revenue, AOV —
+ * pivoted by an optional dimension (e.g. sessionCampaign, pagePath, itemId).
+ */
+export async function getEcommerce(
+  accessToken: string,
+  property: GA4Property,
+  dateRange: string,
+  pivot: string | null = null,
+  limit: number = 50
+): Promise<Array<{ dim: string; purchases: number; revenue: number; itemQuantity: number; avgValue: number }>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: pivot ? [{ name: pivot }] : [],
+    metrics: [
+      { name: "transactions" },
+      { name: "totalRevenue" },
+      { name: "itemsPurchased" },
+      { name: "averagePurchaseRevenue" },
+    ],
+    orderBys: [{ metric: { metricName: "totalRevenue" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => ({
+    dim: pivot ? row.dimensionValues?.[0]?.value || "(not set)" : "Total",
+    purchases: parseInt(row.metricValues?.[0]?.value || "0"),
+    revenue: parseFloat(row.metricValues?.[1]?.value || "0"),
+    itemQuantity: parseInt(row.metricValues?.[2]?.value || "0"),
+    avgValue: parseFloat(row.metricValues?.[3]?.value || "0"),
+  }));
+}
+
+/**
+ * Per-page metrics keyed by pagePath — used by the Landing Pages report.
+ * Returns one row per page that received traffic in the window, with
+ * pageviews + sessions + entrance count + bounceRate.
+ */
+export async function getPagesWithEntrances(
+  accessToken: string,
+  property: GA4Property,
+  dateRange: string,
+  limit: number = 200
+): Promise<Array<{
+  page: string;
+  pageviews: number;
+  users: number;
+  sessions: number;
+  entrances: number;
+  bounceRate: number;
+}>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "pagePath" }],
+    metrics: [
+      { name: "screenPageViews" },
+      { name: "totalUsers" },
+      { name: "sessions" },
+      { name: "entrances" },
+      { name: "bounceRate" },
+    ],
+    orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => ({
+    page: row.dimensionValues?.[0]?.value || "",
+    pageviews: parseInt(row.metricValues?.[0]?.value || "0"),
+    users: parseInt(row.metricValues?.[1]?.value || "0"),
+    sessions: parseInt(row.metricValues?.[2]?.value || "0"),
+    entrances: parseInt(row.metricValues?.[3]?.value || "0"),
+    bounceRate: parseFloat(row.metricValues?.[4]?.value || "0"),
+  }));
+}
+
+/**
+ * Channel-level rollup: utm_source / utm_medium / utm_campaign × {users,
+ * sessions, conversions, revenue}. Powers the Channels report.
+ */
+export async function getChannelRollup(
+  accessToken: string,
+  property: GA4Property,
+  dateRange: string,
+  limit: number = 100
+): Promise<Array<{
+  source: string;
+  medium: string;
+  campaign: string;
+  users: number;
+  sessions: number;
+  conversions: number;
+  revenue: number;
+}>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+      { name: "sessionCampaignName" },
+    ],
+    metrics: [
+      { name: "totalUsers" },
+      { name: "sessions" },
+      { name: "conversions" },
+      { name: "totalRevenue" },
+    ],
+    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => ({
+    source: row.dimensionValues?.[0]?.value || "(direct)",
+    medium: row.dimensionValues?.[1]?.value || "(none)",
+    campaign: row.dimensionValues?.[2]?.value || "(not set)",
+    users: parseInt(row.metricValues?.[0]?.value || "0"),
+    sessions: parseInt(row.metricValues?.[1]?.value || "0"),
+    conversions: parseFloat(row.metricValues?.[2]?.value || "0"),
+    revenue: parseFloat(row.metricValues?.[3]?.value || "0"),
+  }));
+}
+
+/**
+ * Compute a step funnel for a sequence of events. Each step is the count
+ * of distinct users that fired that event in the window. We don't enforce
+ * step ordering at the API layer (would need a funnelReport request — more
+ * heavyweight). For our team's reporting needs, bare counts are clear enough.
+ */
+export async function getFunnelSteps(
+  accessToken: string,
+  property: GA4Property,
+  dateRange: string,
+  steps: Array<{ name: string; eventName: string; pageMatch?: string }>
+): Promise<Array<{ name: string; eventName: string; users: number; events: number }>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const results: Array<{ name: string; eventName: string; users: number; events: number }> = [];
+
+  for (const step of steps) {
+    const dimensionFilter: any = {
+      filter: {
+        fieldName: "eventName",
+        stringFilter: { matchType: "EXACT", value: step.eventName },
+      },
+    };
+
+    let body: any = {
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "totalUsers" }, { name: "eventCount" }],
+      dimensionFilter,
+    };
+
+    if (step.pageMatch) {
+      body.dimensions = [{ name: "eventName" }, { name: "pagePath" }];
+      body.dimensionFilter = {
+        andGroup: {
+          expressions: [
+            dimensionFilter,
+            {
+              filter: {
+                fieldName: "pagePath",
+                stringFilter: { matchType: "BEGINS_WITH", value: step.pageMatch },
+              },
+            },
+          ],
+        },
+      };
+    }
+
+    try {
+      const data = await ga4Fetch(propertyId, accessToken, "runReport", body);
+      let users = 0;
+      let events = 0;
+      for (const row of data.rows || []) {
+        users += parseInt(row.metricValues?.[0]?.value || "0");
+        events += parseInt(row.metricValues?.[1]?.value || "0");
+      }
+      results.push({ name: step.name, eventName: step.eventName, users, events });
+    } catch {
+      results.push({ name: step.name, eventName: step.eventName, users: 0, events: 0 });
+    }
+  }
+
+  return results;
+}
+
 // ---- Comparison ----
 
 export async function getTrafficOverviewWithComparison(

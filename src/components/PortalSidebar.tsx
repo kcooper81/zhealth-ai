@@ -9,6 +9,14 @@ import {
   Globe,
   BarChart,
   Sparkles,
+  Mail,
+  Target,
+  Funnel,
+  Map,
+  GraduationCap,
+  Settings,
+  FileText,
+  Zap,
 } from "./icons";
 import ModeSwitcher from "./portal/ModeSwitcher";
 import SyncBadge from "./portal/SyncBadge";
@@ -20,14 +28,51 @@ type NavItem = {
   status?: "live" | "scaffold" | "soon";
 };
 
-const PORTAL_ITEMS: NavItem[] = [
-  { href: "/portal", label: "Overview", icon: Layers, status: "live" },
-  { href: "/portal/customer-flows", label: "Customer Flows", icon: Activity, status: "scaffold" },
-  { href: "/portal/keap", label: "Keap CRM", icon: Users, status: "live" },
-  { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
-  { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
-  { href: "/portal/analytics", label: "Analytics", icon: BarChart, status: "live" },
-  { href: "/portal/reports/weekly", label: "Weekly Report", icon: BarChart, status: "live" },
+type NavGroup = {
+  title: string;
+  items: NavItem[];
+};
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Overview",
+    items: [
+      { href: "/portal", label: "Home", icon: Layers, status: "live" },
+    ],
+  },
+  {
+    title: "Reports",
+    items: [
+      { href: "/portal/reports/channels", label: "Channels", icon: Map, status: "live" },
+      { href: "/portal/reports/landing-pages", label: "Landing pages", icon: Target, status: "live" },
+      { href: "/portal/reports/courses", label: "Courses", icon: GraduationCap, status: "live" },
+      { href: "/portal/reports/emails", label: "Emails", icon: Mail, status: "live" },
+      { href: "/portal/reports/campaigns", label: "Campaigns", icon: Zap, status: "live" },
+      { href: "/portal/reports/funnels", label: "Funnels", icon: Funnel, status: "live" },
+    ],
+  },
+  {
+    title: "Summaries",
+    items: [
+      { href: "/portal/reports/weekly", label: "Weekly", icon: BarChart, status: "live" },
+    ],
+  },
+  {
+    title: "Sources",
+    items: [
+      { href: "/portal/keap", label: "Keap CRM", icon: Users, status: "live" },
+      { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
+      { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
+      { href: "/portal/analytics", label: "GA4 analytics", icon: BarChart, status: "live" },
+      { href: "/portal/customer-flows", label: "Customer flows", icon: Activity, status: "scaffold" },
+    ],
+  },
+  {
+    title: "Setup",
+    items: [
+      { href: "/portal/reports/setup", label: "Tracking setup", icon: Settings, status: "live" },
+    ],
+  },
 ];
 
 function statusDot(status?: NavItem["status"]) {
@@ -75,6 +120,11 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+function isActive(href: string, pathname: string): boolean {
+  if (href === "/portal") return pathname === "/portal";
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 export default function PortalSidebar() {
   const pathname = usePathname() || "";
 
@@ -95,23 +145,20 @@ export default function PortalSidebar() {
       <ModeSwitcher tone="light" />
 
       <nav className="flex-1 overflow-y-auto px-2 py-2">
-        <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
-          Workspaces
-        </div>
-        <ul className="space-y-0.5">
-          {PORTAL_ITEMS.map((item) => (
-            <li key={item.href}>
-              <NavLink
-                item={item}
-                active={
-                  item.href === "/portal"
-                    ? pathname === "/portal"
-                    : pathname.startsWith(item.href)
-                }
-              />
-            </li>
-          ))}
-        </ul>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} className="mb-4">
+            <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
+              {group.title}
+            </div>
+            <ul className="space-y-0.5">
+              {group.items.map((item) => (
+                <li key={item.href}>
+                  <NavLink item={item} active={isActive(item.href, pathname)} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       <SyncBadge />

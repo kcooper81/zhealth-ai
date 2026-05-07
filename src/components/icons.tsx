@@ -512,3 +512,29 @@ export const Terminal = icon(
     <line x1="12" y1="19" x2="20" y2="19" />
   </>
 );
+
+export const Mail = icon(
+  <>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="M2 7l10 7 10-7" />
+  </>
+);
+
+export const Target = icon(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+  </>
+);
+
+export const Funnel = icon(
+  <path d="M3 4h18l-7 9v6l-4 2v-8L3 4z" />
+);
+
+export const Map = icon(
+  <>
+    <path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z" />
+    <path d="M9 4v14M15 6v14" />
+  </>
+);
