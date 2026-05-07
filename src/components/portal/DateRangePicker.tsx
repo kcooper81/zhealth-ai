@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useSearchParams, usePathname } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import { ChevronDown } from "@/components/icons";
 
 const PRESETS = [
@@ -15,12 +15,11 @@ const PRESETS = [
 ] as const;
 
 export default function DateRangePicker() {
-  const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const current = search.get("range") || "30d";
@@ -42,13 +41,17 @@ export default function DateRangePicker() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  /**
+   * Hard-navigate. router.push + router.refresh is unreliable on dynamic
+   * App Router pages when only the query string changes — the server-render
+   * cache often returns the previous payload. window.location.assign forces
+   * a full re-fetch with the new searchParams every time.
+   */
   const navigate = (params: URLSearchParams) => {
     const qs = params.toString();
     const target = qs ? `${pathname}?${qs}` : pathname;
-    startTransition(() => {
-      router.push(target, { scroll: false });
-      router.refresh();
-    });
+    setPending(true);
+    window.location.assign(target);
   };
 
   const setRange = (id: string) => {
