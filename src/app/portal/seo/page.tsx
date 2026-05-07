@@ -19,6 +19,7 @@ import Insight, { InsightGrid } from "@/components/portal/Insight";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
 import { SectionSkeleton, TableSkeleton, KPIGridSkeleton } from "@/components/portal/Skeletons";
+import FilterableTable, { type Column } from "@/components/portal/FilterableTable";
 import { runSEOAudit } from "@/lib/wp-seo-audit";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
@@ -649,48 +650,95 @@ export default async function SEOAuditPage({
       <Section
         id="section-all"
         title={`All audited pages (${audit.rows.length})`}
-        description="The full list — sorted score ascending so the worst surfaces first."
+        description="Search by title or path. Sort by clicking column headers. Use the chips to narrow to common SEO problems."
         action={<ExportButton targetId="section-all" filename="seo-all" />}
       >
-        <Card padded={false}>
-          <div className="max-h-[600px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 border-b border-gray-200/70 bg-white/95 backdrop-blur dark:border-white/5 dark:bg-[#1f1f22]/95">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Page</th>
-                  <th className="px-5 py-3">Type</th>
-                  <th className="px-5 py-3 text-right">Title len</th>
-                  <th className="px-5 py-3 text-right">Desc len</th>
-                  <th className="px-5 py-3 text-right">Words</th>
-                  <th className="px-5 py-3 text-right">Issues</th>
-                  <th className="px-5 py-3 text-right">Score</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {audit.rows.map((r) => (
-                  <tr key={r.id} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-3">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{r.title}</div>
-                      <a href={r.link} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-gray-500 hover:underline">
-                        {r.path}
-                      </a>
-                    </td>
-                    <td className="px-5 py-3 text-xs uppercase tracking-wider text-gray-500">{r.type}</td>
-                    <td className={`px-5 py-3 text-right tabular-nums ${r.titleLength === 0 ? "text-rose-600" : r.titleLength < 25 || r.titleLength > 65 ? "text-amber-600" : ""}`}>
-                      {r.titleLength}
-                    </td>
-                    <td className={`px-5 py-3 text-right tabular-nums ${r.descriptionLength === 0 ? "text-rose-600" : r.descriptionLength < 70 || r.descriptionLength > 165 ? "text-amber-600" : ""}`}>
-                      {r.descriptionLength || "—"}
-                    </td>
-                    <td className="px-5 py-3 text-right tabular-nums">{r.wordCount.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{r.issues.length}</td>
-                    <td className={`px-5 py-3 text-right tabular-nums font-semibold ${scoreCls(r.score)}`}>{r.score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <FilterableTable
+          rows={audit.rows}
+          rowKey={(r) => String(r.id)}
+          searchableKeys={["title", "path", "slug"]}
+          placeholder="Search by page title or URL path…"
+          maxHeight={600}
+          presets={[
+            { label: "Score < 70", predicate: (r) => r.score < 70 },
+            { label: "Missing description", predicate: (r) => r.issues.some((i) => i.code === "missing_description") },
+            { label: "Thin content", predicate: (r) => r.issues.some((i) => i.code === "thin_content") },
+            { label: "Posts only", predicate: (r) => r.type === "post" },
+            { label: "Pages only", predicate: (r) => r.type === "page" },
+          ]}
+          initialSort={{ key: "score", dir: "asc" }}
+          columns={[
+            {
+              key: "title",
+              label: "Page",
+              sortable: true,
+              accessor: (r) => r.title,
+              render: (r) => (
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">{r.title}</div>
+                  <a href={r.link} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-gray-500 hover:underline">
+                    {r.path}
+                  </a>
+                </div>
+              ),
+            },
+            {
+              key: "type",
+              label: "Type",
+              sortable: true,
+              accessor: (r) => r.type,
+              render: (r) => <span className="text-xs uppercase tracking-wider text-gray-500">{r.type}</span>,
+            },
+            {
+              key: "titleLength",
+              label: "Title len",
+              sortable: true,
+              numeric: true,
+              accessor: (r) => r.titleLength,
+              render: (r) => (
+                <span className={r.titleLength === 0 ? "text-rose-600" : r.titleLength < 25 || r.titleLength > 65 ? "text-amber-600" : ""}>
+                  {r.titleLength}
+                </span>
+              ),
+            },
+            {
+              key: "descriptionLength",
+              label: "Desc len",
+              sortable: true,
+              numeric: true,
+              accessor: (r) => r.descriptionLength,
+              render: (r) => (
+                <span className={r.descriptionLength === 0 ? "text-rose-600" : r.descriptionLength < 70 || r.descriptionLength > 165 ? "text-amber-600" : ""}>
+                  {r.descriptionLength || "—"}
+                </span>
+              ),
+            },
+            {
+              key: "wordCount",
+              label: "Words",
+              sortable: true,
+              numeric: true,
+              accessor: (r) => r.wordCount,
+              render: (r) => r.wordCount.toLocaleString(),
+            },
+            {
+              key: "issues",
+              label: "Issues",
+              sortable: true,
+              numeric: true,
+              accessor: (r) => r.issues.length,
+              render: (r) => r.issues.length,
+            },
+            {
+              key: "score",
+              label: "Score",
+              sortable: true,
+              numeric: true,
+              accessor: (r) => r.score,
+              render: (r) => <span className={`font-semibold ${scoreCls(r.score)}`}>{r.score}</span>,
+            },
+          ] as Column<typeof audit.rows[number]>[]}
+        />
       </Section>
 
       </div>

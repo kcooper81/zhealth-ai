@@ -16,6 +16,7 @@ import Insight, { InsightGrid } from "@/components/portal/Insight";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
 import { SectionSkeleton, KPIGridSkeleton } from "@/components/portal/Skeletons";
+import FilterableTable, { type Column } from "@/components/portal/FilterableTable";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import {
@@ -284,74 +285,76 @@ async function GSCBody({
 
       <Section
         id="section-queries"
-        title="Top queries"
-        description={`The 50 queries that drove the most search clicks in ${range.label.toLowerCase()}.`}
+        title={`Top queries (${topQueries.length})`}
+        description={`Search and sort to find specific queries. Use chips to narrow to common cases.`}
         action={<ExportButton targetId="section-queries" filename="gsc-top-queries" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Query</th>
-                  <th className="px-5 py-3 text-right">Clicks</th>
-                  <th className="px-5 py-3 text-right">Impressions</th>
-                  <th className="px-5 py-3 text-right">CTR</th>
-                  <th className="px-5 py-3 text-right">Position</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {topQueries.slice(0, 50).map((q, i) => (
-                  <tr key={i} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-2 font-medium text-gray-900 dark:text-gray-100">{q.query}</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{q.clicks.toLocaleString()}</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{q.impressions.toLocaleString()}</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{(q.ctr * 100).toFixed(2)}%</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{q.position.toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <FilterableTable
+          rows={topQueries}
+          rowKey={(q) => q.query}
+          searchableKeys={["query"]}
+          placeholder="Search queries…"
+          maxHeight={500}
+          presets={[
+            { label: "Page 1 (≤10)", predicate: (q: any) => q.position <= 10 },
+            { label: "Page 2 (11–20)", predicate: (q: any) => q.position > 10 && q.position <= 20 },
+            { label: ">100 impressions", predicate: (q: any) => q.impressions > 100 },
+            { label: "Low CTR (<2%)", predicate: (q: any) => q.ctr < 0.02 },
+          ]}
+          initialSort={{ key: "clicks", dir: "desc" }}
+          columns={[
+            {
+              key: "query",
+              label: "Query",
+              sortable: true,
+              accessor: (q: any) => q.query,
+              render: (q: any) => <span className="font-medium text-gray-900 dark:text-gray-100">{q.query}</span>,
+            },
+            { key: "clicks", label: "Clicks", sortable: true, numeric: true, accessor: (q: any) => q.clicks, render: (q: any) => q.clicks.toLocaleString() },
+            { key: "impressions", label: "Impressions", sortable: true, numeric: true, accessor: (q: any) => q.impressions, render: (q: any) => q.impressions.toLocaleString() },
+            { key: "ctr", label: "CTR", sortable: true, numeric: true, accessor: (q: any) => q.ctr, render: (q: any) => `${(q.ctr * 100).toFixed(2)}%` },
+            { key: "position", label: "Position", sortable: true, numeric: true, accessor: (q: any) => q.position, render: (q: any) => q.position.toFixed(1) },
+          ] as Column<any>[]}
+        />
       </Section>
 
       <Section
         id="section-pages"
-        title="Top pages"
-        description="Which URLs are landing search traffic. Sorted by clicks."
+        title={`Top pages (${topPages.length})`}
+        description="Which URLs are landing search traffic. Search by path."
         action={<ExportButton targetId="section-pages" filename="gsc-top-pages" />}
       >
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-5 py-3">Page</th>
-                  <th className="px-5 py-3 text-right">Clicks</th>
-                  <th className="px-5 py-3 text-right">Impressions</th>
-                  <th className="px-5 py-3 text-right">CTR</th>
-                  <th className="px-5 py-3 text-right">Position</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {topPages.slice(0, 50).map((p, i) => (
-                  <tr key={i} className="text-gray-700 dark:text-gray-300">
-                    <td className="px-5 py-2">
-                      <a href={p.page} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-gray-900 hover:underline dark:text-gray-100">
-                        {(() => { try { return new URL(p.page).pathname; } catch { return p.page; } })()}
-                      </a>
-                    </td>
-                    <td className="px-5 py-2 text-right tabular-nums">{p.clicks.toLocaleString()}</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{p.impressions.toLocaleString()}</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{(p.ctr * 100).toFixed(2)}%</td>
-                    <td className="px-5 py-2 text-right tabular-nums">{p.position.toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <FilterableTable
+          rows={topPages}
+          rowKey={(p) => p.page}
+          searchableKeys={["page"]}
+          placeholder="Search by URL path…"
+          maxHeight={500}
+          presets={[
+            { label: "Page 1 (≤10)", predicate: (p: any) => p.position <= 10 },
+            { label: "Page 2 (11–20)", predicate: (p: any) => p.position > 10 && p.position <= 20 },
+            { label: ">100 impressions", predicate: (p: any) => p.impressions > 100 },
+            { label: "0 clicks", predicate: (p: any) => p.clicks === 0 },
+          ]}
+          initialSort={{ key: "clicks", dir: "desc" }}
+          columns={[
+            {
+              key: "page",
+              label: "Page",
+              sortable: true,
+              accessor: (p: any) => p.page,
+              render: (p: any) => (
+                <a href={p.page} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-gray-900 hover:underline dark:text-gray-100">
+                  {(() => { try { return new URL(p.page).pathname; } catch { return p.page; } })()}
+                </a>
+              ),
+            },
+            { key: "clicks", label: "Clicks", sortable: true, numeric: true, accessor: (p: any) => p.clicks, render: (p: any) => p.clicks.toLocaleString() },
+            { key: "impressions", label: "Impressions", sortable: true, numeric: true, accessor: (p: any) => p.impressions, render: (p: any) => p.impressions.toLocaleString() },
+            { key: "ctr", label: "CTR", sortable: true, numeric: true, accessor: (p: any) => p.ctr, render: (p: any) => `${(p.ctr * 100).toFixed(2)}%` },
+            { key: "position", label: "Position", sortable: true, numeric: true, accessor: (p: any) => p.position, render: (p: any) => p.position.toFixed(1) },
+          ] as Column<any>[]}
+        />
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">
