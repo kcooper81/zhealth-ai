@@ -17,7 +17,6 @@
  */
 import { listContacts, getContactsWithTag, listAllContactsInRange } from "@/lib/keap";
 import { cachedFetch, TTL, cacheGet } from "@/lib/cache";
-import KPIGrid from "@/components/portal/KPIGrid";
 import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import EmailMetricsForm from "@/components/portal/EmailMetricsForm";
@@ -83,7 +82,7 @@ async function loadReportData(searchParams: Record<string, string | string[] | u
       TTL.KEAP_TAGS,
       () => getContactsWithTag(SYSTEM_TAGS.optedOut, { limit: 1 }).catch(() => ({ count: 0, contacts: [] }))
     ),
-    cacheGet<any>("weekly-report:email-metrics:latest"),
+    cacheGet<any[]>("weekly-report:email-metrics:history"),
   ]);
 
   // ---- Tag/source counts derived from new-contacts list ----
@@ -127,13 +126,78 @@ async function loadReportData(searchParams: Record<string, string | string[] | u
     unknownSources,
     grandTotalLeads,
     newContactsTotal: newContacts.length,
-    emailMetrics,
+    emailMetricsHistory: emailMetrics ?? [],
   };
 }
 
 function fmtPct(n: number | null | undefined, digits = 2): string {
   if (n == null) return "—";
   return `${(n * 100).toFixed(digits)}%`;
+}
+
+function MetricRow({
+  label,
+  current,
+  prior,
+  format,
+  isPercent = false,
+  source,
+  higherIsWorse = false,
+}: {
+  label: string;
+  current: number | null;
+  prior: number | null;
+  format: (n: number) => string;
+  isPercent?: boolean;
+  source: "Auto" | "Manual";
+  higherIsWorse?: boolean;
+}) {
+  // Compute delta + display
+  let deltaCell: React.ReactNode = <span className="text-gray-400">—</span>;
+  if (current != null && prior != null) {
+    const diff = current - prior;
+    if (Math.abs(diff) > 1e-9) {
+      const isUp = diff > 0;
+      // For "higherIsWorse" metrics like complaint rate, up = bad
+      const isBadDirection = higherIsWorse ? isUp : !isUp;
+      const cls = isBadDirection ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400";
+      const arrow = isUp ? "▲" : "▼";
+      const display = isPercent ? `${(diff * 100).toFixed(2)}%` : format(Math.abs(diff));
+      deltaCell = (
+        <span className={`tabular-nums font-medium ${cls}`}>
+          {arrow} {isPercent ? display.replace(/^-/, "") : display}
+        </span>
+      );
+    } else {
+      deltaCell = <span className="text-gray-500">no change</span>;
+    }
+  } else if (current != null && prior == null) {
+    deltaCell = <span className="text-xs text-gray-400">no prior week</span>;
+  }
+
+  return (
+    <tr className="text-gray-700 dark:text-gray-300">
+      <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{label}</td>
+      <td className="px-5 py-3 text-right tabular-nums font-semibold">
+        {current != null ? format(current) : <span className="text-gray-400">Pending</span>}
+      </td>
+      <td className="px-5 py-3 text-right">{deltaCell}</td>
+      <td className="px-5 py-3 text-right tabular-nums text-gray-500">
+        {prior != null ? format(prior) : <span className="text-gray-400">—</span>}
+      </td>
+      <td className="px-5 py-3 text-xs">
+        {source === "Auto" ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+            Auto
+          </span>
+        ) : (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            Manual
+          </span>
+        )}
+      </td>
+    </tr>
+  );
 }
 
 /**
@@ -245,13 +309,15 @@ export default async function WeeklyReportPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const data = await loadReportData(searchParams);
-  const insights = generateInsights(data);
+  // Latest record + previous record for week-over-week delta math
+  const m = data.emailMetricsHistory[0] || null;
+  const prev = data.emailMetricsHistory[1] || null;
+  const insights = generateInsights({ ...data, emailMetrics: m, prevEmailMetrics: prev });
   const updatedAt = new Date().toLocaleString("en-US", {
     timeZone: "America/Los_Angeles",
     dateStyle: "medium",
     timeStyle: "short",
   });
-  const m = data.emailMetrics;
   const reasonsRaw: string = m?.unsubscribe_reasons || "";
   const reasons = reasonsRaw ? reasonsRaw.split(/\n+/).map((r: string) => r.trim()).filter(Boolean) : [];
 
@@ -322,34 +388,56 @@ export default async function WeeklyReportPage({
       {/* ===== EMAIL STUFF ===== */}
       <Section
         title="Email Performance"
-        description="Auto-pulled where possible. Open / click / complaint rates are not in Keap's REST API — manual entry until webhook integration is built."
+        description="Auto-pulled where possible. Click / open / complaint rates are not in Keap's REST API — manual entry until webhook integration is built. Once you've saved metrics for two weeks, weekly change will compute automatically."
       >
-        <KPIGrid
-          accent="blue"
-          kpis={[
-            {
-              label: "Total Engaged List",
-              value: data.totalEngaged,
-              hint: `Last week ${data.lastWeekTotal.toLocaleString()} · Auto-pulled`,
-              trend: data.weeklyChange !== 0 ? { value: Math.abs(data.weeklyChange), positive: data.weeklyChange > 0 } : undefined,
-            },
-            {
-              label: "Email Click Rate",
-              value: m?.click_rate != null ? fmtPct(m.click_rate) : "Pending",
-              hint: m?.week_of ? `As of ${m.week_of} · Manual` : "Update via form below",
-            },
-            {
-              label: "Email Open Rate",
-              value: m?.open_rate != null ? fmtPct(m.open_rate) : "Pending",
-              hint: m?.week_of ? `As of ${m.week_of} · Manual` : "Update via form below",
-            },
-            {
-              label: "Complaint Rate",
-              value: m?.complaint_rate != null ? fmtPct(m.complaint_rate, 3) : "Pending",
-              hint: m?.week_of ? `As of ${m.week_of} · Manual` : "Update via form below",
-            },
-          ]}
-        />
+        {/* Spreadsheet-style table: Metric | TOTAL | WEEKLY CHANGE | LAST WEEK | SOURCE */}
+        <Card padded={false}>
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
+              <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-5 py-3">Metric</th>
+                <th className="px-5 py-3 text-right">Total / Current</th>
+                <th className="px-5 py-3 text-right">Weekly Change</th>
+                <th className="px-5 py-3 text-right">Last Week</th>
+                <th className="px-5 py-3 text-xs">Source</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+              <MetricRow
+                label="Total Engaged Email List"
+                current={data.totalEngaged}
+                prior={data.lastWeekTotal}
+                format={(n) => n.toLocaleString()}
+                source="Auto"
+              />
+              <MetricRow
+                label="Email Click Rate (last 7 days)"
+                current={m?.click_rate ?? null}
+                prior={prev?.click_rate ?? null}
+                format={(n) => fmtPct(n, 2)}
+                isPercent
+                source="Manual"
+              />
+              <MetricRow
+                label="Email Open Rate (last 7 days)"
+                current={m?.open_rate ?? null}
+                prior={prev?.open_rate ?? null}
+                format={(n) => fmtPct(n, 2)}
+                isPercent
+                source="Manual"
+              />
+              <MetricRow
+                label="Email Complaint Rate"
+                current={m?.complaint_rate ?? null}
+                prior={prev?.complaint_rate ?? null}
+                format={(n) => fmtPct(n, 3)}
+                isPercent
+                source="Manual"
+                higherIsWorse
+              />
+            </tbody>
+          </table>
+        </Card>
 
         {/* Unsubscribes split: all-time auto-pulled from tag, 30-day delta + reasons manual */}
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">

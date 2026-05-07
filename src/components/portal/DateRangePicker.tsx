@@ -51,6 +51,9 @@ export default function DateRangePicker() {
       setShowCustom(true);
     }
     router.replace(`?${params.toString()}`, { scroll: false });
+    // Force server re-render with the new searchParams; router.replace alone
+    // doesn't always trigger an RSC re-fetch on dynamic pages.
+    router.refresh();
     if (id !== "custom") setOpen(false);
   };
 
@@ -59,6 +62,7 @@ export default function DateRangePicker() {
     params.set("range", "custom");
     params.set(which, val);
     router.replace(`?${params.toString()}`, { scroll: false });
+    router.refresh();
   };
 
   const activeLabel =
