@@ -186,8 +186,7 @@ export default async function LandingPagesReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          For every page that received traffic in {data.range.label.toLowerCase()}: visits →
-          CTA clicks → form submits → Keap tag → enroll clicks → attributed revenue.
+          How does each page convert from visit to lead to sale?
         </p>
       </header>
 

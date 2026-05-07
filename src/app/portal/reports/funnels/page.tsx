@@ -361,7 +361,7 @@ export default async function FunnelsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Built-in cross-channel funnels plus your saved custom funnel reports. Click <strong>Build a new funnel</strong> to add one for any WP page, post, or Thinkific course.
+          Where do visitors get stuck on each path to purchase?
         </p>
       </header>
 

@@ -12,9 +12,51 @@ const GSC_API = "https://searchconsole.googleapis.com/webmasters/v3";
 
 const SITE_URL = process.env.WP_SITE_URL || "https://zhealtheducation.com";
 
-/** GSC accepts both "https://example.com/" and "sc-domain:example.com" — we use the URL form. */
-function siteParam(): string {
-  return SITE_URL.endsWith("/") ? SITE_URL : SITE_URL + "/";
+/**
+ * Resolve which GSC property to query. The user's account may have either
+ * a URL-prefix property ("https://zhealtheducation.com/") OR a domain
+ * property ("sc-domain:zhealtheducation.com") — and only the granted one
+ * works. We list the account's sites and pick the matching one.
+ *
+ * Cached per token via the module's WeakMap (token → siteParam) so we
+ * don't list sites on every API call.
+ */
+const siteCache = new Map<string, string>();
+
+async function resolveSiteParam(accessToken: string): Promise<string> {
+  if (siteCache.has(accessToken)) return siteCache.get(accessToken)!;
+
+  let host = "zhealtheducation.com";
+  try { host = new URL(SITE_URL).hostname.replace(/^www\./, ""); } catch {}
+
+  // List the user's GSC properties
+  const r = await fetch(`${GSC_API}/sites`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error(`Search Console — couldn't list properties (${r.status}). ${text.slice(0, 200)}`);
+  }
+  const data = await r.json();
+  const sites: Array<{ siteUrl: string; permissionLevel: string }> = data.siteEntry || [];
+
+  const wantUrl = (SITE_URL.endsWith("/") ? SITE_URL : SITE_URL + "/").toLowerCase();
+  const wantDomain = `sc-domain:${host}`.toLowerCase();
+
+  // Prefer exact URL match, fall back to domain match
+  const found = sites.find((s) => s.siteUrl.toLowerCase() === wantUrl)
+    || sites.find((s) => s.siteUrl.toLowerCase() === wantDomain)
+    || sites.find((s) => s.siteUrl.toLowerCase().includes(host));
+
+  if (!found) {
+    const seen = sites.map((s) => s.siteUrl).join(", ") || "(none)";
+    throw new Error(
+      `Your Google account has access to these GSC properties: ${seen}. None match ${SITE_URL}. Add the signed-in account as Owner or Full user on the Z-Health property in Search Console.`
+    );
+  }
+
+  siteCache.set(accessToken, found.siteUrl);
+  return found.siteUrl;
 }
 
 async function gscFetch(
@@ -22,7 +64,8 @@ async function gscFetch(
   endpoint: string,
   body: Record<string, unknown>
 ): Promise<any> {
-  const url = `${GSC_API}/sites/${encodeURIComponent(siteParam())}/${endpoint}`;
+  const site = await resolveSiteParam(accessToken);
+  const url = `${GSC_API}/sites/${encodeURIComponent(site)}/${endpoint}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -39,9 +82,25 @@ async function gscFetch(
     } catch {
       msg = response.statusText;
     }
+    // Specific guidance for 403s — tells us scope vs property access
+    if (response.status === 403) {
+      throw new Error(
+        `Search Console — 403 on ${site}. Either the OAuth scope isn't granted (sign out, then sign back in via /portal/analytics — Google will re-prompt for the webmasters.readonly permission) or this Google account isn't a Full/Owner user on the property. Original: ${msg}`
+      );
+    }
+    if (response.status === 401) {
+      throw new Error(
+        `Search Console — 401 (token invalid). Sign out and sign back in. Original: ${msg}`
+      );
+    }
     throw new Error(`Search Console API error (${response.status}): ${msg}`);
   }
   return response.json();
+}
+
+/** Surfaces the resolved property + permission level — useful for debugging. */
+export async function getResolvedProperty(accessToken: string): Promise<string> {
+  return resolveSiteParam(accessToken);
 }
 
 /** YYYY-MM-DD start/end pair from a GA4-style range key. */

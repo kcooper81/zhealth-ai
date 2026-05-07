@@ -94,10 +94,7 @@ export default async function CampaignsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Keap sequences with their active reach and lifecycle. To attribute traffic or revenue
-          to a specific campaign, tag its outbound emails with{" "}
-          <code className="rounded bg-gray-100 px-1 dark:bg-white/10">utm_campaign=&lt;slug&gt;</code>{" "}
-          and check the Channels or Funnels report.
+          Which Keap sequences are still reaching contacts, and which have stalled?
         </p>
       </header>
 

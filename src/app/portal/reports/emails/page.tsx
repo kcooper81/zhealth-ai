@@ -172,7 +172,7 @@ export default async function EmailsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Keap broadcasts in {data.range.label.toLowerCase()} cross-stitched against email-medium traffic and purchase attribution from GA4.
+          Which email broadcasts drove traffic and sales?
         </p>
         <p className="mt-2 max-w-2xl text-xs text-gray-500 dark:text-gray-500">
           Note: Keap REST API doesn&apos;t expose per-email open/click rates. The Weekly Report has manual fields for those numbers.

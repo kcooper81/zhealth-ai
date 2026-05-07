@@ -220,7 +220,7 @@ export default async function CoursesReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Per-course performance for {data.range.label.toLowerCase()}: views → checkout → purchase, joined to Thinkific orders + enrollments.
+          Which courses are selling, and where are the buyers coming from?
         </p>
       </header>
 

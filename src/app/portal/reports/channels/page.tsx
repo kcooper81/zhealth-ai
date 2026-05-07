@@ -173,8 +173,7 @@ export default async function ChannelsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Every traffic channel × every KPI for {data.range.label.toLowerCase()}.
-          Sessions, users, conversions, and revenue from GA4 — joined with Keap leads.
+          Which traffic sources actually drive sales?
         </p>
       </header>
 

@@ -57,10 +57,36 @@ async function GSCBody({
     );
   }
 
+  // Try the overview first — if it errors, surface the real message
+  let gscError: string | null = null;
+  const safeOverview = await getOverview(accessToken, rangeKey).catch((e) => {
+    gscError = e instanceof Error ? e.message : "Search Console fetch failed";
+    return null;
+  });
+
+  if (gscError) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
+        <p className="text-sm text-amber-900 dark:text-amber-200">
+          <strong>Search Console error:</strong>
+        </p>
+        <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+          {gscError}
+        </p>
+        <details className="mt-3 text-xs text-amber-800 dark:text-amber-300">
+          <summary className="cursor-pointer">If sign-in didn&apos;t fix it</summary>
+          <ol className="mt-2 ml-5 list-decimal space-y-1">
+            <li>Go to <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="underline">myaccount.google.com/permissions</a> and remove access for &ldquo;Z-Health AI&rdquo; (so Google forces a fresh consent prompt).</li>
+            <li>In <a href="https://search.google.com/search-console/users" target="_blank" rel="noopener noreferrer" className="underline">Search Console &rarr; Users</a>, confirm your Google account is listed as Owner or Full user.</li>
+            <li>Sign back in at <a href="/portal/analytics" className="underline">/portal/analytics</a>. The consent screen will request the new <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/30">webmasters.readonly</code> permission.</li>
+          </ol>
+        </details>
+      </Card>
+    );
+  }
+
   const [overview, topQueries, topPages, striking, lowCtr, devices, countries, daily] = await Promise.all([
-    cachedFetch(`gsc:overview:${rangeKey}`, TTL.GA4_OVERVIEW, () =>
-      getOverview(accessToken, rangeKey).catch(() => null)
-    ),
+    Promise.resolve(safeOverview),
     cachedFetch(`gsc:queries:${rangeKey}`, TTL.GA4_REPORTS, () =>
       getTopQueries(accessToken, rangeKey, 100).catch(() => [])
     ),
@@ -88,9 +114,7 @@ async function GSCBody({
     return (
       <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
         <p className="text-sm text-amber-900 dark:text-amber-200">
-          <strong>GSC scope not granted yet.</strong> Sign out and sign back in via
-          <a href="/portal/analytics" className="ml-1 underline">/portal/analytics</a> — the consent screen
-          will request the additional <code>webmasters.readonly</code> permission.
+          <strong>No Search Console data yet for this date range.</strong> Try a wider window or check that the property has any traffic.
         </p>
       </Card>
     );
@@ -524,8 +548,7 @@ export default function GSCDashboardPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Real Google search performance for zhealtheducation.com — what queries drove clicks,
-          which pages ranked, and which URLs Chrome users are flagging as slow.
+          What does Google show people who search for us, and how are they responding?
         </p>
       </header>
 

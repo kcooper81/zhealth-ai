@@ -208,13 +208,13 @@ async function SearchConsoleSection({
       <Section
         id="section-gsc"
         title="From Google Search Console"
-        description="Couldn't fetch GSC data."
+        description="See the Search rankings page for the full diagnostic."
       >
         <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
           <p className="text-sm text-amber-900 dark:text-amber-200">
-            <strong>GSC scope not granted yet.</strong> Sign out and sign back in via
-            <a href="/portal/analytics" className="ml-1 underline">/portal/analytics</a> — the consent screen
-            will request the additional <code>webmasters.readonly</code> permission.
+            Couldn&apos;t load Search Console data for this window.
+            Open <a href="/portal/gsc" className="underline">Search rankings</a> for the
+            specific error + step-by-step fix.
           </p>
         </Card>
       </Section>
@@ -533,8 +533,7 @@ export default async function SEOAuditPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Every WordPress page and post audited against on-page SEO best practices, with the
-          biggest fixes ranked by traffic impact.
+          Where can we improve to rank higher in search?
         </p>
       </header>
 
