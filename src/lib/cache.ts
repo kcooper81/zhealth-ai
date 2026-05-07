@@ -13,6 +13,15 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 // ---------------------------------------------------------------------------
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
+/**
+ * In-flight fetch dedupe — when N concurrent requests miss the same
+ * cache key, only the first one calls the underlying fetcher; the others
+ * await the same Promise and reuse its result. Dramatically reduces
+ * external API load on cold-cache spikes (e.g. when the cron sync
+ * expires a key and 5 users hit the page simultaneously).
+ */
+const inflight = new Map<string, Promise<unknown>>();
+
 // ---------------------------------------------------------------------------
 // Default TTLs (seconds)
 // ---------------------------------------------------------------------------
@@ -230,9 +239,23 @@ export async function cachedFetch<T>(
   const cached = await cacheGet<T>(key);
   if (cached !== null) return cached;
 
-  const data = await fetcher();
-  await cacheSet(key, data, ttlSeconds);
-  return data;
+  // Dedupe concurrent misses for the same key
+  const existing = inflight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const promise = (async () => {
+    try {
+      const data = await fetcher();
+      // Fire-and-forget cache write so we don't block the return
+      cacheSet(key, data, ttlSeconds);
+      return data;
+    } finally {
+      inflight.delete(key);
+    }
+  })();
+
+  inflight.set(key, promise);
+  return promise;
 }
 
 /**

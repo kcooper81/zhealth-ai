@@ -218,20 +218,70 @@ export async function getTrackingStatus(): Promise<TrackingInstallStatus> {
 async function isSnippetLive(): Promise<boolean> {
   try {
     const html = await fetch(SITE, { cache: "no-store" }).then((r) => r.text());
-    if (html.includes("__zh_tracking_loaded")) return true;
-    // Autoptimize may inline as base64; decode and search
-    const re = /<script[^>]*src="data:text\/javascript;base64,([^"]+)"/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html))) {
-      try {
-        const decoded = Buffer.from(m[1], "base64").toString();
-        if (decoded.includes("__zh_tracking_loaded")) return true;
-      } catch {}
-    }
-    return false;
+    return htmlContains(html, "__zh_tracking_loaded");
   } catch {
     return false;
   }
+}
+
+/** Decodes Autoptimize's base64-inlined scripts before searching the HTML. */
+function htmlContains(html: string, marker: string): boolean {
+  if (html.includes(marker)) return true;
+  const re = /<script[^>]*src="data:text\/javascript;base64,([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    try {
+      const decoded = Buffer.from(m[1], "base64").toString();
+      if (decoded.includes(marker)) return true;
+    } catch {}
+  }
+  return false;
+}
+
+/**
+ * Runs every "is this configured?" check at once, returning a snapshot
+ * the setup page uses to render green / red status icons next to each step.
+ */
+export type SetupVerification = {
+  ga4LoadedOnSite: boolean;
+  gtmLoadedOnSite: boolean;
+  trackingLiveOnSite: boolean;
+  thinkificLinked: boolean;
+  thinkificEvents: boolean;
+};
+
+const THINKIFIC_HOMEPAGES = [
+  "https://courses.zhealtheducation.com/",
+  "https://zhealtheducation.thinkific.com/",
+];
+
+export async function verifySetup(): Promise<SetupVerification> {
+  const wpHtml = await fetch(SITE, { cache: "no-store" })
+    .then((r) => r.text())
+    .catch(() => "");
+
+  // Try the user-facing courses domain first, fall back to thinkific.com
+  let lmsHtml = "";
+  for (const url of THINKIFIC_HOMEPAGES) {
+    try {
+      const res = await fetch(url + "?nocache=" + Date.now(), { cache: "no-store" });
+      if (res.ok) {
+        lmsHtml = await res.text();
+        if (lmsHtml.length > 0) break;
+      }
+    } catch {}
+  }
+
+  return {
+    ga4LoadedOnSite: htmlContains(wpHtml, "G-2BGQW8MGVJ"),
+    gtmLoadedOnSite: htmlContains(wpHtml, "GTM-57LMTDX"),
+    trackingLiveOnSite: htmlContains(wpHtml, "__zh_tracking_loaded"),
+    thinkificLinked: htmlContains(lmsHtml, "G-2BGQW8MGVJ") && /linker/i.test(lmsHtml),
+    thinkificEvents:
+      htmlContains(lmsHtml, "course_view") &&
+      htmlContains(lmsHtml, "begin_checkout") &&
+      htmlContains(lmsHtml, "purchase"),
+  };
 }
 
 export async function installOrUpdateTracking(): Promise<{

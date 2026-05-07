@@ -7,7 +7,11 @@
 import Section, { Card } from "@/components/portal/Section";
 import CodeBlock from "@/components/portal/CodeBlock";
 import TrackingInstaller from "@/components/portal/TrackingInstaller";
+import StepStatus from "@/components/portal/StepStatus";
+import { verifySetup } from "@/lib/wp-tracking-installer";
+import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Tracking Setup — Z-Health Portal" };
 
 const GA4_WEBSITE = "G-2BGQW8MGVJ";
@@ -134,31 +138,69 @@ export const LANDING_PAGE_TAG_MAP = [
   { path: '/neurofundamentals',   tagId: 5035, label: 'NeuroFundamentals e-book' },
 ];`;
 
-export default function TrackingSetupPage() {
+export default async function TrackingSetupPage() {
+  const status = await verifySetup().catch(() => null);
+
+  // Step 1: GA4 + GTM both load on the WP site
+  const step1Ok = status ? (status.ga4LoadedOnSite && status.gtmLoadedOnSite) : null;
+  // Step 2: TrackingInstaller already shows its own status — but we still
+  //   give the section a chip reflecting the live-on-site state.
+  const step2Ok = status ? status.trackingLiveOnSite : null;
+  // Step 4: Thinkific has our snippet (linker config + events fire)
+  const step4Ok = status ? (status.thinkificLinked && status.thinkificEvents) : null;
+  // Step 5: GTM config — can't verify automatically (would need GTM API auth),
+  //   so this is always "Manual step".
+  const step5Ok = null;
+  // Step 6: at least one row in the map
+  const step6Ok = LANDING_PAGE_TAG_MAP.length > 0;
+
+  const allReady = step1Ok && step2Ok && step4Ok && step6Ok;
+
   return (
     <main className="mx-auto max-w-5xl px-8 py-12">
       <header className="mb-10">
-        <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
-          Tracking Setup
-        </h1>
+        <div className="flex items-baseline justify-between gap-4">
+          <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+            Tracking Setup
+          </h1>
+          <StepStatus
+            ok={allReady ? true : status ? false : null}
+            label={
+              allReady
+                ? "All checks passing"
+                : status
+                ? "Action needed"
+                : "Verifying…"
+            }
+          />
+        </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
           One-time wiring that powers every report under <strong>Reports</strong>.
-          Once these snippets are in place, GA4 collects the events the portal pivots on,
-          and every WordPress → Thinkific link carries UTM context end-to-end.
+          Each step shows a green check when verified live on the site.
         </p>
       </header>
 
-      <Section title="Step 1 · Confirm GA4 IDs" description="Identifiers used across the stack.">
+      <Section
+        title="Step 1 · Confirm GA4 IDs"
+        description="Identifiers used across the stack — verified by fetching zhealtheducation.com and looking for the IDs in <head>."
+        action={<StepStatus ok={step1Ok} label={step1Ok ? "Both loaded" : step1Ok === false ? "Missing on site" : undefined} />}
+      >
         <Card>
           <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
             <div>
               <dt className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Website measurement ID</dt>
-              <dd className="mt-1 font-mono text-base text-gray-900 dark:text-gray-100">{GA4_WEBSITE}</dd>
-              <dd className="text-xs text-gray-500">currently active on zhealtheducation.com</dd>
+              <dd className="mt-1 flex items-center gap-2">
+                <span className="font-mono text-base text-gray-900 dark:text-gray-100">{GA4_WEBSITE}</span>
+                <StepStatus ok={status?.ga4LoadedOnSite ?? null} label={status?.ga4LoadedOnSite ? "Loaded" : "Not detected"} />
+              </dd>
+              <dd className="text-xs text-gray-500">should be active on zhealtheducation.com</dd>
             </div>
             <div>
               <dt className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">GTM container</dt>
-              <dd className="mt-1 font-mono text-base text-gray-900 dark:text-gray-100">GTM-57LMTDX</dd>
+              <dd className="mt-1 flex items-center gap-2">
+                <span className="font-mono text-base text-gray-900 dark:text-gray-100">GTM-57LMTDX</span>
+                <StepStatus ok={status?.gtmLoadedOnSite ?? null} label={status?.gtmLoadedOnSite ? "Loaded" : "Not detected"} />
+              </dd>
               <dd className="text-xs text-gray-500">manage events here</dd>
             </div>
           </dl>
@@ -171,6 +213,7 @@ export default function TrackingSetupPage() {
       <Section
         title="Step 2 · Install tracking on WordPress"
         description="One click pushes the canonical tracking snippet into the WP site as an Elementor Custom Code in <head>, and purges the SiteGround cache so it goes live immediately. No copy-paste needed."
+        action={<StepStatus ok={step2Ok} label={step2Ok ? "Live on site" : step2Ok === false ? "Not live" : undefined} />}
       >
         <TrackingInstaller />
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-500">
@@ -184,14 +227,27 @@ export default function TrackingSetupPage() {
 
       <Section
         title="Step 4 · Thinkific code injection"
-        description="Paste into Thinkific → Settings → Code & Analytics → Site Footer Code. Receives the UTM context from the auto-tagged WP links and emits course_view, begin_checkout, sign_up_view, and purchase events into the same GA4 property as the website."
+        description="Paste into Thinkific → Settings → Code & Analytics → Site Footer Code. Verified by fetching the LMS homepage and checking for our cross-domain linker + course_view / begin_checkout / purchase event hooks."
+        action={<StepStatus ok={step4Ok} label={step4Ok ? "Live on Thinkific" : step4Ok === false ? "Not detected" : undefined} />}
       >
+        {step4Ok && (
+          <Card className="mb-4 border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+            <p className="text-sm text-emerald-900 dark:text-emerald-200">
+              <strong>Verified on Thinkific.</strong> Cross-domain linker is configured and{" "}
+              <code className="rounded bg-emerald-100 px-1 dark:bg-emerald-900/30">course_view</code>,{" "}
+              <code className="rounded bg-emerald-100 px-1 dark:bg-emerald-900/30">begin_checkout</code>, and{" "}
+              <code className="rounded bg-emerald-100 px-1 dark:bg-emerald-900/30">purchase</code> events
+              are wired. The snippet below stays here in case you ever need to re-paste it.
+            </p>
+          </Card>
+        )}
         <CodeBlock language="html" code={THINKIFIC_HEAD} />
       </Section>
 
       <Section
         title="Step 5 · GTM configuration (one-time)"
         description="Map dataLayer keys → GA4 event params. Once this is set, every event auto-carries cta / form / utm / promo / course context."
+        action={<StepStatus ok={step5Ok} label="Manual — verify in GTM" />}
       >
         <Card>
           <CodeBlock language="text" code={GTM_VARIABLES} />
@@ -204,6 +260,7 @@ export default function TrackingSetupPage() {
       <Section
         title="Step 6 · Map landing pages → Keap tags"
         description="So lead-magnet signups can be attributed to the page that drove them."
+        action={<StepStatus ok={step6Ok} label={`${LANDING_PAGE_TAG_MAP.length} mapped`} />}
       >
         <Card>
           <p className="mb-3 text-sm text-gray-700 dark:text-gray-300">
