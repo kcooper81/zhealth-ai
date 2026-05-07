@@ -1,20 +1,36 @@
 /**
- * Funnels report — predefined cross-channel funnels.
+ * Funnels report — predefined cross-channel funnels + a dynamic builder
+ * that lets you pick any entry page and inspect a custom funnel from there.
  *
- * Each funnel in src/lib/funnel-config.ts is rendered as a step card showing
- * users at each step + conversion vs the first step. Add new flows there.
+ * URL params:
+ *   ?entry=/lower-back        → render a custom funnel for that entry path
+ *   ?steps=cta_click,form_submit,enroll_click,purchase  (optional override)
+ *   ?property=website|lms     (optional, defaults to website)
+ *
+ * When `entry` is omitted, falls back to the predefined FUNNELS catalog.
  */
 import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
+import FunnelBuilder from "@/components/portal/FunnelBuilder";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
-import { getFunnelSteps } from "@/lib/google-analytics";
-import { FUNNELS } from "@/lib/funnel-config";
+import { getFunnelSteps, getPagesWithEntrances } from "@/lib/google-analytics";
+import {
+  FUNNELS,
+  FUNNEL_EVENT_CATALOG,
+  buildFunnelFromEntry,
+  type FunnelDefinition,
+} from "@/lib/funnel-config";
+import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
+
+function firstParam(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
 
 async function loadFunnels(searchParams: Record<string, string | string[] | undefined>) {
   const range = parseTimeRange(searchParams);
@@ -23,25 +39,76 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
 
-  const results = await Promise.all(
-    FUNNELS.map(async (f) => {
-      if (!accessToken) {
-        return { funnel: f, steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })) };
-      }
-      try {
-        const steps = await cachedFetch(
-          `ga4:funnel:${f.id}:${rangeKey}`,
-          TTL.GA4_REPORTS,
-          () => getFunnelSteps(accessToken, f.property, rangeKey, f.steps)
-        );
-        return { funnel: f, steps };
-      } catch {
-        return { funnel: f, steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })) };
-      }
-    })
-  );
+  const entry = firstParam(searchParams.entry);
+  const stepsParam = firstParam(searchParams.steps);
+  const propertyParam = firstParam(searchParams.property) as "website" | "lms" | undefined;
 
-  return { range, accessToken: !!accessToken, funnels: results };
+  // Build either the custom funnel (if entry is set) OR the predefined list
+  let activeFunnels: FunnelDefinition[];
+  let isCustom = false;
+  if (entry) {
+    isCustom = true;
+    const eventNames = stepsParam
+      ? stepsParam
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+    const custom = buildFunnelFromEntry({
+      entryPath: entry,
+      eventNames,
+      property: propertyParam || "website",
+    });
+    activeFunnels = [custom];
+  } else {
+    activeFunnels = FUNNELS;
+  }
+
+  // Fetch funnel data for each active funnel + the page list for the picker
+  const [funnelResults, pagesForPicker] = await Promise.all([
+    Promise.all(
+      activeFunnels.map(async (f) => {
+        if (!accessToken) {
+          return {
+            funnel: f,
+            steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })),
+          };
+        }
+        try {
+          const cacheKey = isCustom
+            ? `ga4:funnel:custom:${f.id}:${(stepsParam || "default")}:${rangeKey}`
+            : `ga4:funnel:${f.id}:${rangeKey}`;
+          const steps = await cachedFetch(cacheKey, TTL.GA4_REPORTS, () =>
+            getFunnelSteps(accessToken, f.property, rangeKey, f.steps)
+          );
+          return { funnel: f, steps };
+        } catch {
+          return {
+            funnel: f,
+            steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })),
+          };
+        }
+      })
+    ),
+    accessToken
+      ? cachedFetch(`ga4:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
+          getPagesWithEntrances(accessToken, "website", rangeKey, 100).catch(() => [])
+        ).then((pages) =>
+          (pages as any[]).map((p) => ({ path: p.page, pageviews: p.pageviews }))
+        )
+      : Promise.resolve([] as Array<{ path: string; pageviews: number }>),
+  ]);
+
+  return {
+    range,
+    accessToken: !!accessToken,
+    funnels: funnelResults,
+    isCustom,
+    currentEntry: entry || null,
+    currentSteps: stepsParam ? stepsParam.split(",").map((s) => s.trim()).filter(Boolean) : null,
+    currentProperty: propertyParam || ("website" as const),
+    pagesForPicker,
+  };
 }
 
 export const metadata = { title: "Funnels — Z-Health Portal" };
@@ -52,6 +119,8 @@ export default async function FunnelsReportPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const data = await loadFunnels(searchParams);
+
+  const knownPages = LANDING_PAGE_TAG_MAP.map((lp) => ({ path: lp.path, label: lp.label }));
 
   return (
     <main className="mx-auto max-w-7xl px-8 py-12">
@@ -64,7 +133,9 @@ export default async function FunnelsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Predefined cross-channel funnels. Edit <code className="rounded bg-gray-100 px-1 dark:bg-white/10">src/lib/funnel-config.ts</code> to add new flows.
+          {data.isCustom
+            ? `Custom funnel for entry path ${data.currentEntry} over ${data.range.label.toLowerCase()}.`
+            : `Predefined cross-channel funnels. Use the builder below to inspect any entry page.`}
         </p>
       </header>
 
@@ -76,7 +147,29 @@ export default async function FunnelsReportPage({
         </Card>
       )}
 
+      <div className="mb-10">
+        <FunnelBuilder
+          knownPages={knownPages}
+          topPages={data.pagesForPicker}
+          eventCatalog={FUNNEL_EVENT_CATALOG}
+          currentEntry={data.currentEntry}
+          currentSteps={data.currentSteps}
+          currentProperty={data.currentProperty}
+        />
+      </div>
+
       <div id="report-content" className="bg-white dark:bg-[#1c1c1e] space-y-12">
+        {data.isCustom && (
+          <p className="text-xs text-gray-500 dark:text-gray-500">
+            Showing custom funnel only. <a href="/portal/reports/funnels" className="underline">Clear to see presets →</a>
+          </p>
+        )}
+        {!data.isCustom && (
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
+            Preset funnels
+          </h2>
+        )}
+
         {data.funnels.map(({ funnel, steps }) => {
           const top = steps[0]?.users ?? 0;
           const last = steps[steps.length - 1]?.users ?? 0;
