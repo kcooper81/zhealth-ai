@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
-import { ChevronDown, Plus, X, Funnel as FunnelIcon, Search } from "@/components/icons";
+import { useRouter } from "next/navigation";
+import Modal from "./Modal";
+import { ChevronDown, Plus, X, Funnel as FunnelIcon, Search, Check } from "@/components/icons";
 
 type EventOption = { value: string; label: string; description: string };
 
@@ -15,20 +16,29 @@ export type PageGroup =
 
 type GroupedPage = { path: string; label: string; sublabel?: string };
 
+export type SavedFunnelInput = {
+  id?: string;
+  label: string;
+  description?: string;
+  property: "website" | "lms";
+  entryPath: string;
+  steps: Array<{ name: string; eventName: string; pageMatch?: string }>;
+};
+
 type Props = {
   /** Pages grouped by source (mapped LPs / WP pages / WP posts / Thinkific / GA4 top). */
   pageGroups: Record<PageGroup, GroupedPage[]>;
   /** Catalog of events the user can pick at each step. */
   eventCatalog: EventOption[];
-  /** Current entry path from URL params, or null. */
-  currentEntry: string | null;
-  /** Current steps from URL params (event names), or null for default. */
-  currentSteps: string[] | null;
-  /** Current property (website / lms). */
-  currentProperty: "website" | "lms";
+  /** Optional initial values when editing an existing saved funnel */
+  initial?: SavedFunnelInput;
+  /** Whether the modal is open */
+  open: boolean;
+  onClose: () => void;
 };
 
 const DEFAULT_STEPS = ["page_view", "cta_click", "form_submit", "enroll_click", "begin_checkout", "purchase"];
+const ON_PAGE_EVENTS = new Set(["page_view", "session_start", "cta_click", "form_submit", "outbound_click"]);
 
 const GROUP_ORDER: PageGroup[] = [
   "Mapped landing pages",
@@ -38,32 +48,39 @@ const GROUP_ORDER: PageGroup[] = [
   "Recent GA4 traffic",
 ];
 
-/** Heuristic: anything pointing at a Thinkific URL/path is "lms", everything else is "website". */
 function detectProperty(path: string): "website" | "lms" {
   return /\/courses\/|thinkific\.com/i.test(path) ? "lms" : "website";
 }
 
-export default function FunnelBuilder({
-  pageGroups,
-  eventCatalog,
-  currentEntry,
-  currentSteps,
-  currentProperty,
-}: Props) {
-  const pathname = usePathname();
-  const search = useSearchParams();
+export default function FunnelBuilder({ pageGroups, eventCatalog, initial, open, onClose }: Props) {
+  const router = useRouter();
 
-  const [entry, setEntry] = useState(currentEntry || "");
-  const [property, setProperty] = useState<"website" | "lms">(currentProperty);
-  const [autoProperty, setAutoProperty] = useState(true);
+  const [name, setName] = useState(initial?.label || "");
+  const [entry, setEntry] = useState(initial?.entryPath || "");
+  const [property, setProperty] = useState<"website" | "lms">(initial?.property || "website");
+  const [autoProperty, setAutoProperty] = useState(!initial); // editing → keep manual choice
   const [steps, setSteps] = useState<string[]>(
-    currentSteps && currentSteps.length > 0 ? currentSteps : DEFAULT_STEPS
+    initial?.steps && initial.steps.length > 0 ? initial.steps.map((s) => s.eventName) : DEFAULT_STEPS
   );
-  const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [filter, setFilter] = useState("");
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-detect property when entry changes (unless user manually overrode it)
+  // Reset state when modal opens with new initial values
+  useEffect(() => {
+    if (!open) return;
+    setName(initial?.label || "");
+    setEntry(initial?.entryPath || "");
+    setProperty(initial?.property || "website");
+    setAutoProperty(!initial);
+    setSteps(initial?.steps && initial.steps.length > 0 ? initial.steps.map((s) => s.eventName) : DEFAULT_STEPS);
+    setFilter("");
+    setError(null);
+  }, [open, initial]);
+
+  // Auto-detect property
   useEffect(() => {
     if (autoProperty && entry) {
       const detected = detectProperty(entry);
@@ -71,56 +88,16 @@ export default function FunnelBuilder({
     }
   }, [entry, autoProperty]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Close dropdown on outside click
+  // Outside-click for picker dropdown
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    if (!pickerOpen) return;
+    const h = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [pickerOpen]);
 
-  const apply = () => {
-    const params = new URLSearchParams(Array.from(search.entries()));
-    if (entry.trim()) {
-      params.set("entry", entry.trim());
-      params.set("steps", steps.join(","));
-      params.set("property", property);
-    } else {
-      params.delete("entry");
-      params.delete("steps");
-      params.delete("property");
-    }
-    const qs = params.toString();
-    window.location.assign(`${pathname}${qs ? `?${qs}` : ""}`);
-  };
-
-  const reset = () => {
-    const params = new URLSearchParams(Array.from(search.entries()));
-    params.delete("entry");
-    params.delete("steps");
-    params.delete("property");
-    const qs = params.toString();
-    window.location.assign(`${pathname}${qs ? `?${qs}` : ""}`);
-  };
-
-  const updateStep = (idx: number, value: string) => setSteps((s) => s.map((v, i) => (i === idx ? value : v)));
-  const removeStep = (idx: number) => setSteps((s) => s.filter((_, i) => i !== idx));
-  const addStep = () => setSteps((s) => [...s, "purchase"]);
-  const moveStep = (idx: number, dir: -1 | 1) => {
-    setSteps((s) => {
-      const next = [...s];
-      const swap = idx + dir;
-      if (swap < 0 || swap >= next.length) return s;
-      [next[idx], next[swap]] = [next[swap], next[idx]];
-      return next;
-    });
-  };
-
-  // Filter pages by typed text against path / label / sublabel
   const filteredGroups = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return pageGroups;
@@ -135,21 +112,107 @@ export default function FunnelBuilder({
 
   const visibleCount = GROUP_ORDER.reduce((sum, g) => sum + (filteredGroups[g]?.length || 0), 0);
 
+  const updateStep = (i: number, v: string) => setSteps((s) => s.map((x, idx) => (idx === i ? v : x)));
+  const removeStep = (i: number) => setSteps((s) => s.filter((_, idx) => idx !== i));
+  const addStep = () => setSteps((s) => [...s, "purchase"]);
+  const moveStep = (i: number, dir: -1 | 1) =>
+    setSteps((s) => {
+      const next = [...s];
+      const swap = i + dir;
+      if (swap < 0 || swap >= next.length) return s;
+      [next[i], next[swap]] = [next[swap], next[i]];
+      return next;
+    });
+
+  const save = async () => {
+    setError(null);
+    if (!name.trim()) return setError("Name is required");
+    if (!entry.trim()) return setError("Entry page is required");
+    if (steps.length === 0) return setError("At least one step is required");
+
+    setSaving(true);
+    try {
+      const stepObjs = steps.map((ev) => {
+        const cataloged = eventCatalog.find((c) => c.value === ev);
+        return {
+          name: cataloged?.label || ev,
+          eventName: ev,
+          pageMatch: ON_PAGE_EVENTS.has(ev) ? entry.trim() : undefined,
+        };
+      });
+      const r = await fetch("/api/portal/funnels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: initial?.id,
+          label: name.trim(),
+          property,
+          entryPath: entry.trim(),
+          steps: stepObjs,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || `Save failed (${r.status})`);
+      }
+      onClose();
+      // Re-render the page so the new funnel data flows in
+      router.refresh();
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div ref={wrapperRef} className="rounded-2xl border border-gray-200/70 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-[#1f1f22]">
-      <div className="mb-4 flex items-center gap-2">
-        <FunnelIcon size={16} className="text-brand-blue" />
-        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-50">Build a custom funnel</h3>
-        {currentEntry && (
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-            Active: {currentEntry}
-          </span>
-        )}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={initial ? "Edit funnel report" : "Build a funnel report"}
+      description={initial ? `Editing "${initial.label}"` : "Pick an entry page and the events that follow it. Save to add it to your funnel reports."}
+      size="3xl"
+      footer={
+        <>
+          {error && <span className="mr-auto text-xs text-rose-600 dark:text-rose-400">{error}</span>}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || !name.trim() || !entry.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-black disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+          >
+            {saving ? <span className="h-2 w-2 animate-pulse rounded-full bg-current" /> : <Check size={14} />}
+            <span>{saving ? "Saving…" : initial ? "Save changes" : "Save funnel"}</span>
+          </button>
+        </>
+      }
+    >
+      {/* Name */}
+      <div className="mb-4">
+        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          Funnel name
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Lower Back launch funnel"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-white/10 dark:bg-[#19191c] dark:text-gray-100"
+        />
       </div>
 
+      {/* Entry + property */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Entry-page selector */}
-        <div className="relative">
+        <div ref={pickerRef} className="relative">
           <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Entry page (path)
           </label>
@@ -159,18 +222,18 @@ export default function FunnelBuilder({
             onChange={(e) => setEntry(e.target.value)}
             placeholder="/lower-back, /blog/post-slug, /courses/i-phase…"
             className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-sm font-mono text-gray-900 dark:border-white/10 dark:bg-[#19191c] dark:text-gray-100"
-            onFocus={() => setOpen(true)}
+            onFocus={() => setPickerOpen(true)}
           />
           <button
             type="button"
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => setPickerOpen((o) => !o)}
             className="absolute right-2 top-[33px] text-gray-500"
           >
             <ChevronDown size={14} />
           </button>
 
-          {open && (
-            <div className="absolute z-30 mt-1 max-h-[460px] w-full overflow-hidden rounded-lg border border-gray-200/80 bg-white shadow-xl ring-1 ring-black/5 dark:border-white/10 dark:bg-[#1f1f22] dark:ring-white/10">
+          {pickerOpen && (
+            <div className="absolute z-30 mt-1 max-h-[400px] w-full overflow-hidden rounded-lg border border-gray-200/80 bg-white shadow-xl ring-1 ring-black/5 dark:border-white/10 dark:bg-[#1f1f22] dark:ring-white/10">
               <div className="flex items-center gap-2 border-b border-gray-200/60 bg-gray-50/50 px-3 py-2 dark:border-white/5 dark:bg-white/[0.02]">
                 <Search size={12} className="text-gray-400" />
                 <input
@@ -182,7 +245,7 @@ export default function FunnelBuilder({
                   autoFocus
                 />
               </div>
-              <div className="max-h-[400px] overflow-y-auto">
+              <div className="max-h-[330px] overflow-y-auto">
                 {GROUP_ORDER.map((g) => {
                   const items = filteredGroups[g] || [];
                   if (items.length === 0) return null;
@@ -198,7 +261,7 @@ export default function FunnelBuilder({
                               type="button"
                               onClick={() => {
                                 setEntry(p.path);
-                                setOpen(false);
+                                setPickerOpen(false);
                                 setFilter("");
                               }}
                               className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50 dark:hover:bg-white/5"
@@ -218,19 +281,14 @@ export default function FunnelBuilder({
                 })}
                 {visibleCount === 0 && (
                   <p className="px-3 py-6 text-center text-xs text-gray-500">
-                    No pages match &ldquo;{filter}&rdquo;. You can also type the path manually in the input above.
+                    No pages match &ldquo;{filter}&rdquo;. Type the path manually in the input above.
                   </p>
                 )}
               </div>
             </div>
           )}
-
-          <p className="mt-1 text-[11px] text-gray-500">
-            Pick from any WP page/post, Thinkific course, or LP from the catalog. Type a partial like <code>/blog</code> to capture a section.
-          </p>
         </div>
 
-        {/* Property selector */}
         <div>
           <label className="mb-1 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             <span>GA4 property</span>
@@ -241,7 +299,7 @@ export default function FunnelBuilder({
                 onChange={(e) => setAutoProperty(e.target.checked)}
                 className="h-3 w-3"
               />
-              Auto-detect from path
+              Auto-detect
             </label>
           </label>
           <div className="flex gap-2">
@@ -264,13 +322,10 @@ export default function FunnelBuilder({
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-gray-500">
-            Auto switches to LMS when the entry path matches <code>/courses/</code> or <code>thinkific.com</code>.
-          </p>
         </div>
       </div>
 
-      {/* Step editor */}
+      {/* Steps */}
       <div className="mt-6">
         <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Funnel steps ({steps.length})
@@ -295,7 +350,6 @@ export default function FunnelBuilder({
                 onClick={() => moveStep(idx, -1)}
                 disabled={idx === 0}
                 className="rounded-md border border-gray-200 px-1.5 py-1 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-white/10 dark:hover:bg-white/5"
-                title="Move up"
               >
                 ↑
               </button>
@@ -304,7 +358,6 @@ export default function FunnelBuilder({
                 onClick={() => moveStep(idx, 1)}
                 disabled={idx === steps.length - 1}
                 className="rounded-md border border-gray-200 px-1.5 py-1 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-white/10 dark:hover:bg-white/5"
-                title="Move down"
               >
                 ↓
               </button>
@@ -313,7 +366,6 @@ export default function FunnelBuilder({
                 onClick={() => removeStep(idx)}
                 disabled={steps.length <= 1}
                 className="rounded-md border border-gray-200 px-1.5 py-1 text-gray-500 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-30 dark:border-white/10 dark:hover:bg-rose-950/30"
-                title="Remove step"
               >
                 <X size={12} />
               </button>
@@ -327,30 +379,31 @@ export default function FunnelBuilder({
         >
           <Plus size={12} /> Add step
         </button>
-      </div>
-
-      <div className="mt-6 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={apply}
-          disabled={!entry.trim()}
-          className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-black disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
-        >
-          Build funnel
-        </button>
-        {currentEntry && (
-          <button
-            type="button"
-            onClick={reset}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
-          >
-            Clear · show presets
-          </button>
-        )}
-        <p className="ml-auto text-[11px] text-gray-500">
-          On-page steps (page_view, cta_click, form_submit) auto-filter to your entry path.
+        <p className="mt-2 text-[11px] text-gray-500">
+          On-page steps (page_view, cta_click, form_submit, outbound_click) auto-filter to your entry path.
+          Downstream steps (enroll_click, begin_checkout, purchase) match anywhere on site.
         </p>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+/** Floating "Build a new funnel" trigger button. */
+export function FunnelBuilderTrigger({
+  onClick,
+  label = "Build a new funnel",
+}: {
+  onClick: () => void;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+    >
+      <FunnelIcon size={14} />
+      <span>{label}</span>
+    </button>
   );
 }

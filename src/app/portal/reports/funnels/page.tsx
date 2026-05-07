@@ -1,18 +1,15 @@
 /**
- * Funnels report — predefined cross-channel funnels + a dynamic builder
- * that lets you pick any entry page and inspect a custom funnel from there.
+ * Funnels report — built-in preset funnels + saved custom funnel reports.
  *
- * URL params:
- *   ?entry=/lower-back        → render a custom funnel for that entry path
- *   ?steps=cta_click,form_submit,enroll_click,purchase  (optional override)
- *   ?property=website|lms     (optional, defaults to website)
- *
- * When `entry` is omitted, falls back to the predefined FUNNELS catalog.
+ * The "Build a new funnel" modal in FunnelManager creates/edits saved
+ * funnels that persist via Supabase api_cache (see src/lib/saved-funnels.ts).
+ * Each saved funnel renders as a Section card just like the presets.
  */
 import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
-import FunnelBuilder, { type PageGroup } from "@/components/portal/FunnelBuilder";
+import FunnelManager from "@/components/portal/FunnelManager";
+import { type PageGroup } from "@/components/portal/FunnelBuilder";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
@@ -20,19 +17,15 @@ import { getFunnelSteps, getPagesWithEntrances } from "@/lib/google-analytics";
 import {
   FUNNELS,
   FUNNEL_EVENT_CATALOG,
-  buildFunnelFromEntry,
   type FunnelDefinition,
 } from "@/lib/funnel-config";
 import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
 import { getAllWPPages, getAllWPPosts } from "@/lib/wp-content-list";
 import { listCourses } from "@/lib/thinkific";
+import { listSavedFunnels } from "@/lib/saved-funnels";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
-
-function firstParam(v: string | string[] | undefined): string | undefined {
-  return Array.isArray(v) ? v[0] : v;
-}
 
 async function loadFunnels(searchParams: Record<string, string | string[] | undefined>) {
   const range = parseTimeRange(searchParams);
@@ -41,58 +34,9 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
 
-  const entry = firstParam(searchParams.entry);
-  const stepsParam = firstParam(searchParams.steps);
-  const propertyParam = firstParam(searchParams.property) as "website" | "lms" | undefined;
-
-  // Build either the custom funnel (if entry is set) OR the predefined list
-  let activeFunnels: FunnelDefinition[];
-  let isCustom = false;
-  if (entry) {
-    isCustom = true;
-    const eventNames = stepsParam
-      ? stepsParam
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : undefined;
-    const custom = buildFunnelFromEntry({
-      entryPath: entry,
-      eventNames,
-      property: propertyParam || "website",
-    });
-    activeFunnels = [custom];
-  } else {
-    activeFunnels = FUNNELS;
-  }
-
-  // Fetch funnel data + every entry-page candidate (WP pages, WP posts,
-  // Thinkific courses, GA4 top pages from both properties).
-  const [funnelResults, wpPages, wpPosts, lmsCourses, gaWebPages, gaLmsPages] = await Promise.all([
-    Promise.all(
-      activeFunnels.map(async (f) => {
-        if (!accessToken) {
-          return {
-            funnel: f,
-            steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })),
-          };
-        }
-        try {
-          const cacheKey = isCustom
-            ? `ga4:funnel:custom:${f.id}:${(stepsParam || "default")}:${rangeKey}`
-            : `ga4:funnel:${f.id}:${rangeKey}`;
-          const steps = await cachedFetch(cacheKey, TTL.GA4_REPORTS, () =>
-            getFunnelSteps(accessToken, f.property, rangeKey, f.steps)
-          );
-          return { funnel: f, steps };
-        } catch {
-          return {
-            funnel: f,
-            steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })),
-          };
-        }
-      })
-    ),
+  // 1. Load saved customs + page lists in parallel
+  const [saved, wpPages, wpPosts, lmsCourses, gaWebPages, gaLmsPages] = await Promise.all([
+    listSavedFunnels().catch(() => []),
     getAllWPPages().catch(() => []),
     getAllWPPosts().catch(() => []),
     cachedFetch("thinkific:courses:250", TTL.THINKIFIC_COURSES, () =>
@@ -114,14 +58,34 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
       : Promise.resolve([] as Array<{ path: string; pageviews: number }>),
   ]);
 
-  // Build grouped, dedup'd list for the picker
-  const seen = new Set<string>();
-  const dedupAdd = (group: PageGroup, path: string, label: string, sublabel?: string) => {
-    const k = `${group}::${path}`;
-    if (seen.has(k)) return;
-    seen.add(k);
-    pageGroups[group].push({ path, label, sublabel });
-  };
+  // 2. Combine presets + saved customs into one list to render
+  const allFunnels: FunnelDefinition[] = [...FUNNELS, ...saved];
+
+  // 3. Fetch GA4 funnel data for each
+  const funnelResults = await Promise.all(
+    allFunnels.map(async (f) => {
+      if (!accessToken) {
+        return {
+          funnel: f,
+          steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })),
+        };
+      }
+      try {
+        const cacheKey = `ga4:funnel:${f.id}:${rangeKey}`;
+        const steps = await cachedFetch(cacheKey, TTL.GA4_REPORTS, () =>
+          getFunnelSteps(accessToken, f.property, rangeKey, f.steps)
+        );
+        return { funnel: f, steps };
+      } catch {
+        return {
+          funnel: f,
+          steps: f.steps.map((s) => ({ name: s.name, eventName: s.eventName, users: 0, events: 0 })),
+        };
+      }
+    })
+  );
+
+  // 4. Build grouped, dedup'd page list for the picker
   const pageGroups: Record<PageGroup, Array<{ path: string; label: string; sublabel?: string }>> = {
     "Mapped landing pages": [],
     "WordPress pages": [],
@@ -129,26 +93,28 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
     "Thinkific courses": [],
     "Recent GA4 traffic": [],
   };
+  const seen = new Set<string>();
+  const dedupAdd = (group: PageGroup, path: string, label: string, sublabel?: string) => {
+    const k = `${group}::${path}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    pageGroups[group].push({ path, label, sublabel });
+  };
 
-  // 1. Known landing pages (top of dropdown — highest signal)
   for (const lp of LANDING_PAGE_TAG_MAP) {
     dedupAdd("Mapped landing pages", lp.path, lp.label, `tag ${lp.tagId}`);
   }
-  // 2. All WP pages
   for (const p of wpPages) {
     dedupAdd("WordPress pages", p.path, p.title || p.path, p.path);
   }
-  // 3. All WP posts
   for (const p of wpPosts) {
     dedupAdd("WordPress posts", p.path, p.title || p.path, p.path);
   }
-  // 4. Thinkific courses (path = /courses/<slug>)
   for (const c of (lmsCourses as any).items || []) {
     if (c.slug) {
       dedupAdd("Thinkific courses", `/courses/${c.slug}`, c.name || c.slug, `slug ${c.slug}`);
     }
   }
-  // 5. GA4 top pages — only ones not already in the list above
   for (const p of [...gaWebPages, ...gaLmsPages]) {
     dedupAdd("Recent GA4 traffic", p.path, p.path, `${p.pageviews.toLocaleString()} views`);
   }
@@ -157,10 +123,8 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
     range,
     accessToken: !!accessToken,
     funnels: funnelResults,
-    isCustom,
-    currentEntry: entry || null,
-    currentSteps: stepsParam ? stepsParam.split(",").map((s) => s.trim()).filter(Boolean) : null,
-    currentProperty: propertyParam || ("website" as const),
+    presetCount: FUNNELS.length,
+    saved,
     pageGroups,
   };
 }
@@ -185,9 +149,7 @@ export default async function FunnelsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          {data.isCustom
-            ? `Custom funnel for entry path ${data.currentEntry} over ${data.range.label.toLowerCase()}.`
-            : `Predefined cross-channel funnels. Use the builder below to inspect any entry page.`}
+          Built-in cross-channel funnels plus your saved custom funnel reports. Click <strong>Build a new funnel</strong> to add one for any WP page, post, or Thinkific course.
         </p>
       </header>
 
@@ -200,31 +162,29 @@ export default async function FunnelsReportPage({
       )}
 
       <div className="mb-10">
-        <FunnelBuilder
+        <FunnelManager
+          savedFunnels={data.saved.map((f) => ({
+            id: f.id,
+            label: f.label,
+            description: f.description,
+            property: f.property,
+            entryPath: f.entryPath,
+            steps: f.steps,
+            createdAt: f.createdAt,
+            updatedAt: f.updatedAt,
+          }))}
+          presetCount={data.presetCount}
           pageGroups={data.pageGroups}
           eventCatalog={FUNNEL_EVENT_CATALOG}
-          currentEntry={data.currentEntry}
-          currentSteps={data.currentSteps}
-          currentProperty={data.currentProperty}
         />
       </div>
 
       <div id="report-content" className="bg-white dark:bg-[#1c1c1e] space-y-12">
-        {data.isCustom && (
-          <p className="text-xs text-gray-500 dark:text-gray-500">
-            Showing custom funnel only. <a href="/portal/reports/funnels" className="underline">Clear to see presets →</a>
-          </p>
-        )}
-        {!data.isCustom && (
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
-            Preset funnels
-          </h2>
-        )}
-
         {data.funnels.map(({ funnel, steps }) => {
           const top = steps[0]?.users ?? 0;
           const last = steps[steps.length - 1]?.users ?? 0;
           const overallCvr = top > 0 ? (last / top) * 100 : 0;
+          const isCustom = funnel.id.startsWith("custom-");
 
           return (
             <Section
@@ -235,9 +195,18 @@ export default async function FunnelsReportPage({
               action={<ExportButton targetId={`section-funnel-${funnel.id}`} filename={`funnel-${funnel.id}`} />}
             >
               <Card>
-                <div className="mb-4 flex items-baseline justify-between">
-                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Property: <span className="font-mono text-gray-700 dark:text-gray-300">{funnel.property}</span>
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    <span>{funnel.property === "lms" ? "LMS" : "Website"}</span>
+                    {isCustom ? (
+                      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                        Custom
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-700 dark:bg-white/5 dark:text-gray-400">
+                        Preset
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm">
                     Overall conversion:{" "}
