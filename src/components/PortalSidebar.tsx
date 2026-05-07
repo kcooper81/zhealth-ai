@@ -64,6 +64,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/portal/keap", label: "Keap CRM", icon: Users, status: "live" },
       { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
       { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
+      { href: "/portal/seo", label: "SEO audit", icon: Target, status: "live" },
       { href: "/portal/analytics", label: "GA4 analytics", icon: BarChart, status: "live" },
       { href: "/portal/customer-flows", label: "Customer flows", icon: Activity, status: "scaffold" },
     ],
