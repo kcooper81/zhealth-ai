@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 type Tone = "dark" | "light";
 
 const MODES = [
-  { id: "chat", label: "Chat", href: "/" },
+  { id: "chat", label: "Chat", href: "/chat" },
   { id: "portal", label: "Portal", href: "/portal" },
 ] as const;
 

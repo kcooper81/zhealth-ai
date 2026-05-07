@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useTransition, useState, useEffect } from "react";
 import {
   Layers,
   Activity,
@@ -20,6 +20,7 @@ import {
   Zap,
   Search,
   AIBrain,
+  ChevronDown,
 } from "./icons";
 import ModeSwitcher from "./portal/ModeSwitcher";
 import SyncBadge from "./portal/SyncBadge";
@@ -35,6 +36,8 @@ type NavItem = {
 type NavGroup = {
   title: string;
   items: NavItem[];
+  /** When true, group renders collapsed by default. */
+  defaultCollapsed?: boolean;
 };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -63,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Sources",
+    defaultCollapsed: true,
     items: [
       { href: "/portal/keap", label: "Keap CRM", icon: Users, status: "live" },
       { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
@@ -75,6 +79,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Tools",
+    defaultCollapsed: true,
     items: [
       { href: "/chat", label: "AI chat", icon: AIBrain, status: "live" },
       { href: "/portal/reports/setup", label: "Tracking setup", icon: Settings, status: "live" },
@@ -161,8 +166,45 @@ function isActive(href: string, pathname: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+const COLLAPSE_STORAGE_KEY = "zh-sidebar-collapsed";
+
+function loadCollapseState(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function PortalSidebar() {
   const pathname = usePathname() || "";
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate from localStorage on mount, falling back to defaultCollapsed.
+  useEffect(() => {
+    const stored = loadCollapseState();
+    const next: Record<string, boolean> = {};
+    for (const g of NAV_GROUPS) {
+      next[g.title] = stored[g.title] ?? g.defaultCollapsed ?? false;
+    }
+    setCollapsed(next);
+    setHydrated(true);
+  }, []);
+
+  // Persist on change (skip the initial hydration write)
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(collapsed));
+    } catch {}
+  }, [collapsed, hydrated]);
+
+  const toggleGroup = (title: string) => {
+    setCollapsed((c) => ({ ...c, [title]: !c[title] }));
+  };
 
   return (
     <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-gray-200/70 bg-gray-50/60 backdrop-blur-xl dark:border-white/5 dark:bg-[#161618]/80">
@@ -181,20 +223,43 @@ export default function PortalSidebar() {
       <ModeSwitcher tone="light" />
 
       <nav className="flex-1 overflow-y-auto px-2 py-2">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.title} className="mb-4">
-            <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
-              {group.title}
+        {NAV_GROUPS.map((group) => {
+          const groupHasActive = group.items.some((it) => isActive(it.href, pathname));
+          // If any item in the group is active, force the group open even if collapsed
+          const isCollapsed = (collapsed[group.title] ?? group.defaultCollapsed ?? false) && !groupHasActive;
+          const isCollapsible = (group.items.length > 1) || group.defaultCollapsed;
+
+          return (
+            <div key={group.title} className="mb-4">
+              {isCollapsible ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.title)}
+                  className="mb-1 flex w-full items-center justify-between px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
+                >
+                  <span>{group.title}</span>
+                  <ChevronDown
+                    size={12}
+                    className={`transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                  />
+                </button>
+              ) : (
+                <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
+                  {group.title}
+                </div>
+              )}
+              {!isCollapsed && (
+                <ul className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <li key={item.href}>
+                      <NavLink item={item} active={isActive(item.href, pathname)} />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <ul className="space-y-0.5">
-              {group.items.map((item) => (
-                <li key={item.href}>
-                  <NavLink item={item} active={isActive(item.href, pathname)} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       <SyncBadge />
