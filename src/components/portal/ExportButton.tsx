@@ -10,6 +10,8 @@ type Props = {
   targetId: string;
   /** Base filename, no extension. Date is appended automatically. */
   filename: string;
+  /** Button label when idle. Defaults to "Export". */
+  label?: string;
 };
 
 const FORMATS: Array<{ id: Format; label: string; ext: string }> = [
@@ -31,7 +33,7 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   a.remove();
 }
 
-export default function ExportButton({ targetId, filename }: Props) {
+export default function ExportButton({ targetId, filename, label = "Export" }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<Format | null>(null);
   const [done, setDone] = useState<Format | null>(null);
@@ -160,7 +162,7 @@ export default function ExportButton({ targetId, filename }: Props) {
           </>
         ) : (
           <>
-            <span>Export</span>
+            <span>{label}</span>
             <ChevronDown size={14} className="text-gray-500" />
           </>
         )}

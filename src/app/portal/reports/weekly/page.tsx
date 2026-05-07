@@ -352,7 +352,7 @@ export default async function WeeklyReportPage({
           </h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
-            <ExportButton targetId="report-content" filename="weekly-report" />
+            <ExportButton targetId="report-content" filename="weekly-report-full" label="Export all" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{updatedAt} PT</span>
           </div>
         </div>
@@ -363,7 +363,12 @@ export default async function WeeklyReportPage({
       <div id="report-content" className="bg-white dark:bg-[#1c1c1e]">
 
       {/* ===== HIGHLIGHTS — eye-catching summary at the top ===== */}
-      <Section title="At a glance" description={`The headline numbers for ${data.range.label.toLowerCase()}.`}>
+      <Section
+        id="section-at-a-glance"
+        title="At a glance"
+        description={`The headline numbers for ${data.range.label.toLowerCase()}.`}
+        action={<ExportButton targetId="section-at-a-glance" filename="weekly-at-a-glance" />}
+      >
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {/* Engaged list with delta */}
           <div className="overflow-hidden rounded-2xl border border-gray-200/70 bg-gradient-to-br from-blue-50 via-white to-white p-5 shadow-sm dark:border-white/5 dark:from-blue-950/30 dark:via-[#1f1f22] dark:to-[#1a1a1d]">
@@ -419,7 +424,12 @@ export default async function WeeklyReportPage({
 
       {/* ===== INSIGHTS — dynamic, regenerated each render ===== */}
       {insights.length > 0 && (
-        <Section title="What stands out this report" description="Computed live from current data — wording changes as the numbers do.">
+        <Section
+          id="section-insights"
+          title="What stands out this report"
+          description="Computed live from current data — wording changes as the numbers do."
+          action={<ExportButton targetId="section-insights" filename="weekly-insights" />}
+        >
           <InsightGrid>
             {insights.map((i, idx) => (
               <Insight key={idx} severity={i.severity} title={i.title}>
@@ -432,8 +442,10 @@ export default async function WeeklyReportPage({
 
       {/* ===== UPCOMING EVENTS ===== */}
       <Section
+        id="section-events"
         title="Upcoming Events"
         description="Auto-pulled from Keap registration tags. Add an attendedTagId in config when an event has happened to show attendance."
+        action={<ExportButton targetId="section-events" filename="weekly-events" />}
       >
         <Card padded={false}>
           <table className="w-full text-sm">
@@ -466,8 +478,10 @@ export default async function WeeklyReportPage({
 
       {/* ===== EMAIL STUFF ===== */}
       <Section
+        id="section-email"
         title="Email Performance"
         description="Auto-pulled where possible. Click / open / complaint rates are not in Keap's REST API — manual entry until webhook integration is built. Once you've saved metrics for two weeks, weekly change will compute automatically."
+        action={<ExportButton targetId="section-email" filename="weekly-email" />}
       >
         {/* Spreadsheet-style table: Metric | TOTAL | WEEKLY CHANGE | LAST WEEK | SOURCE */}
         <Card padded={false}>
@@ -593,8 +607,10 @@ export default async function WeeklyReportPage({
 
       {/* ===== NEW LEADS ===== */}
       <Section
+        id="section-leads"
         title="New Leads"
         description={`Auto-derived from new Keap contacts in window (${data.newContactsTotal.toLocaleString()} total). Each row counts contacts created in window with the matching tag or lead_source_id.`}
+        action={<ExportButton targetId="section-leads" filename="weekly-leads" />}
       >
         {leadsBars.length > 0 && (
           <Card className="mb-4">
@@ -665,8 +681,10 @@ export default async function WeeklyReportPage({
       {history.length > 0 && (
         <>
           <Section
+            id="section-rate-trends"
             title="Email rate trends"
             description={`Week-over-week movement of open / click / complaint rates. ${history.length} week${history.length === 1 ? "" : "s"} of history.`}
+            action={<ExportButton targetId="section-rate-trends" filename="weekly-rate-trends" />}
           >
             <Card>
               <LineChart
@@ -680,8 +698,10 @@ export default async function WeeklyReportPage({
 
           {history.some((h: any) => h.unsubscribes_30d != null) && (
             <Section
+              id="section-unsubs-trend"
               title="Unsubscribes (30-day) trend"
               description="Track whether the email-frequency complaint pattern is improving over time."
+              action={<ExportButton targetId="section-unsubs-trend" filename="weekly-unsubs-trend" />}
             >
               <Card>
                 <LineChart

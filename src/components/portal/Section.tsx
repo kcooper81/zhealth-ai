@@ -4,11 +4,13 @@ type Props = {
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** Optional DOM id — set this so ExportButton can capture just this section. */
+  id?: string;
 };
 
-export default function Section({ title, description, action, children, className = "" }: Props) {
+export default function Section({ title, description, action, children, className = "", id }: Props) {
   return (
-    <section className={`mb-12 ${className}`}>
+    <section id={id} className={`mb-12 ${className}`}>
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">

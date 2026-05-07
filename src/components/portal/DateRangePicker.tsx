@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useState, useEffect, useRef, useTransition } from "react";
 import { ChevronDown } from "@/components/icons";
 
 const PRESETS = [
@@ -16,9 +16,11 @@ const PRESETS = [
 
 export default function DateRangePicker() {
   const router = useRouter();
+  const pathname = usePathname();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
+  const [pending, startTransition] = useTransition();
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const current = search.get("range") || "30d";
@@ -40,6 +42,15 @@ export default function DateRangePicker() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  const navigate = (params: URLSearchParams) => {
+    const qs = params.toString();
+    const target = qs ? `${pathname}?${qs}` : pathname;
+    startTransition(() => {
+      router.push(target, { scroll: false });
+      router.refresh();
+    });
+  };
+
   const setRange = (id: string) => {
     const params = new URLSearchParams(Array.from(search.entries()));
     params.set("range", id);
@@ -50,10 +61,7 @@ export default function DateRangePicker() {
     } else {
       setShowCustom(true);
     }
-    router.replace(`?${params.toString()}`, { scroll: false });
-    // Force server re-render with the new searchParams; router.replace alone
-    // doesn't always trigger an RSC re-fetch on dynamic pages.
-    router.refresh();
+    navigate(params);
     if (id !== "custom") setOpen(false);
   };
 
@@ -61,8 +69,7 @@ export default function DateRangePicker() {
     const params = new URLSearchParams(Array.from(search.entries()));
     params.set("range", "custom");
     params.set(which, val);
-    router.replace(`?${params.toString()}`, { scroll: false });
-    router.refresh();
+    navigate(params);
   };
 
   const activeLabel =
@@ -78,7 +85,11 @@ export default function DateRangePicker() {
         aria-expanded={open}
       >
         <span>{activeLabel}</span>
-        <ChevronDown size={14} className="text-gray-500" />
+        {pending ? (
+          <span className="h-2 w-2 animate-pulse rounded-full bg-brand-blue" aria-label="Loading" />
+        ) : (
+          <ChevronDown size={14} className="text-gray-500" />
+        )}
       </button>
 
       {open && (

@@ -32,7 +32,12 @@ import {
   getAccountInfo,
   getContactsWithTag,
   getTagsWithCounts,
+  listAllContactsInRange,
 } from "./keap";
+import {
+  UPCOMING_EVENTS,
+  SYSTEM_TAGS,
+} from "./weekly-report-config";
 import {
   listCourses,
   listOrders,
@@ -185,6 +190,73 @@ export async function refreshKeap(): Promise<{ refreshed: number; errors: string
   } catch (e) {
     errors.push(`keap:tags-counts: ${e instanceof Error ? e.message : String(e)}`);
   }
+
+  // ---- Weekly Report cache keys (/portal/reports/weekly) ----
+  // Mirrors loadReportData() so the page hits warm cache on first load.
+  const weeklyTasks: Array<Promise<unknown>> = [];
+  const safeWeekly = <T>(label: string, fn: () => Promise<T>) => {
+    weeklyTasks.push(
+      fn()
+        .then(() => {
+          refreshed += 1;
+        })
+        .catch((e) => {
+          errors.push(`keap:weekly:${label}: ${e instanceof Error ? e.message : String(e)}`);
+        })
+    );
+  };
+
+  const sevenDaysAgoISO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const nowISO = new Date().toISOString();
+
+  // Total contact count "as of 7 days ago" — used to compute weekly delta
+  safeWeekly("contacts:total-up-to-7d-ago", () =>
+    cacheRefresh("keap:contacts:total-up-to-7d-ago", TTL.KEAP_STATS, () =>
+      listContacts({ limit: 1, until: sevenDaysAgoISO }).catch(() => ({ count: 0, contacts: [] }))
+    )
+  );
+
+  // Full new-contacts list for the rolling 7-day window (drives lead-magnet + source rows)
+  const sinceDate = sevenDaysAgoISO.slice(0, 10);
+  const untilDate = nowISO.slice(0, 10);
+  safeWeekly(`new-contacts:${sinceDate}:${untilDate}`, () =>
+    cacheRefresh(
+      `keap:weekly-report:new-contacts:${sinceDate}:${untilDate}`,
+      TTL.KEAP_STATS,
+      () => listAllContactsInRange(sevenDaysAgoISO, nowISO).catch(() => [])
+    )
+  );
+
+  // Upcoming-event registration counts (registeredTagId + optional attendedTagId)
+  for (const ev of UPCOMING_EVENTS) {
+    safeWeekly(`event-tag:${ev.registeredTagId}`, () =>
+      cacheRefresh(
+        `keap:contacts-with-tag:${ev.registeredTagId}:count`,
+        TTL.KEAP_TAGS,
+        () => getContactsWithTag(ev.registeredTagId, { limit: 1 }).catch(() => ({ count: 0, contacts: [] }))
+      )
+    );
+    if (ev.attendedTagId) {
+      safeWeekly(`event-tag:${ev.attendedTagId}`, () =>
+        cacheRefresh(
+          `keap:contacts-with-tag:${ev.attendedTagId}:count`,
+          TTL.KEAP_TAGS,
+          () => getContactsWithTag(ev.attendedTagId!, { limit: 1 }).catch(() => ({ count: 0, contacts: [] }))
+        )
+      );
+    }
+  }
+
+  // All-time unsubscribe count (opt-out tag)
+  safeWeekly(`opt-out-tag:${SYSTEM_TAGS.optedOut}`, () =>
+    cacheRefresh(
+      `keap:contacts-with-tag:${SYSTEM_TAGS.optedOut}:count`,
+      TTL.KEAP_TAGS,
+      () => getContactsWithTag(SYSTEM_TAGS.optedOut, { limit: 1 }).catch(() => ({ count: 0, contacts: [] }))
+    )
+  );
+
+  await Promise.allSettled(weeklyTasks);
 
   // Warm top-tag contact samples (used by /portal/analytics audience tab)
   try {
