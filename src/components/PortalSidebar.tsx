@@ -27,6 +27,7 @@ const PORTAL_ITEMS: NavItem[] = [
   { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
   { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
   { href: "/portal/analytics", label: "Analytics", icon: BarChart, status: "live" },
+  { href: "/portal/reports/weekly", label: "Weekly Report", icon: BarChart, status: "live" },
 ];
 
 function statusDot(status?: NavItem["status"]) {

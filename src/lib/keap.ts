@@ -61,6 +61,8 @@ export interface KeapContact {
   last_updated?: string;
   owner_id?: number;
   custom_fields?: Array<{ id: number; content: any }>;
+  // Returned only when optional_properties=lead_source_id is requested
+  lead_source_id?: number;
 }
 
 export async function listContacts(params?: {
@@ -73,6 +75,7 @@ export async function listContacts(params?: {
   order_direction?: "ASCENDING" | "DESCENDING";
   since?: string;
   until?: string;
+  optional_properties?: string;
 }): Promise<{ contacts: KeapContact[]; count: number }> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
@@ -84,9 +87,32 @@ export async function listContacts(params?: {
   if (params?.order_direction) qs.set("order_direction", params.order_direction);
   if (params?.since) qs.set("since", params.since);
   if (params?.until) qs.set("until", params.until);
+  if (params?.optional_properties) qs.set("optional_properties", params.optional_properties);
 
   const data = await keapFetch(`/contacts?${qs}`);
   return { contacts: data.contacts || [], count: data.count || 0 };
+}
+
+/**
+ * Paginate ALL contacts created in a date range and return the full set with
+ * tag_ids and lead_source_id expanded. Used by the weekly report to count
+ * new leads per source.
+ */
+export async function listAllContactsInRange(since: string, until: string): Promise<KeapContact[]> {
+  const all: KeapContact[] = [];
+  for (let offset = 0; offset < 5000; offset += 1000) {
+    const page = await listContacts({
+      limit: 1000,
+      offset,
+      since,
+      until,
+      optional_properties: "tag_ids,lead_source_id",
+    }).catch(() => ({ contacts: [], count: 0 }));
+    if (!page.contacts || page.contacts.length === 0) break;
+    all.push(...page.contacts);
+    if (page.contacts.length < 1000) break;
+  }
+  return all;
 }
 
 export async function getContact(contactId: number): Promise<KeapContact> {
