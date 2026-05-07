@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useTransition } from "react";
 import {
   Layers,
   Activity,
@@ -75,7 +76,15 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-function statusDot(status?: NavItem["status"]) {
+function statusDot(status?: NavItem["status"], pending?: boolean) {
+  if (pending) {
+    return (
+      <span className="relative flex h-2 w-2" title="Loading…">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-blue opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-blue" />
+      </span>
+    );
+  }
   if (!status) return null;
   const cls = {
     live: "bg-emerald-500",
@@ -88,11 +97,15 @@ function statusDot(status?: NavItem["status"]) {
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const isSoon = item.status === "soon";
+
   const base =
     "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all";
   const activeStyle =
     "bg-white text-gray-900 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/10 dark:text-gray-50 dark:ring-white/[0.04]";
+  const pendingStyle = "bg-white/70 text-gray-900 dark:bg-white/[0.06] dark:text-gray-50";
   const idleStyle =
     "text-gray-700 hover:bg-white/60 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-gray-100";
   const disabled = "cursor-not-allowed text-gray-400 dark:text-gray-600";
@@ -101,7 +114,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     <>
       <Icon size={16} className="flex-shrink-0" />
       <span className="flex-1 truncate font-medium tracking-tight">{item.label}</span>
-      {statusDot(item.status)}
+      {statusDot(item.status, isPending)}
     </>
   );
 
@@ -113,8 +126,25 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     );
   }
 
+  const stateClass = active ? activeStyle : isPending ? pendingStyle : idleStyle;
+
+  // Use a custom click handler that wraps router.push in startTransition.
+  // This makes isPending light up the moment the user clicks, regardless of
+  // how long the new page takes to server-render — instant visual feedback.
   return (
-    <Link href={item.href} className={`${base} ${active ? activeStyle : idleStyle}`}>
+    <Link
+      href={item.href}
+      prefetch
+      onClick={(e) => {
+        // Allow modifier-key opens (cmd/ctrl-click for new tab)
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+        e.preventDefault();
+        startTransition(() => {
+          router.push(item.href);
+        });
+      }}
+      className={`${base} ${stateClass}`}
+    >
       {content}
     </Link>
   );
