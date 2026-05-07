@@ -63,6 +63,15 @@ export default function SyncBadge() {
     setError(null);
     setJustSynced(false);
     try {
+      // Clear stale GSC + GA4 cache before warming — empty results from
+      // earlier failed calls (API not enabled / scope missing / etc) would
+      // otherwise stick around for 30 min.
+      await Promise.all(
+        ["gsc:", "ga4:", "pagespeed:", "seo:"].map((p) =>
+          fetch(`/api/portal/cache-clear?prefix=${encodeURIComponent(p)}`, { method: "POST" }).catch(() => null)
+        )
+      );
+
       const res = await fetch("/api/cron/sync", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {

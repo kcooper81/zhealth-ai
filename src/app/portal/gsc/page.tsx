@@ -87,27 +87,29 @@ async function GSCBody({
 
   const [overview, topQueries, topPages, striking, lowCtr, devices, countries, daily] = await Promise.all([
     Promise.resolve(safeOverview),
+    // catch OUTSIDE cachedFetch so failures don't poison the cache —
+    // we'd rather retry next page load than show empty data for 30min
     cachedFetch(`gsc:queries:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getTopQueries(accessToken, rangeKey, 100).catch(() => [])
-    ),
+      getTopQueries(accessToken, rangeKey, 100)
+    ).catch(() => []),
     cachedFetch(`gsc:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getTopPagesGSC(accessToken, rangeKey, 100).catch(() => [])
-    ),
+      getTopPagesGSC(accessToken, rangeKey, 100)
+    ).catch(() => []),
     cachedFetch(`gsc:striking:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getStrikingDistance(accessToken, rangeKey, 30).catch(() => [])
-    ),
+      getStrikingDistance(accessToken, rangeKey, 30)
+    ).catch(() => []),
     cachedFetch(`gsc:low-ctr:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getLowCTRQueries(accessToken, rangeKey, 30).catch(() => [])
-    ),
+      getLowCTRQueries(accessToken, rangeKey, 30)
+    ).catch(() => []),
     cachedFetch(`gsc:devices:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getByDimension(accessToken, rangeKey, "device", 10).catch(() => [])
-    ),
+      getByDimension(accessToken, rangeKey, "device", 10)
+    ).catch(() => []),
     cachedFetch(`gsc:countries:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getByDimension(accessToken, rangeKey, "country", 15).catch(() => [])
-    ),
+      getByDimension(accessToken, rangeKey, "country", 15)
+    ).catch(() => []),
     cachedFetch(`gsc:daily:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getDailyTrend(accessToken, rangeKey).catch(() => [])
-    ),
+      getDailyTrend(accessToken, rangeKey)
+    ).catch(() => []),
   ]);
 
   if (!overview) {

@@ -190,17 +190,17 @@ async function SearchConsoleSection({
 
   const [overview, top, striking, lowCtr] = await Promise.all([
     cachedFetch(`gsc:overview:${rangeKey}`, TTL.GA4_OVERVIEW, () =>
-      getOverview(accessToken, rangeKey).catch(() => null)
-    ),
+      getOverview(accessToken, rangeKey)
+    ).catch(() => null),
     cachedFetch(`gsc:top:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getTopQueries(accessToken, rangeKey, 50).catch(() => [])
-    ),
+      getTopQueries(accessToken, rangeKey, 50)
+    ).catch(() => []),
     cachedFetch(`gsc:striking:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getStrikingDistance(accessToken, rangeKey, 25).catch(() => [])
-    ),
+      getStrikingDistance(accessToken, rangeKey, 25)
+    ).catch(() => []),
     cachedFetch(`gsc:low-ctr:${rangeKey}`, TTL.GA4_REPORTS, () =>
-      getLowCTRQueries(accessToken, rangeKey, 25).catch(() => [])
-    ),
+      getLowCTRQueries(accessToken, rangeKey, 25)
+    ).catch(() => []),
   ]);
 
   if (!overview) {

@@ -40,28 +40,28 @@ async function loadLandingPages(searchParams: Record<string, string | string[] |
   const [pages, formSubmits, ctaClicks, enrollClicks, campaignRev, contactsInWindow] = await Promise.all([
     accessToken
       ? cachedFetch(`ga4:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getPagesWithEntrances(accessToken, "website", rangeKey, 200).catch(() => [])
-        )
+          getPagesWithEntrances(accessToken, "website", rangeKey, 200)
+        ).catch(() => [])
       : Promise.resolve([] as any[]),
     accessToken
       ? cachedFetch(`ga4:event:form_submit:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "website", rangeKey, "form_submit", ["pagePath"], 200).catch(() => [])
-        )
+          getEventCounts(accessToken, "website", rangeKey, "form_submit", ["pagePath"], 200)
+        ).catch(() => [])
       : Promise.resolve([] as any[]),
     accessToken
       ? cachedFetch(`ga4:event:cta_click:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "website", rangeKey, "cta_click", ["pagePath"], 200).catch(() => [])
-        )
+          getEventCounts(accessToken, "website", rangeKey, "cta_click", ["pagePath"], 200)
+        ).catch(() => [])
       : Promise.resolve([] as any[]),
     accessToken
       ? cachedFetch(`ga4:event:enroll_click:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "website", rangeKey, "enroll_click", ["pagePath"], 200).catch(() => [])
-        )
+          getEventCounts(accessToken, "website", rangeKey, "enroll_click", ["pagePath"], 200)
+        ).catch(() => [])
       : Promise.resolve([] as any[]),
     accessToken
       ? cachedFetch(`ga4:ecom:campaign:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEcommerce(accessToken, "website", rangeKey, "sessionCampaignName", 100).catch(() => [])
-        )
+          getEcommerce(accessToken, "website", rangeKey, "sessionCampaignName", 100)
+        ).catch(() => [])
       : Promise.resolve([] as any[]),
     // Pull every contact created in window with their tag_ids — we'll
     // count per LP tag below, which gives us "leads in window" instead
