@@ -21,6 +21,7 @@ import {
   Search,
   AIBrain,
   ChevronDown,
+  TrendingUp,
 } from "./icons";
 import ModeSwitcher from "./portal/ModeSwitcher";
 import SyncBadge from "./portal/SyncBadge";
@@ -41,44 +42,40 @@ type NavGroup = {
 };
 
 const NAV_GROUPS: NavGroup[] = [
+  // No group header — top-level dashboard pages, always visible
   {
-    title: "Overview",
+    title: "",
     items: [
       { href: "/portal", label: "Home", icon: Layers, status: "live" },
+      { href: "/portal/reports/weekly", label: "Weekly digest", icon: FileText, status: "live" },
     ],
   },
   {
     title: "Reports",
     items: [
+      { href: "/portal/reports/funnels", label: "Funnels", icon: Funnel, status: "live" },
       { href: "/portal/reports/channels", label: "Channels", icon: Map, status: "live" },
       { href: "/portal/reports/landing-pages", label: "Landing pages", icon: Target, status: "live" },
       { href: "/portal/reports/courses", label: "Courses", icon: GraduationCap, status: "live" },
       { href: "/portal/reports/emails", label: "Emails", icon: Mail, status: "live" },
       { href: "/portal/reports/campaigns", label: "Campaigns", icon: Zap, status: "live" },
-      { href: "/portal/reports/funnels", label: "Funnels", icon: Funnel, status: "live" },
+      { href: "/portal/seo", label: "SEO health", icon: Search, status: "live" },
+      { href: "/portal/gsc", label: "Search rankings", icon: TrendingUp, status: "live" },
     ],
   },
   {
-    title: "Summaries",
-    items: [
-      { href: "/portal/reports/weekly", label: "Weekly digest", icon: BarChart, status: "live" },
-    ],
-  },
-  {
-    title: "Sources",
+    title: "Data sources",
     defaultCollapsed: true,
     items: [
-      { href: "/portal/keap", label: "Keap CRM", icon: Users, status: "live" },
-      { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
-      { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
-      { href: "/portal/seo", label: "SEO audit", icon: Target, status: "live" },
-      { href: "/portal/gsc", label: "Search Console", icon: Search, status: "live" },
-      { href: "/portal/analytics", label: "GA4 analytics", icon: BarChart, status: "live" },
-      { href: "/portal/customer-flows", label: "Customer flows", icon: Activity, status: "scaffold" },
+      { href: "/portal/keap", label: "Keap (CRM)", icon: Users, status: "live" },
+      { href: "/portal/thinkific", label: "Thinkific (LMS)", icon: Sparkles, status: "live" },
+      { href: "/portal/wp", label: "WordPress", icon: Globe, status: "live" },
+      { href: "/portal/analytics", label: "Google Analytics", icon: BarChart, status: "live" },
+      { href: "/portal/customer-flows", label: "Customer journeys", icon: Activity, status: "scaffold" },
     ],
   },
   {
-    title: "Tools",
+    title: "Workspace",
     defaultCollapsed: true,
     items: [
       { href: "/chat", label: "AI chat", icon: AIBrain, status: "live" },
@@ -113,13 +110,13 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const isSoon = item.status === "soon";
 
   const base =
-    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all";
+    "group flex items-center gap-3 rounded-lg px-3 py-1.5 text-[13px] transition-all";
   const activeStyle =
-    "bg-white text-gray-900 shadow-sm ring-1 ring-black/[0.04] dark:bg-white/10 dark:text-gray-50 dark:ring-white/[0.04]";
-  const pendingStyle = "bg-white/70 text-gray-900 dark:bg-white/[0.06] dark:text-gray-50";
+    "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]";
+  const pendingStyle = "bg-white/[0.04] text-white";
   const idleStyle =
-    "text-gray-700 hover:bg-white/60 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-gray-100";
-  const disabled = "cursor-not-allowed text-gray-400 dark:text-gray-600";
+    "text-gray-400 hover:bg-white/[0.04] hover:text-gray-100";
+  const disabled = "cursor-not-allowed text-gray-600";
 
   const content = (
     <>
@@ -207,15 +204,15 @@ export default function PortalSidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-64 flex-shrink-0 flex-col border-r border-gray-200/70 bg-gray-50/60 backdrop-blur-xl dark:border-white/5 dark:bg-[#161618]/80">
-      <div className="flex items-center gap-2 px-4 pt-5 pb-2">
+    <aside className="flex h-screen w-64 flex-shrink-0 flex-col bg-[#1a1b2e] text-gray-200">
+      <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="https://zhealtheducation.com/wp-content/uploads/2024/02/logo.svg"
           alt="Z-Health"
-          className="h-5 w-auto dark:invert"
+          className="h-5 w-auto invert"
         />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-400">
           Portal
         </span>
       </div>
@@ -231,11 +228,11 @@ export default function PortalSidebar() {
 
           return (
             <div key={group.title} className="mb-4">
-              {isCollapsible ? (
+              {group.title && isCollapsible ? (
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.title)}
-                  className="mb-1 flex w-full items-center justify-between px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
+                  className="mb-1 flex w-full items-center justify-between px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500 hover:text-gray-300"
                 >
                   <span>{group.title}</span>
                   <ChevronDown
@@ -243,11 +240,11 @@ export default function PortalSidebar() {
                     className={`transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
                   />
                 </button>
-              ) : (
-                <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">
+              ) : group.title ? (
+                <div className="mb-1 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500">
                   {group.title}
                 </div>
-              )}
+              ) : null}
               {!isCollapsed && (
                 <ul className="space-y-0.5">
                   {group.items.map((item) => (

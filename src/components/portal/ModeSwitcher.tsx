@@ -14,18 +14,11 @@ export default function ModeSwitcher({ tone = "light" }: { tone?: Tone }) {
   const pathname = usePathname() || "";
   const active = pathname.startsWith("/portal") ? "portal" : "chat";
 
-  const trackBg =
-    tone === "dark"
-      ? "bg-white/5"
-      : "bg-gray-100/80 dark:bg-white/5";
-  const inactiveText =
-    tone === "dark"
-      ? "text-gray-400 hover:text-gray-100"
-      : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100";
-  const activeBg =
-    tone === "dark"
-      ? "bg-white text-gray-900"
-      : "bg-white text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-50";
+  // Both portal and chat use a dark sidebar now — use the same dark
+  // mode-switcher styling regardless of `tone` so they feel uniform.
+  const trackBg = "bg-white/[0.06]";
+  const inactiveText = "text-gray-400 hover:text-gray-100";
+  const activeBg = "bg-white/[0.12] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]";
 
   return (
     <div

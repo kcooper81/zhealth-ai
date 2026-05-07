@@ -85,15 +85,14 @@ export default function SyncBadge() {
   const errorCount = status?.all?.errors?.length ?? 0;
 
   return (
-    <div className="border-t border-gray-200/70 px-3 py-2.5 dark:border-white/5">
+    <div className="px-3 py-2">
       <button
         type="button"
         onClick={handleRefresh}
         disabled={syncing}
         className={[
-          "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs transition-all",
-          "border border-gray-200/80 bg-white/60 hover:bg-white",
-          "dark:border-white/10 dark:bg-white/[0.02] dark:hover:bg-white/[0.06]",
+          "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition-all",
+          "bg-white/[0.04] hover:bg-white/[0.08] text-gray-200",
           syncing ? "cursor-wait opacity-80" : "cursor-pointer",
         ].join(" ")}
         title={
@@ -104,24 +103,24 @@ export default function SyncBadge() {
       >
         <span
           className={[
-            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg",
+            "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md",
             justSynced
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+              ? "bg-emerald-500/20 text-emerald-300"
               : error
-              ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-              : "bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-300",
+              ? "bg-rose-500/20 text-rose-300"
+              : "bg-white/[0.06] text-gray-300",
           ].join(" ")}
         >
           {justSynced ? (
-            <Check size={13} />
+            <Check size={12} />
           ) : error ? (
-            <AlertCircle size={13} />
+            <AlertCircle size={12} />
           ) : (
-            <RotateCw size={13} className={syncing ? "animate-spin" : ""} />
+            <RotateCw size={12} className={syncing ? "animate-spin" : ""} />
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-gray-900 dark:text-gray-100">
+          <div className="text-[12px] text-gray-200">
             {syncing
               ? "Syncing data…"
               : justSynced
@@ -130,7 +129,7 @@ export default function SyncBadge() {
               ? "Sync failed"
               : "Refresh data"}
           </div>
-          <div className="text-[10px] text-gray-500 dark:text-gray-500">
+          <div className="text-[10px] text-gray-500">
             {error
               ? error.slice(0, 60)
               : status?.all
