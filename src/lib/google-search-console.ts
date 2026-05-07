@@ -183,3 +183,93 @@ export async function getOverview(
     position: row.position || 0,
   };
 }
+
+export type GSCPageRow = {
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+/** Top pages — which URLs are landing search traffic. */
+export async function getTopPagesGSC(
+  accessToken: string,
+  rangeKey: string = "30d",
+  limit: number = 100
+): Promise<GSCPageRow[]> {
+  const { startDate, endDate } = rangeDates(rangeKey);
+  const data = await gscFetch(accessToken, "searchAnalytics/query", {
+    startDate,
+    endDate,
+    dimensions: ["page"],
+    rowLimit: limit,
+  });
+  return (data.rows || []).map((r: any) => ({
+    page: r.keys?.[0] || "",
+    clicks: r.clicks || 0,
+    impressions: r.impressions || 0,
+    ctr: r.ctr || 0,
+    position: r.position || 0,
+  }));
+}
+
+export type GSCDimensionRow = {
+  key: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+/** Breakdown by an arbitrary dimension (device, country, searchAppearance). */
+export async function getByDimension(
+  accessToken: string,
+  rangeKey: string,
+  dimension: "device" | "country" | "searchAppearance",
+  limit: number = 50
+): Promise<GSCDimensionRow[]> {
+  const { startDate, endDate } = rangeDates(rangeKey);
+  const data = await gscFetch(accessToken, "searchAnalytics/query", {
+    startDate,
+    endDate,
+    dimensions: [dimension],
+    rowLimit: limit,
+  });
+  return (data.rows || []).map((r: any) => ({
+    key: r.keys?.[0] || "",
+    clicks: r.clicks || 0,
+    impressions: r.impressions || 0,
+    ctr: r.ctr || 0,
+    position: r.position || 0,
+  }));
+}
+
+export type GSCDailyRow = {
+  date: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+/** Day-by-day trend — used for the line chart on the GSC dashboard. */
+export async function getDailyTrend(
+  accessToken: string,
+  rangeKey: string = "30d"
+): Promise<GSCDailyRow[]> {
+  const { startDate, endDate } = rangeDates(rangeKey);
+  const data = await gscFetch(accessToken, "searchAnalytics/query", {
+    startDate,
+    endDate,
+    dimensions: ["date"],
+    rowLimit: 1000,
+  });
+  return (data.rows || []).map((r: any) => ({
+    date: r.keys?.[0] || "",
+    clicks: r.clicks || 0,
+    impressions: r.impressions || 0,
+    ctr: r.ctr || 0,
+    position: r.position || 0,
+  }));
+}

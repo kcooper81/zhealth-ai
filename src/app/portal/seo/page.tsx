@@ -23,8 +23,9 @@ import { runSEOAudit } from "@/lib/wp-seo-audit";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import { getTopPages } from "@/lib/google-analytics";
-import { getTopQueries, getStrikingDistance, getLowCTRQueries, getOverview } from "@/lib/google-search-console";
+import { getTopQueries, getStrikingDistance, getLowCTRQueries, getOverview, getTopPagesGSC } from "@/lib/google-search-console";
 import { getKeywordSuggestions } from "@/lib/keyword-research";
+import { getPageSpeedBatch, rollupVitals } from "@/lib/pagespeed";
 import { parseTimeRange } from "@/lib/time-range";
 
 export const dynamic = "force-dynamic";
@@ -317,6 +318,92 @@ async function SearchConsoleSection({
   );
 }
 
+async function CoreWebVitalsSummary({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const range = parseTimeRange(searchParams);
+  const rangeKey = range.key === "custom" ? "30d" : range.key;
+  const session = (await getServerSession()) as any;
+  const accessToken = session?.accessToken;
+
+  // Pick which URLs to score: GSC top pages if available, otherwise the
+  // homepage + top pages from the audit.
+  const SITE = process.env.WP_SITE_URL || "https://zhealtheducation.com";
+  let urls: string[] = [SITE];
+  if (accessToken) {
+    try {
+      const gscPages = await cachedFetch(`gsc:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
+        getTopPagesGSC(accessToken, rangeKey, 8).catch(() => [])
+      );
+      urls = Array.from(new Set([SITE, ...gscPages.map((p: any) => p.page)])).slice(0, 8);
+    } catch {}
+  } else {
+    const audit = await runSEOAudit().catch(() => null);
+    if (audit) urls = [SITE, ...audit.rows.slice(0, 7).map((r) => r.link)];
+  }
+
+  const mobile = await getPageSpeedBatch(urls, "MOBILE", 4);
+  const rollup = rollupVitals(mobile);
+  const poorPages = mobile.filter(
+    (m) => m.lcp?.rating === "poor" || m.inp?.rating === "poor" || m.cls?.rating === "poor"
+  );
+
+  return (
+    <Section
+      id="section-cwv"
+      title="Core Web Vitals (mobile)"
+      description="Field data from Chrome users — same source GSC uses for its CWV report. Sampling your top GSC pages."
+      action={
+        <a
+          href="/portal/gsc#section-cwv"
+          className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+        >
+          Full breakdown →
+        </a>
+      }
+    >
+      <KPIGrid
+        accent={poorPages.length > 0 ? "rose" : "green"}
+        kpis={[
+          { label: "Pages tested", value: rollup.total, hint: `${rollup.withFieldData} have CrUX field data` },
+          { label: "Mobile avg perf", value: rollup.avgPerformance != null ? `${rollup.avgPerformance}/100` : "—" },
+          { label: "Pages with poor CWV", value: poorPages.length, hint: "any of LCP / INP / CLS in 'poor' tier" },
+          { label: "LCP good / OK / poor", value: `${rollup.lcp.good} / ${rollup.lcp.ni} / ${rollup.lcp.poor}` },
+        ]}
+      />
+      {poorPages.length > 0 && (
+        <Card className="mt-4 border-rose-200 bg-rose-50/50 dark:border-rose-900/50 dark:bg-rose-950/20">
+          <h3 className="text-sm font-semibold text-rose-900 dark:text-rose-200">
+            {poorPages.length} page{poorPages.length === 1 ? "" : "s"} with poor Core Web Vitals
+          </h3>
+          <ul className="mt-2 space-y-1 text-sm">
+            {poorPages.slice(0, 6).map((p) => {
+              const path = (() => { try { return new URL(p.url).pathname || "/"; } catch { return p.url; } })();
+              return (
+                <li key={p.url} className="flex items-center justify-between text-rose-900 dark:text-rose-200">
+                  <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-mono text-xs hover:underline">
+                    {path}
+                  </a>
+                  <span className="ml-3 text-xs">
+                    {p.lcp ? `LCP ${(p.lcp.ms / 1000).toFixed(1)}s` : ""}
+                    {p.inp ? ` · INP ${p.inp.ms}ms` : ""}
+                    {p.cls ? ` · CLS ${p.cls.value.toFixed(2)}` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-3 text-xs text-rose-800 dark:text-rose-300">
+            Open the <a href="/portal/gsc#section-cwv" className="underline">Search Console page</a> for the full table with the top recommended fix per URL.
+          </p>
+        </Card>
+      )}
+    </Section>
+  );
+}
+
 async function KeywordOpportunitiesSection() {
   const audit = await runSEOAudit().catch(() => null);
   if (!audit) return null;
@@ -493,6 +580,11 @@ export default async function SEOAuditPage({
       {/* Keyword opportunities — Google Suggest variations on actual focus keywords */}
       <Suspense fallback={<SectionSkeleton title="Keyword opportunities" description="Pulling Google autocomplete for your top pages' topics…" bodyHeight={400} />}>
         <KeywordOpportunitiesSection />
+      </Suspense>
+
+      {/* Core Web Vitals — same data Google Search Console uses */}
+      <Suspense fallback={<SectionSkeleton title="Core Web Vitals" description="Calling PageSpeed Insights for your top pages…" bodyHeight={300} />}>
+        <CoreWebVitalsSummary searchParams={searchParams} />
       </Suspense>
 
       <Section

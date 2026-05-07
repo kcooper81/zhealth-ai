@@ -18,6 +18,7 @@ import {
   Settings,
   FileText,
   Zap,
+  Search,
 } from "./icons";
 import ModeSwitcher from "./portal/ModeSwitcher";
 import SyncBadge from "./portal/SyncBadge";
@@ -65,6 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/portal/thinkific", label: "Thinkific LMS", icon: Sparkles, status: "live" },
       { href: "/portal/wp", label: "WordPress site", icon: Globe, status: "live" },
       { href: "/portal/seo", label: "SEO audit", icon: Target, status: "live" },
+      { href: "/portal/gsc", label: "Search Console", icon: Search, status: "live" },
       { href: "/portal/analytics", label: "GA4 analytics", icon: BarChart, status: "live" },
       { href: "/portal/customer-flows", label: "Customer flows", icon: Activity, status: "scaffold" },
     ],
