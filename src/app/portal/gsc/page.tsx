@@ -16,7 +16,7 @@ import Insight, { InsightGrid } from "@/components/portal/Insight";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
 import { SectionSkeleton, KPIGridSkeleton } from "@/components/portal/Skeletons";
-import FilterableTable, { type Column } from "@/components/portal/FilterableTable";
+import { GSCQueriesTable, GSCPagesTable } from "@/components/portal/GSCTables";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import {
@@ -289,33 +289,7 @@ async function GSCBody({
         description={`Search and sort to find specific queries. Use chips to narrow to common cases.`}
         action={<ExportButton targetId="section-queries" filename="gsc-top-queries" />}
       >
-        <FilterableTable
-          rows={topQueries}
-          rowKey={(q) => q.query}
-          searchableKeys={["query"]}
-          placeholder="Search queries…"
-          maxHeight={500}
-          presets={[
-            { label: "Page 1 (≤10)", predicate: (q: any) => q.position <= 10 },
-            { label: "Page 2 (11–20)", predicate: (q: any) => q.position > 10 && q.position <= 20 },
-            { label: ">100 impressions", predicate: (q: any) => q.impressions > 100 },
-            { label: "Low CTR (<2%)", predicate: (q: any) => q.ctr < 0.02 },
-          ]}
-          initialSort={{ key: "clicks", dir: "desc" }}
-          columns={[
-            {
-              key: "query",
-              label: "Query",
-              sortable: true,
-              accessor: (q: any) => q.query,
-              render: (q: any) => <span className="font-medium text-gray-900 dark:text-gray-100">{q.query}</span>,
-            },
-            { key: "clicks", label: "Clicks", sortable: true, numeric: true, accessor: (q: any) => q.clicks, render: (q: any) => q.clicks.toLocaleString() },
-            { key: "impressions", label: "Impressions", sortable: true, numeric: true, accessor: (q: any) => q.impressions, render: (q: any) => q.impressions.toLocaleString() },
-            { key: "ctr", label: "CTR", sortable: true, numeric: true, accessor: (q: any) => q.ctr, render: (q: any) => `${(q.ctr * 100).toFixed(2)}%` },
-            { key: "position", label: "Position", sortable: true, numeric: true, accessor: (q: any) => q.position, render: (q: any) => q.position.toFixed(1) },
-          ] as Column<any>[]}
-        />
+        <GSCQueriesTable rows={topQueries} />
       </Section>
 
       <Section
@@ -324,37 +298,7 @@ async function GSCBody({
         description="Which URLs are landing search traffic. Search by path."
         action={<ExportButton targetId="section-pages" filename="gsc-top-pages" />}
       >
-        <FilterableTable
-          rows={topPages}
-          rowKey={(p) => p.page}
-          searchableKeys={["page"]}
-          placeholder="Search by URL path…"
-          maxHeight={500}
-          presets={[
-            { label: "Page 1 (≤10)", predicate: (p: any) => p.position <= 10 },
-            { label: "Page 2 (11–20)", predicate: (p: any) => p.position > 10 && p.position <= 20 },
-            { label: ">100 impressions", predicate: (p: any) => p.impressions > 100 },
-            { label: "0 clicks", predicate: (p: any) => p.clicks === 0 },
-          ]}
-          initialSort={{ key: "clicks", dir: "desc" }}
-          columns={[
-            {
-              key: "page",
-              label: "Page",
-              sortable: true,
-              accessor: (p: any) => p.page,
-              render: (p: any) => (
-                <a href={p.page} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-gray-900 hover:underline dark:text-gray-100">
-                  {(() => { try { return new URL(p.page).pathname; } catch { return p.page; } })()}
-                </a>
-              ),
-            },
-            { key: "clicks", label: "Clicks", sortable: true, numeric: true, accessor: (p: any) => p.clicks, render: (p: any) => p.clicks.toLocaleString() },
-            { key: "impressions", label: "Impressions", sortable: true, numeric: true, accessor: (p: any) => p.impressions, render: (p: any) => p.impressions.toLocaleString() },
-            { key: "ctr", label: "CTR", sortable: true, numeric: true, accessor: (p: any) => p.ctr, render: (p: any) => `${(p.ctr * 100).toFixed(2)}%` },
-            { key: "position", label: "Position", sortable: true, numeric: true, accessor: (p: any) => p.position, render: (p: any) => p.position.toFixed(1) },
-          ] as Column<any>[]}
-        />
+        <GSCPagesTable rows={topPages} />
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">

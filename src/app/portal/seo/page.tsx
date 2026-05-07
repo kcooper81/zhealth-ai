@@ -19,7 +19,7 @@ import Insight, { InsightGrid } from "@/components/portal/Insight";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
 import { SectionSkeleton, TableSkeleton, KPIGridSkeleton } from "@/components/portal/Skeletons";
-import FilterableTable, { type Column } from "@/components/portal/FilterableTable";
+import SEOAuditTable from "@/components/portal/SEOAuditTable";
 import { runSEOAudit } from "@/lib/wp-seo-audit";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
@@ -653,91 +653,20 @@ export default async function SEOAuditPage({
         description="Search by title or path. Sort by clicking column headers. Use the chips to narrow to common SEO problems."
         action={<ExportButton targetId="section-all" filename="seo-all" />}
       >
-        <FilterableTable
-          rows={audit.rows}
-          rowKey={(r) => String(r.id)}
-          searchableKeys={["title", "path", "slug"]}
-          placeholder="Search by page title or URL path…"
-          maxHeight={600}
-          presets={[
-            { label: "Score < 70", predicate: (r) => r.score < 70 },
-            { label: "Missing description", predicate: (r) => r.issues.some((i) => i.code === "missing_description") },
-            { label: "Thin content", predicate: (r) => r.issues.some((i) => i.code === "thin_content") },
-            { label: "Posts only", predicate: (r) => r.type === "post" },
-            { label: "Pages only", predicate: (r) => r.type === "page" },
-          ]}
-          initialSort={{ key: "score", dir: "asc" }}
-          columns={[
-            {
-              key: "title",
-              label: "Page",
-              sortable: true,
-              accessor: (r) => r.title,
-              render: (r) => (
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">{r.title}</div>
-                  <a href={r.link} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-gray-500 hover:underline">
-                    {r.path}
-                  </a>
-                </div>
-              ),
-            },
-            {
-              key: "type",
-              label: "Type",
-              sortable: true,
-              accessor: (r) => r.type,
-              render: (r) => <span className="text-xs uppercase tracking-wider text-gray-500">{r.type}</span>,
-            },
-            {
-              key: "titleLength",
-              label: "Title len",
-              sortable: true,
-              numeric: true,
-              accessor: (r) => r.titleLength,
-              render: (r) => (
-                <span className={r.titleLength === 0 ? "text-rose-600" : r.titleLength < 25 || r.titleLength > 65 ? "text-amber-600" : ""}>
-                  {r.titleLength}
-                </span>
-              ),
-            },
-            {
-              key: "descriptionLength",
-              label: "Desc len",
-              sortable: true,
-              numeric: true,
-              accessor: (r) => r.descriptionLength,
-              render: (r) => (
-                <span className={r.descriptionLength === 0 ? "text-rose-600" : r.descriptionLength < 70 || r.descriptionLength > 165 ? "text-amber-600" : ""}>
-                  {r.descriptionLength || "—"}
-                </span>
-              ),
-            },
-            {
-              key: "wordCount",
-              label: "Words",
-              sortable: true,
-              numeric: true,
-              accessor: (r) => r.wordCount,
-              render: (r) => r.wordCount.toLocaleString(),
-            },
-            {
-              key: "issues",
-              label: "Issues",
-              sortable: true,
-              numeric: true,
-              accessor: (r) => r.issues.length,
-              render: (r) => r.issues.length,
-            },
-            {
-              key: "score",
-              label: "Score",
-              sortable: true,
-              numeric: true,
-              accessor: (r) => r.score,
-              render: (r) => <span className={`font-semibold ${scoreCls(r.score)}`}>{r.score}</span>,
-            },
-          ] as Column<typeof audit.rows[number]>[]}
+        <SEOAuditTable
+          rows={audit.rows.map((r) => ({
+            id: r.id,
+            type: r.type,
+            title: r.title,
+            slug: r.slug,
+            link: r.link,
+            path: r.path,
+            titleLength: r.titleLength,
+            descriptionLength: r.descriptionLength,
+            wordCount: r.wordCount,
+            score: r.score,
+            issues: r.issues,
+          }))}
         />
       </Section>
 
