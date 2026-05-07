@@ -21,7 +21,7 @@ import {
 import { LANDING_PAGE_TAG_MAP } from "@/lib/landing-page-tag-map";
 import { getAllWPPages, getAllWPPosts } from "@/lib/wp-content-list";
 import { listCourses } from "@/lib/thinkific";
-import { listSavedFunnels, seedBuiltInFunnels } from "@/lib/saved-funnels";
+import { listSavedFunnels, seedBuiltInFunnels, migrateGenericStepNames } from "@/lib/saved-funnels";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
@@ -33,11 +33,17 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
 
-  // 0. Auto-seed any built-in preset funnels that aren't yet in the
-  //    saved store. Adds new defaults on first load + any newly-shipped
-  //    defaults later, without overwriting user customs or restoring
-  //    defaults the user has explicitly deleted.
+  // 0a. Auto-seed any built-in preset funnels that aren't yet in the
+  //     saved store. Adds new defaults on first load + any newly-shipped
+  //     defaults later, without overwriting user customs.
   await seedBuiltInFunnels("if-missing").catch(() => null);
+
+  // 0b. One-time migration: any existing saved funnel whose step name
+  //     is still the generic catalog label ("Page view", "CTA click")
+  //     gets rewritten to the descriptive form ("Landed on /lower-back",
+  //     "Clicked a CTA on /lower-back"). Idempotent — only changes names
+  //     that exactly match the generic catalog label.
+  await migrateGenericStepNames().catch(() => null);
 
   // 1. Load saved customs + page lists in parallel
   const [saved, wpPages, wpPosts, lmsCourses, gaWebPages, gaLmsPages] = await Promise.all([
@@ -187,6 +193,64 @@ export default async function FunnelsReportPage({
           const top = steps[0]?.users ?? 0;
           const last = steps[steps.length - 1]?.users ?? 0;
           const overallCvr = top > 0 ? (last / top) * 100 : 0;
+          const totalDropoff = top - last;
+
+          // Find biggest single-step drop-off
+          let biggestDropIdx = -1;
+          let biggestDropAmount = 0;
+          for (let i = 1; i < steps.length; i++) {
+            const drop = steps[i - 1].users - steps[i].users;
+            if (drop > biggestDropAmount) {
+              biggestDropAmount = drop;
+              biggestDropIdx = i;
+            }
+          }
+
+          const matchingSaved = data.saved.find((s) => s.id === funnel.id);
+          const entryPath = matchingSaved?.entryPath || funnel.steps.find((s) => s.pageMatch)?.pageMatch || null;
+          const isCustom = !funnel.id.startsWith("seed-");
+
+          // Per-funnel insights — written from the data
+          const insights: Array<{ tone: "good" | "warn" | "alert" | "info"; title: string; body: string }> = [];
+          if (top === 0) {
+            insights.push({
+              tone: "warn",
+              title: "No traffic at the entry step",
+              body: entryPath
+                ? `The first step found 0 users in ${data.range.label.toLowerCase()}. Either the page didn't get visits, or the page filter doesn't match GA4's reported pagePath. Check ${entryPath} for typos or trailing slashes.`
+                : `The first step found 0 users in ${data.range.label.toLowerCase()}.`,
+            });
+          } else if (top < 50) {
+            insights.push({
+              tone: "info",
+              title: "Low entry traffic",
+              body: `${top.toLocaleString()} entrants is too small to draw conclusions. Pick a longer date range or wait for more data before optimizing.`,
+            });
+          }
+          if (biggestDropIdx > 0 && top > 0 && biggestDropAmount > 0) {
+            const fromStep = steps[biggestDropIdx - 1];
+            const toStep = steps[biggestDropIdx];
+            const dropPct = (biggestDropAmount / Math.max(1, fromStep.users)) * 100;
+            insights.push({
+              tone: dropPct >= 80 ? "alert" : dropPct >= 50 ? "warn" : "info",
+              title: `Biggest drop: "${fromStep.name}" → "${toStep.name}"`,
+              body: `${biggestDropAmount.toLocaleString()} users (${dropPct.toFixed(1)}% of the previous step) didn't make it to the next step. This is where to focus optimization effort.`,
+            });
+          }
+          if (overallCvr > 0 && overallCvr < 0.5 && top >= 100) {
+            insights.push({
+              tone: "alert",
+              title: `End-to-end conversion is ${overallCvr.toFixed(2)}%`,
+              body: "Below 0.5% is unusual even for cold traffic. Likely either a tracking gap (events not firing on later steps) or a real conversion problem.",
+            });
+          } else if (overallCvr >= 5 && top >= 100) {
+            insights.push({
+              tone: "good",
+              title: `Strong ${overallCvr.toFixed(2)}% end-to-end conversion`,
+              body: `${last.toLocaleString()} of ${top.toLocaleString()} entrants made it through the full funnel. Above typical course-funnel conversion (1-3%).`,
+            });
+          }
+
           return (
             <Section
               key={funnel.id}
@@ -196,53 +260,135 @@ export default async function FunnelsReportPage({
               action={<ExportButton targetId={`section-funnel-${funnel.id}`} filename={`funnel-${funnel.id}`} />}
             >
               <Card>
-                <div className="mb-4 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    <span>{funnel.property === "lms" ? "LMS" : "Website"}</span>
-                  </div>
-                  <div className="text-sm">
-                    Overall conversion:{" "}
-                    <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                      {overallCvr.toFixed(2)}%
+                {/* Header strip — entry, property, count, period, type chip */}
+                <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200/70 pb-4 dark:border-white/5">
+                  <div className="flex items-center gap-2 text-xs">
+                    {isCustom ? (
+                      <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                        Custom
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-700 dark:bg-white/5 dark:text-gray-400">
+                        Default
+                      </span>
+                    )}
+                    <span className="text-gray-500">·</span>
+                    <span className="text-gray-700 dark:text-gray-300">
+                      {funnel.property === "lms" ? "LMS / Thinkific" : "Website"}
                     </span>
-                    <span className="ml-2 text-xs text-gray-500">{top.toLocaleString()} → {last.toLocaleString()}</span>
+                  </div>
+                  {entryPath && (
+                    <div className="text-xs">
+                      <span className="text-gray-500">Entry:</span>{" "}
+                      <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-gray-900 dark:bg-white/10 dark:text-gray-100">{entryPath}</code>
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500">
+                    {steps.length} step{steps.length === 1 ? "" : "s"}
+                  </div>
+                  <div className="text-xs text-gray-500">{data.range.label}</div>
+                </div>
+
+                {/* Headline tiles */}
+                <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Entrants</div>
+                    <div className="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-50">{top.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Conversions</div>
+                    <div className="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-50">{last.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">End-to-end CVR</div>
+                    <div className={`mt-1 text-2xl font-semibold tabular-nums ${overallCvr >= 5 ? "text-emerald-700 dark:text-emerald-400" : overallCvr >= 1 ? "text-gray-900 dark:text-gray-50" : "text-rose-700 dark:text-rose-400"}`}>
+                      {top > 0 ? overallCvr.toFixed(2) + "%" : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total drop-off</div>
+                    <div className="mt-1 text-2xl font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+                      {totalDropoff > 0 ? totalDropoff.toLocaleString() : "—"}
+                    </div>
                   </div>
                 </div>
 
+                {/* Step bars with drop-off markers */}
                 <div className="space-y-2">
                   {steps.map((s, i) => {
                     const cvrFromTop = top > 0 ? (s.users / top) * 100 : 0;
-                    const cvrFromPrev = i > 0 && steps[i - 1].users > 0 ? (s.users / steps[i - 1].users) * 100 : null;
+                    const prevUsers = i > 0 ? steps[i - 1].users : null;
+                    const cvrFromPrev = prevUsers != null && prevUsers > 0 ? (s.users / prevUsers) * 100 : null;
+                    const dropFromPrev = prevUsers != null ? prevUsers - s.users : 0;
                     const widthPct = top > 0 ? Math.max(2, Math.min(100, (s.users / top) * 100)) : 0;
+                    const isBiggestDrop = i === biggestDropIdx && dropFromPrev > 0;
                     return (
-                      <div key={`${s.eventName}-${i}`} className="grid grid-cols-12 items-center gap-3">
-                        <div className="col-span-3 text-sm text-gray-700 dark:text-gray-300">
-                          <div className="font-medium text-gray-900 dark:text-gray-100">{s.name}</div>
-                          <div className="text-[10px] font-mono text-gray-400">{s.eventName}</div>
-                        </div>
-                        <div className="col-span-6">
-                          <div className="h-7 w-full overflow-hidden rounded-md bg-gray-100 dark:bg-white/5">
-                            <div
-                              className="h-full rounded-md bg-gradient-to-r from-blue-500/80 to-blue-600/80 dark:from-blue-400/70 dark:to-blue-500/70"
-                              style={{ width: `${widthPct}%` }}
-                            />
+                      <div key={`${s.eventName}-${i}`}>
+                        {prevUsers != null && dropFromPrev > 0 && (
+                          <div className={`mb-1 ml-[25%] flex items-center gap-1.5 text-[10px] ${isBiggestDrop ? "text-rose-600 dark:text-rose-400 font-medium" : "text-gray-500 dark:text-gray-500"}`}>
+                            <span>↓</span>
+                            <span>{dropFromPrev.toLocaleString()} dropped</span>
+                            <span className="opacity-60">({((dropFromPrev / prevUsers) * 100).toFixed(1)}% of previous)</span>
+                            {isBiggestDrop && <span className="ml-1 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">biggest drop</span>}
                           </div>
-                        </div>
-                        <div className="col-span-3 text-right text-xs">
-                          <div className="text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                            {s.users.toLocaleString()} users
+                        )}
+                        <div className="grid grid-cols-12 items-center gap-3">
+                          <div className="col-span-3 text-sm text-gray-700 dark:text-gray-300">
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{s.name}</div>
+                            <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-500">
+                              <code className="font-mono">{s.eventName}</code>
+                              {(s as any).pageMatch && (
+                                <>
+                                  <span>·</span>
+                                  <span>scoped to <code className="font-mono">{(s as any).pageMatch}</code></span>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-[10px] text-gray-500">
-                            {cvrFromTop.toFixed(1)}% of top
-                            {cvrFromPrev != null && (
-                              <span className="ml-2">· {cvrFromPrev.toFixed(1)}% of previous</span>
-                            )}
+                          <div className="col-span-6">
+                            <div className="h-7 w-full overflow-hidden rounded-md bg-gray-100 dark:bg-white/5">
+                              <div
+                                className="h-full rounded-md bg-gradient-to-r from-blue-500/80 to-blue-600/80 dark:from-blue-400/70 dark:to-blue-500/70"
+                                style={{ width: `${widthPct}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="col-span-3 text-right text-xs">
+                            <div className="text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                              {s.users.toLocaleString()} users
+                            </div>
+                            <div className="text-[10px] text-gray-500">
+                              {cvrFromTop.toFixed(1)}% of top
+                              {cvrFromPrev != null && (
+                                <span className="ml-2">· {cvrFromPrev.toFixed(1)}% of previous</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Per-funnel insights */}
+                {insights.length > 0 && (
+                  <div className="mt-6 grid gap-3 border-t border-gray-200/70 pt-5 dark:border-white/5 md:grid-cols-2">
+                    {insights.map((ins, idx) => {
+                      const toneCls = {
+                        good: "border-emerald-200 bg-emerald-50/50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200",
+                        warn: "border-amber-200 bg-amber-50/50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200",
+                        alert: "border-rose-200 bg-rose-50/50 text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-200",
+                        info: "border-blue-200 bg-blue-50/50 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200",
+                      }[ins.tone];
+                      return (
+                        <div key={idx} className={`rounded-lg border p-3 text-xs ${toneCls}`}>
+                          <div className="font-semibold">{ins.title}</div>
+                          <div className="mt-1 opacity-90">{ins.body}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </Card>
             </Section>
           );

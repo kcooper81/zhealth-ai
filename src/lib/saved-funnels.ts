@@ -5,7 +5,25 @@
  * alongside the built-in presets.
  */
 import { cacheGet, cacheSet } from "./cache";
-import { FUNNELS, type FunnelDefinition, type FunnelStep } from "./funnel-config";
+import {
+  FUNNELS,
+  FUNNEL_EVENT_CATALOG,
+  describeStep,
+  type FunnelDefinition,
+  type FunnelStep,
+} from "./funnel-config";
+
+/**
+ * On-page events get their entry-path applied as a `pageMatch` filter when
+ * a funnel is built. Used by both the builder and the rename migration.
+ */
+const ON_PAGE_EVENTS = new Set([
+  "page_view",
+  "session_start",
+  "cta_click",
+  "form_submit",
+  "outbound_click",
+]);
 
 const STORE_KEY = "saved-funnels:list";
 const STORE_TTL = 365 * 24 * 60 * 60; // effectively forever (1 year)
@@ -27,6 +45,42 @@ function newId(): string {
 export async function listSavedFunnels(): Promise<SavedFunnel[]> {
   const stored = await cacheGet<SavedFunnel[]>(STORE_KEY);
   return Array.isArray(stored) ? stored : [];
+}
+
+/**
+ * Replace generic step names ("Page view", "CTA click", etc) on existing
+ * saved funnels with the descriptive form ("Landed on /lower-back",
+ * "Clicked a CTA on /lower-back"). Idempotent — only rewrites names that
+ * exactly match a catalog label (i.e., haven't been hand-customized).
+ *
+ * Persists if anything changed. Safe to call on every page load.
+ */
+export async function migrateGenericStepNames(): Promise<{ migrated: number }> {
+  const all = await listSavedFunnels();
+  if (all.length === 0) return { migrated: 0 };
+
+  const genericNames = new Set(FUNNEL_EVENT_CATALOG.map((c) => c.label));
+  let migrated = 0;
+
+  const next: SavedFunnel[] = all.map((f) => {
+    const updatedSteps: FunnelStep[] = f.steps.map((s) => {
+      if (genericNames.has(s.name)) {
+        const usePath = ON_PAGE_EVENTS.has(s.eventName);
+        const newName = describeStep(s.eventName, usePath ? f.entryPath : null);
+        if (newName !== s.name) {
+          migrated++;
+          return { ...s, name: newName };
+        }
+      }
+      return s;
+    });
+    return { ...f, steps: updatedSteps };
+  });
+
+  if (migrated > 0) {
+    await cacheSet(STORE_KEY, next, STORE_TTL);
+  }
+  return { migrated };
 }
 
 export async function saveFunnel(input: {
