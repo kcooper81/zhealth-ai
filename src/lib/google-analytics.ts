@@ -444,55 +444,54 @@ export async function getFunnelSteps(
   const { startDate, endDate } = parseDateRange(dateRange);
   const propertyId = getPropertyId(property);
 
-  const results: Array<{ name: string; eventName: string; users: number; events: number }> = [];
-
-  for (const step of steps) {
-    const dimensionFilter: any = {
-      filter: {
-        fieldName: "eventName",
-        stringFilter: { matchType: "EXACT", value: step.eventName },
-      },
-    };
-
-    let body: any = {
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: "eventName" }],
-      metrics: [{ name: "totalUsers" }, { name: "eventCount" }],
-      dimensionFilter,
-    };
-
-    if (step.pageMatch) {
-      body.dimensions = [{ name: "eventName" }, { name: "pagePath" }];
-      body.dimensionFilter = {
-        andGroup: {
-          expressions: [
-            dimensionFilter,
-            {
-              filter: {
-                fieldName: "pagePath",
-                stringFilter: { matchType: "BEGINS_WITH", value: step.pageMatch },
-              },
-            },
-          ],
+  // Run every step in parallel — each step is an independent runReport call.
+  return Promise.all(
+    steps.map(async (step) => {
+      const dimensionFilter: any = {
+        filter: {
+          fieldName: "eventName",
+          stringFilter: { matchType: "EXACT", value: step.eventName },
         },
       };
-    }
 
-    try {
-      const data = await ga4Fetch(propertyId, accessToken, "runReport", body);
-      let users = 0;
-      let events = 0;
-      for (const row of data.rows || []) {
-        users += parseInt(row.metricValues?.[0]?.value || "0");
-        events += parseInt(row.metricValues?.[1]?.value || "0");
+      const body: any = {
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: "eventName" }],
+        metrics: [{ name: "totalUsers" }, { name: "eventCount" }],
+        dimensionFilter,
+      };
+
+      if (step.pageMatch) {
+        body.dimensions = [{ name: "eventName" }, { name: "pagePath" }];
+        body.dimensionFilter = {
+          andGroup: {
+            expressions: [
+              dimensionFilter,
+              {
+                filter: {
+                  fieldName: "pagePath",
+                  stringFilter: { matchType: "BEGINS_WITH", value: step.pageMatch },
+                },
+              },
+            ],
+          },
+        };
       }
-      results.push({ name: step.name, eventName: step.eventName, users, events });
-    } catch {
-      results.push({ name: step.name, eventName: step.eventName, users: 0, events: 0 });
-    }
-  }
 
-  return results;
+      try {
+        const data = await ga4Fetch(propertyId, accessToken, "runReport", body);
+        let users = 0;
+        let events = 0;
+        for (const row of data.rows || []) {
+          users += parseInt(row.metricValues?.[0]?.value || "0");
+          events += parseInt(row.metricValues?.[1]?.value || "0");
+        }
+        return { name: step.name, eventName: step.eventName, users, events };
+      } catch {
+        return { name: step.name, eventName: step.eventName, users: 0, events: 0 };
+      }
+    })
+  );
 }
 
 // ---- Comparison ----

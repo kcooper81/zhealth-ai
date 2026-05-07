@@ -17,27 +17,31 @@ const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 // Default TTLs (seconds)
 // ---------------------------------------------------------------------------
 export const TTL = {
-  WP_PAGES: 5 * 60,        // 5 minutes — pages list
-  WP_POSTS: 5 * 60,        // 5 minutes — posts list
-  WP_POPUPS: 5 * 60,       // 5 minutes — popups list
-  WP_PLUGINS: 30 * 60,     // 30 minutes — plugin discovery
-  WP_COUNTS: 10 * 60,      // 10 minutes — header-total counts
-  KEAP_TAGS: 30 * 60,      // 30 minutes — tags list
-  KEAP_STATS: 10 * 60,     // 10 minutes — contact count, pipeline stats
-  KEAP_CONTACTS: 5 * 60,   // 5 minutes — contacts list (default view)
-  KEAP_CAMPAIGNS: 15 * 60, // 15 minutes — campaigns list
-  KEAP_EMAILS: 5 * 60,     // 5 minutes — recent emails
-  KEAP_OPPORTUNITIES: 15 * 60, // 15 minutes — opportunities list
+  // WP — content is admin-edited but rarely; can cache aggressively
+  WP_PAGES: 30 * 60,       // 30 minutes — pages list
+  WP_POSTS: 30 * 60,       // 30 minutes — posts list
+  WP_POPUPS: 15 * 60,      // 15 minutes — popups list
+  WP_PLUGINS: 60 * 60,     // 1 hour — plugin discovery
+  WP_COUNTS: 30 * 60,      // 30 minutes — header-total counts
+  // Keap — semi-frequent data
+  KEAP_TAGS: 60 * 60,      // 1 hour — tags rarely change
+  KEAP_STATS: 15 * 60,     // 15 minutes — contact count, pipeline stats
+  KEAP_CONTACTS: 10 * 60,  // 10 minutes — contacts list (default view)
+  KEAP_CAMPAIGNS: 30 * 60, // 30 minutes — campaigns list
+  KEAP_EMAILS: 10 * 60,    // 10 minutes — recent emails
+  KEAP_OPPORTUNITIES: 30 * 60, // 30 minutes
   KEAP_ACCOUNT: 24 * 60 * 60, // 24h — account profile
-  THINKIFIC_COURSES: 15 * 60,  // 15 minutes
-  THINKIFIC_OVERVIEW: 15 * 60, // 15 minutes
-  THINKIFIC_ORDERS: 5 * 60,    // 5 minutes — orders move fast
-  THINKIFIC_ENROLLMENTS: 5 * 60, // 5 minutes
-  THINKIFIC_USERS: 30 * 60,    // 30 minutes — students roster
-  THINKIFIC_PRODUCTS: 30 * 60, // 30 minutes
-  THINKIFIC_COUPONS: 30 * 60,  // 30 minutes
-  GA4_OVERVIEW: 10 * 60,   // 10 minutes — per date range
-  GA4_REPORTS: 10 * 60,    // 10 minutes — top-pages, sources, daily, etc.
+  // Thinkific — orders/enrollments move fast on launch days; otherwise slow
+  THINKIFIC_COURSES: 60 * 60,  // 1 hour — courses are rarely added
+  THINKIFIC_OVERVIEW: 30 * 60, // 30 minutes
+  THINKIFIC_ORDERS: 10 * 60,   // 10 minutes
+  THINKIFIC_ENROLLMENTS: 10 * 60, // 10 minutes
+  THINKIFIC_USERS: 60 * 60,    // 1 hour — students roster
+  THINKIFIC_PRODUCTS: 60 * 60, // 1 hour
+  THINKIFIC_COUPONS: 60 * 60,  // 1 hour
+  // GA4 — last-day data updates ~hourly in the API
+  GA4_OVERVIEW: 30 * 60,   // 30 minutes — per date range
+  GA4_REPORTS: 30 * 60,    // 30 minutes — top-pages, sources, daily, etc.
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -112,6 +116,54 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 }
 
 /**
+ * Batched read — fetches many keys in one Supabase round-trip when L1 misses,
+ * dramatically speeding up cold page loads that read 10+ cache keys.
+ *
+ * Returns a Map keyed by the requested cache key; missing/expired keys are
+ * absent from the map (use `.has(key)` to check).
+ */
+export async function cacheGetMulti<T = unknown>(
+  keys: string[]
+): Promise<Map<string, T>> {
+  const out = new Map<string, T>();
+  if (keys.length === 0) return out;
+
+  const remaining: string[] = [];
+  for (const key of keys) {
+    const mem = memoryCache.get(key);
+    if (mem && mem.expiresAt > Date.now()) {
+      out.set(key, mem.data as T);
+    } else {
+      if (mem) memoryCache.delete(key);
+      remaining.push(key);
+    }
+  }
+
+  if (remaining.length === 0 || !isSupabaseConfigured) return out;
+
+  try {
+    const { data, error } = await supabase
+      .from("api_cache")
+      .select("cache_key, data, expires_at")
+      .in("cache_key", remaining);
+
+    if (error || !data) return out;
+
+    const now = Date.now();
+    for (const row of data as Array<{ cache_key: string; data: unknown; expires_at: string }>) {
+      const expiresAt = new Date(row.expires_at).getTime();
+      if (expiresAt <= now) continue;
+      out.set(row.cache_key, row.data as T);
+      memoryCache.set(row.cache_key, { data: row.data, expiresAt });
+    }
+  } catch {
+    // ignore — return whatever L1 had
+  }
+
+  return out;
+}
+
+/**
  * Set cache data with TTL in seconds.
  */
 export async function cacheSet(key: string, data: unknown, ttlSeconds: number): Promise<void> {
@@ -181,6 +233,34 @@ export async function cachedFetch<T>(
   const data = await fetcher();
   await cacheSet(key, data, ttlSeconds);
   return data;
+}
+
+/**
+ * Run many cached fetches in parallel with a single batched Supabase read
+ * upfront. For pages that need to read 5+ cache keys at the start of their
+ * server render, this collapses the L2 round-trips into one query.
+ */
+export async function cachedFetchMulti<T = unknown>(
+  entries: Array<{ key: string; ttlSeconds: number; fetcher: () => Promise<T> }>
+): Promise<Map<string, T>> {
+  const keys = entries.map((e) => e.key);
+  const cached = await cacheGetMulti<T>(keys);
+
+  await Promise.all(
+    entries.map(async (e) => {
+      if (cached.has(e.key)) return;
+      try {
+        const data = await e.fetcher();
+        cached.set(e.key, data);
+        // fire-and-forget the cache write so we don't block render
+        cacheSet(e.key, data, e.ttlSeconds);
+      } catch {
+        // swallow — caller decides default via `.get(key)` returning undefined
+      }
+    })
+  );
+
+  return cached;
 }
 
 /**

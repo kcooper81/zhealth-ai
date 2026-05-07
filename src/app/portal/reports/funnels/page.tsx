@@ -33,9 +33,11 @@ async function loadFunnels(searchParams: Record<string, string | string[] | unde
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
 
-  // 0. Auto-seed built-in presets on first load so the team has all of
-  //    them as editable custom funnels right away.
-  await seedBuiltInFunnels("if-empty").catch(() => null);
+  // 0. Auto-seed any built-in preset funnels that aren't yet in the
+  //    saved store. Adds new defaults on first load + any newly-shipped
+  //    defaults later, without overwriting user customs or restoring
+  //    defaults the user has explicitly deleted.
+  await seedBuiltInFunnels("if-missing").catch(() => null);
 
   // 1. Load saved customs + page lists in parallel
   const [saved, wpPages, wpPosts, lmsCourses, gaWebPages, gaLmsPages] = await Promise.all([

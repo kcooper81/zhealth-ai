@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (unauth) return unauth;
   try {
     const url = new URL(req.url);
-    const mode = url.searchParams.get("mode") === "force" ? "force" : "if-empty";
+    const mode = url.searchParams.get("mode") === "force" ? "force" : "if-missing";
     const result = await seedBuiltInFunnels(mode);
     return NextResponse.json({ ...result, mode });
   } catch (e) {
