@@ -23,6 +23,8 @@ import { runSEOAudit } from "@/lib/wp-seo-audit";
 import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import { getTopPages } from "@/lib/google-analytics";
+import { getTopQueries, getStrikingDistance, getLowCTRQueries, getOverview } from "@/lib/google-search-console";
+import { getKeywordSuggestions } from "@/lib/keyword-research";
 import { parseTimeRange } from "@/lib/time-range";
 
 export const dynamic = "force-dynamic";
@@ -155,6 +157,232 @@ async function HighImpactSection({
   );
 }
 
+async function SearchConsoleSection({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const range = parseTimeRange(searchParams);
+  const rangeKey = range.key === "custom" ? "30d" : range.key;
+  const session = (await getServerSession()) as any;
+  const accessToken = session?.accessToken;
+
+  if (!accessToken) {
+    return (
+      <Section
+        id="section-gsc"
+        title="From Google Search Console"
+        description="Sign in with Google to see real query performance."
+      >
+        <Card>
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Search Console reads through the same Google sign-in as GA4. After we deploy this update,
+            click <a href="/portal/analytics" className="underline">Sign in</a> on Analytics —
+            you&apos;ll be asked to grant the additional <code>webmasters.readonly</code> scope.
+            Once granted, this section will populate with clicks, impressions, CTR, and position
+            for every query that landed traffic on the site.
+          </p>
+        </Card>
+      </Section>
+    );
+  }
+
+  const [overview, top, striking, lowCtr] = await Promise.all([
+    cachedFetch(`gsc:overview:${rangeKey}`, TTL.GA4_OVERVIEW, () =>
+      getOverview(accessToken, rangeKey).catch(() => null)
+    ),
+    cachedFetch(`gsc:top:${rangeKey}`, TTL.GA4_REPORTS, () =>
+      getTopQueries(accessToken, rangeKey, 50).catch(() => [])
+    ),
+    cachedFetch(`gsc:striking:${rangeKey}`, TTL.GA4_REPORTS, () =>
+      getStrikingDistance(accessToken, rangeKey, 25).catch(() => [])
+    ),
+    cachedFetch(`gsc:low-ctr:${rangeKey}`, TTL.GA4_REPORTS, () =>
+      getLowCTRQueries(accessToken, rangeKey, 25).catch(() => [])
+    ),
+  ]);
+
+  if (!overview) {
+    return (
+      <Section
+        id="section-gsc"
+        title="From Google Search Console"
+        description="Couldn't fetch GSC data."
+      >
+        <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
+            <strong>GSC scope not granted yet.</strong> Sign out and sign back in via
+            <a href="/portal/analytics" className="ml-1 underline">/portal/analytics</a> — the consent screen
+            will request the additional <code>webmasters.readonly</code> permission.
+          </p>
+        </Card>
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      id="section-gsc"
+      title="From Google Search Console"
+      description={`Real query performance for ${range.label.toLowerCase()}.`}
+      action={<ExportButton targetId="section-gsc" filename="seo-gsc" />}
+    >
+      <div className="mb-6">
+        <KPIGrid
+          accent="blue"
+          kpis={[
+            { label: "Clicks", value: overview.clicks.toLocaleString() },
+            { label: "Impressions", value: overview.impressions.toLocaleString() },
+            { label: "Avg CTR", value: `${(overview.ctr * 100).toFixed(2)}%` },
+            { label: "Avg position", value: overview.position.toFixed(1) },
+          ]}
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-50">
+            Striking-distance keywords (page 2)
+          </h3>
+          <p className="mt-1 mb-3 text-xs text-gray-500">
+            Queries ranking positions 11–20 — the cheapest wins. Small on-page improvements push these onto page 1.
+          </p>
+          {striking.length === 0 ? (
+            <p className="text-xs text-gray-500">No striking-distance queries in this window.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100 dark:divide-white/5">
+              {striking.slice(0, 12).map((q, i) => (
+                <li key={i} className="flex items-center justify-between py-1.5 text-sm">
+                  <span className="text-gray-900 dark:text-gray-100">{q.query}</span>
+                  <span className="ml-2 flex-shrink-0 text-xs tabular-nums text-gray-500">
+                    pos {q.position.toFixed(1)} · {q.impressions.toLocaleString()} impr
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-50">
+            High-impression / low-CTR queries
+          </h3>
+          <p className="mt-1 mb-3 text-xs text-gray-500">
+            People see your listing in search results but don&apos;t click. Title or meta-description rewrites usually fix this.
+          </p>
+          {lowCtr.length === 0 ? (
+            <p className="text-xs text-gray-500">No low-CTR top-10 queries in this window.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100 dark:divide-white/5">
+              {lowCtr.slice(0, 12).map((q, i) => (
+                <li key={i} className="flex items-center justify-between py-1.5 text-sm">
+                  <span className="text-gray-900 dark:text-gray-100">{q.query}</span>
+                  <span className="ml-2 flex-shrink-0 text-xs tabular-nums text-gray-500">
+                    {(q.ctr * 100).toFixed(1)}% CTR · {q.impressions.toLocaleString()} impr
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <Card padded={false} className="mt-6">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
+              <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th className="px-5 py-3">Top query</th>
+                <th className="px-5 py-3 text-right">Clicks</th>
+                <th className="px-5 py-3 text-right">Impressions</th>
+                <th className="px-5 py-3 text-right">CTR</th>
+                <th className="px-5 py-3 text-right">Position</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+              {top.slice(0, 25).map((q, i) => (
+                <tr key={i} className="text-gray-700 dark:text-gray-300">
+                  <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{q.query}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{q.clicks.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{q.impressions.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{(q.ctr * 100).toFixed(2)}%</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{q.position.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </Section>
+  );
+}
+
+async function KeywordOpportunitiesSection() {
+  const audit = await runSEOAudit().catch(() => null);
+  if (!audit) return null;
+
+  // Pick the top 5 highest-traffic-shaped pages by content depth
+  const candidates = audit.rows
+    .filter((r) => r.derivedFocus && r.wordCount >= 300)
+    .sort((a, b) => b.wordCount - a.wordCount)
+    .slice(0, 6);
+
+  const opportunities = await Promise.all(
+    candidates.map(async (r) => {
+      const seed = r.derivedFocus || r.title;
+      const suggestions = await getKeywordSuggestions(seed).catch(() => []);
+      // Filter out suggestions that are too close to existing title (low value)
+      const titleWords = new Set((r.seoTitle || "").toLowerCase().split(/\s+/));
+      const fresh = suggestions.filter((s) => {
+        const words = s.toLowerCase().split(/\s+/);
+        const overlap = words.filter((w) => titleWords.has(w)).length / Math.max(1, words.length);
+        return overlap < 0.6 && s.length >= seed.length + 2;
+      });
+      return { row: r, seed, suggestions: fresh.slice(0, 12) };
+    })
+  );
+
+  return (
+    <Section
+      id="section-keywords"
+      title="Keyword opportunities"
+      description="Long-tail variations from Google Suggest, seeded by your top pages' actual content topics. Use these as new H2/H3 sub-sections, FAQ entries, or new blog post ideas — they're what real users type into Google."
+      action={<ExportButton targetId="section-keywords" filename="seo-keyword-opportunities" />}
+    >
+      <div className="grid gap-6 md:grid-cols-2">
+        {opportunities.map(({ row, seed, suggestions }) => (
+          <Card key={row.id}>
+            <div className="mb-2">
+              <a href={row.link} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-gray-900 hover:underline dark:text-gray-50">
+                {row.title}
+              </a>
+              <div className="mt-0.5 text-xs text-gray-500">
+                <code className="font-mono">{row.path}</code>
+                <span className="mx-2">·</span>
+                <span>seed: <strong className="text-gray-700 dark:text-gray-300">{seed}</strong></span>
+              </div>
+            </div>
+            {suggestions.length === 0 ? (
+              <p className="text-xs text-gray-500">No fresh long-tail variations. The page&apos;s seed term is broad — try refining the focus keyword.</p>
+            ) : (
+              <ul className="space-y-1">
+                {suggestions.map((s, i) => (
+                  <li key={i} className="rounded-md border border-gray-200/70 bg-gray-50/50 px-2 py-1 text-xs text-gray-700 dark:border-white/5 dark:bg-white/[0.02] dark:text-gray-300">
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-[10px] text-gray-500">
+              Top phrases on page: {row.topPhrases.slice(0, 4).map((p) => p.phrase).join(" · ") || "—"}
+            </p>
+          </Card>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 export const metadata = { title: "SEO Audit — Z-Health Portal" };
 
 export default async function SEOAuditPage({
@@ -255,6 +483,16 @@ export default async function SEOAuditPage({
       {/* High-impact section streams in via Suspense — needs GA4 query */}
       <Suspense fallback={<SectionSkeleton title="Highest-impact fixes" description="Cross-stitching audit × GA4 traffic…" bodyHeight={400} />}>
         <HighImpactSection searchParams={searchParams} />
+      </Suspense>
+
+      {/* Search Console — clicks, impressions, striking-distance, low-CTR */}
+      <Suspense fallback={<SectionSkeleton title="From Google Search Console" description="Real query performance from your GSC property…" bodyHeight={420} />}>
+        <SearchConsoleSection searchParams={searchParams} />
+      </Suspense>
+
+      {/* Keyword opportunities — Google Suggest variations on actual focus keywords */}
+      <Suspense fallback={<SectionSkeleton title="Keyword opportunities" description="Pulling Google autocomplete for your top pages' topics…" bodyHeight={400} />}>
+        <KeywordOpportunitiesSection />
       </Suspense>
 
       <Section

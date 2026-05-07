@@ -9,6 +9,7 @@
  * and the JSON-LD `schema` block.
  */
 import { cachedFetch, TTL } from "./cache";
+import { extractTopPhrases, computeTopicalFit } from "./keyword-research";
 
 const SITE_URL = process.env.WP_SITE_URL || "https://zhealtheducation.com";
 const WP_USER = process.env.WP_USERNAME || "";
@@ -50,6 +51,12 @@ export type SEOAuditRow = {
   descriptionLength: number;
   wordCount: number;
   contentLength: number;
+
+  // Topic / keyword targeting
+  topPhrases: Array<{ phrase: string; count: number }>;
+  topicalFit: number; // 0-100 — does the title overlap with the page's actual content?
+  /** Likely focus keyword if the page doesn't have a Yoast focus keyword set — derived from content. */
+  derivedFocus: string | null;
 
   // Scoring
   issues: SEOIssue[];
@@ -178,6 +185,19 @@ function auditRow(item: any, type: "page" | "post"): SEOAuditRow {
     });
   }
 
+  // Topic / keyword analysis from actual page content
+  const topPhrases = extractTopPhrases(cleanContent, 12);
+  const topicalFit = computeTopicalFit(seoTitle, topPhrases);
+  const derivedFocus = topPhrases.length > 0 ? topPhrases[0].phrase : null;
+
+  if (topicalFit < 30 && wordCount >= 300) {
+    issues.push({
+      code: "title_content_mismatch",
+      message: `Title "${seoTitle}" doesn't strongly match the page's actual content (top phrase: "${derivedFocus || "—"}"). Either rewrite the title to match what the page covers, or expand content to deliver on the title.`,
+      severity: "warn",
+    });
+  }
+
   // Compute score: start at 100, subtract penalties
   const penalty: Record<SEOIssueSeverity, number> = { critical: 25, warn: 10, info: 4 };
   let score = 100;
@@ -211,6 +231,10 @@ function auditRow(item: any, type: "page" | "post"): SEOAuditRow {
     descriptionLength: seoDescription.length,
     wordCount,
     contentLength: cleanContent.length,
+
+    topPhrases,
+    topicalFit,
+    derivedFocus,
 
     issues,
     score,
@@ -254,6 +278,7 @@ export type SEOAuditSummary = {
     missingSchema: number;
     thinContent: number;
     noindex: number;
+    titleContentMismatch: number;
   };
   /** Pages where score < 70, sorted by impact (low score). */
   worst: SEOAuditRow[];
@@ -287,6 +312,7 @@ export async function runSEOAudit(): Promise<SEOAuditSummary> {
       missingSchema: rows.filter((r) => r.issues.some((i) => i.code === "no_schema")).length,
       thinContent: rows.filter((r) => r.issues.some((i) => i.code === "thin_content")).length,
       noindex: rows.filter((r) => r.issues.some((i) => i.code === "noindex")).length,
+      titleContentMismatch: rows.filter((r) => r.issues.some((i) => i.code === "title_content_mismatch")).length,
     };
 
     const worst = rows.filter((r) => r.score < 70).slice(0, 25);
