@@ -19,7 +19,7 @@ import {
   getEventCounts,
   getEcommerce,
 } from "@/lib/google-analytics";
-import { getContactsWithTag } from "@/lib/keap";
+import { listAllContactsInRange } from "@/lib/keap";
 import { LANDING_PAGE_TAG_MAP, findLandingPageRow } from "@/lib/landing-page-tag-map";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ async function loadLandingPages(searchParams: Record<string, string | string[] |
   const session = (await getServerSession()) as any;
   const accessToken = session?.accessToken;
 
-  const [pages, formSubmits, ctaClicks, enrollClicks, campaignRev, tagCounts] = await Promise.all([
+  const [pages, formSubmits, ctaClicks, enrollClicks, campaignRev, contactsInWindow] = await Promise.all([
     accessToken
       ? cachedFetch(`ga4:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
           getPagesWithEntrances(accessToken, "website", rangeKey, 200).catch(() => [])
@@ -63,29 +63,30 @@ async function loadLandingPages(searchParams: Record<string, string | string[] |
           getEcommerce(accessToken, "website", rangeKey, "sessionCampaignName", 100).catch(() => [])
         )
       : Promise.resolve([] as any[]),
-    // For each mapped landing page, pull the Keap tag count
-    Promise.all(
-      LANDING_PAGE_TAG_MAP.map(async (lp) => {
-        try {
-          const res = await cachedFetch(
-            `keap:contacts-with-tag:${lp.tagId}:count`,
-            TTL.KEAP_TAGS,
-            () => getContactsWithTag(lp.tagId, { limit: 1 })
-          );
-          return { tagId: lp.tagId, count: res.count };
-        } catch {
-          return { tagId: lp.tagId, count: 0 };
-        }
-      })
+    // Pull every contact created in window with their tag_ids — we'll
+    // count per LP tag below, which gives us "leads in window" instead
+    // of all-time count.
+    cachedFetch(
+      `keap:contacts:in-range-with-tags:${rangeSeg}`,
+      TTL.KEAP_STATS,
+      () => listAllContactsInRange(range.from.toISOString(), range.to.toISOString()).catch(() => [])
     ),
   ]);
+
+  // Count how many in-window contacts have each LP tag
+  const keapByTag = new Map<number, number>();
+  for (const c of contactsInWindow as any[]) {
+    if (c.tag_ids) {
+      for (const tid of c.tag_ids) keapByTag.set(tid, (keapByTag.get(tid) ?? 0) + 1);
+    }
+  }
 
   // Index helpers
   const formByPath = new Map<string, number>(formSubmits.map((r: any) => [r.dims.pagePath || "", r.eventCount]));
   const ctaByPath = new Map<string, number>(ctaClicks.map((r: any) => [r.dims.pagePath || "", r.eventCount]));
   const enrollByPath = new Map<string, number>(enrollClicks.map((r: any) => [r.dims.pagePath || "", r.eventCount]));
   const campaignRevMap = new Map<string, number>(campaignRev.map((r: any) => [r.dim, r.revenue]));
-  const keapByTag = new Map<number, number>(tagCounts.map((t: any) => [t.tagId, t.count]));
+  // keapByTag computed above from in-window contacts
 
   // For each page from GA4, build the funnel
   const funnel = pages.map((p: any) => {
@@ -242,7 +243,7 @@ export default async function LandingPagesReportPage({
                   <th className="px-5 py-3 text-right">Views</th>
                   <th className="px-5 py-3 text-right">CTA</th>
                   <th className="px-5 py-3 text-right">Forms</th>
-                  <th className="px-5 py-3 text-right">Keap leads</th>
+                  <th className="px-5 py-3 text-right">Leads (window)</th>
                   <th className="px-5 py-3 text-right">Enroll</th>
                   <th className="px-5 py-3 text-right">Revenue</th>
                 </tr>

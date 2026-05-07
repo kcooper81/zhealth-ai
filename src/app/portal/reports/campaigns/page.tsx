@@ -1,11 +1,16 @@
 /**
- * Campaigns report — Keap campaign sequences enriched with the GA4 traffic
- * those campaigns drove and the Thinkific revenue attributable to them.
+ * Campaigns report — Keap sequences with their actual reach + status.
  *
- * Each Keap campaign exposes:
- *   - active_contact_count (people in the sequence right now)
- *   - published_status (live / draft / etc)
- *   - name (we match this to GA4 sessionCampaignName when set in outbound links)
+ * Previously this report attempted a fuzzy match between Keap campaign
+ * names and GA4 `sessionCampaignName` to attribute traffic and revenue.
+ * That matched almost nothing in practice (Keap names are ad-hoc text,
+ * GA4 campaigns come from utm_campaign on outbound links — they only
+ * align if the team consistently sets utm_campaign to a normalized
+ * version of the Keap name). To avoid showing misleading $0 columns,
+ * we now show only what Keap actually returns.
+ *
+ * To see attribution for an email/sequence, set utm_campaign=<slug> on
+ * its outbound links and check the Channels or Funnels report.
  */
 import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
@@ -14,89 +19,39 @@ import KPIGrid from "@/components/portal/KPIGrid";
 import BarList from "@/components/portal/BarList";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange } from "@/lib/time-range";
-import { getServerSession } from "@/lib/auth";
 import { cachedFetch, TTL } from "@/lib/cache";
-import { getEcommerce, getChannelRollup } from "@/lib/google-analytics";
 import { listCampaigns } from "@/lib/keap";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function fmtMoney(n: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-}
-
-/** Normalize for fuzzy match between Keap campaign name and GA4 sessionCampaignName */
-function norm(s: string): string {
-  return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
 async function loadCampaigns(searchParams: Record<string, string | string[] | undefined>) {
   const range = parseTimeRange(searchParams);
-  const rangeKey = range.key === "custom" ? "30d" : range.key;
 
-  const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const keapCampaigns = await cachedFetch("keap:campaigns:200", TTL.KEAP_CAMPAIGNS, () =>
+    listCampaigns({ limit: 200 }).catch(() => ({ count: 0, campaigns: [] }))
+  );
 
-  const [keapCampaigns, channelRollup, campaignRevenue] = await Promise.all([
-    cachedFetch("keap:campaigns:200", TTL.KEAP_CAMPAIGNS, () =>
-      listCampaigns({ limit: 200 }).catch(() => ({ count: 0, campaigns: [] }))
-    ),
-    accessToken
-      ? cachedFetch(`ga4:channels:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getChannelRollup(accessToken, "website", rangeKey, 200).catch(() => [])
-        )
-      : Promise.resolve([] as any[]),
-    accessToken
-      ? cachedFetch(`ga4:ecom:campaign:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEcommerce(accessToken, "website", rangeKey, "sessionCampaignName", 100).catch(() => [])
-        )
-      : Promise.resolve([] as any[]),
-  ]);
-
-  // Index GA4 by normalized campaign name
-  const sessionsByCampaign = new Map<string, number>();
-  const usersByCampaign = new Map<string, number>();
-  for (const c of channelRollup) {
-    const k = norm(c.campaign);
-    sessionsByCampaign.set(k, (sessionsByCampaign.get(k) ?? 0) + c.sessions);
-    usersByCampaign.set(k, (usersByCampaign.get(k) ?? 0) + c.users);
-  }
-  const revByCampaign = new Map<string, { revenue: number; purchases: number }>();
-  for (const r of campaignRevenue) {
-    const k = norm(r.dim);
-    const cur = revByCampaign.get(k) || { revenue: 0, purchases: 0 };
-    cur.revenue += r.revenue;
-    cur.purchases += r.purchases;
-    revByCampaign.set(k, cur);
-  }
-
-  const campaigns = (keapCampaigns.campaigns || []).map((c: any) => {
-    const k = norm(c.name);
-    const rev = revByCampaign.get(k) || { revenue: 0, purchases: 0 };
-    return {
-      id: c.id,
-      name: c.name,
-      status: c.published_status || c.status || "—",
-      activeContacts: c.active_contact_count ?? 0,
-      sessions: sessionsByCampaign.get(k) ?? 0,
-      users: usersByCampaign.get(k) ?? 0,
-      purchases: rev.purchases,
-      revenue: rev.revenue,
-    };
-  });
+  const campaigns = (keapCampaigns.campaigns || []).map((c: any) => ({
+    id: c.id,
+    name: c.name || "(unnamed)",
+    status: c.published_status || c.status || "—",
+    activeContacts: c.active_contact_count ?? 0,
+    publishedAt: c.published_time_set || c.date_created || null,
+    completedContactCount: c.completed_contact_count ?? 0,
+    historicalContactCount: c.historical_contact_count ?? c.completed_contact_count ?? 0,
+  }));
 
   campaigns.sort((a, b) => (b.activeContacts || 0) - (a.activeContacts || 0));
 
   const totals = {
     campaigns: campaigns.length,
     activeContacts: campaigns.reduce((s, c) => s + c.activeContacts, 0),
-    sessions: campaigns.reduce((s, c) => s + c.sessions, 0),
-    purchases: campaigns.reduce((s, c) => s + c.purchases, 0),
-    revenue: campaigns.reduce((s, c) => s + c.revenue, 0),
+    publishedCount: campaigns.filter((c) => /publish/i.test(c.status)).length,
+    deadCount: campaigns.filter((c) => c.activeContacts === 0).length,
   };
 
-  return { range, accessToken: !!accessToken, campaigns, totals };
+  return { range, campaigns, totals };
 }
 
 export const metadata = { title: "Campaigns — Z-Health Portal" };
@@ -110,21 +65,21 @@ export default async function CampaignsReportPage({
 
   const insights: Array<{ severity: "good" | "warn" | "alert" | "info"; title: string; body: string }> = [];
 
-  const dead = data.campaigns.filter((c) => c.activeContacts === 0).length;
-  if (dead > 0) {
+  if (data.totals.deadCount > 0) {
+    const deadShare = Math.round((data.totals.deadCount / data.totals.campaigns) * 100);
     insights.push({
-      severity: "warn",
-      title: `${dead} of ${data.campaigns.length} campaigns have no active contacts`,
-      body: "These sequences aren't reaching anyone right now — candidates for archive or re-launch.",
+      severity: deadShare >= 50 ? "alert" : "warn",
+      title: `${data.totals.deadCount} of ${data.totals.campaigns} campaigns have no active contacts (${deadShare}%)`,
+      body: "Empty sequences either finished their job or were never published. Worth archiving or relaunching to keep the Keap workspace tidy.",
     });
   }
 
-  const topRev = data.campaigns.find((c) => c.revenue > 0);
-  if (topRev) {
+  const topActive = data.campaigns[0];
+  if (topActive && topActive.activeContacts > 0) {
     insights.push({
-      severity: "good",
-      title: `Top revenue campaign: ${topRev.name}`,
-      body: `${fmtMoney(topRev.revenue)} from ${topRev.purchases} purchases, ${topRev.sessions.toLocaleString()} sessions.`,
+      severity: "info",
+      title: `Most-reached sequence: ${topActive.name}`,
+      body: `${topActive.activeContacts.toLocaleString()} contacts currently in the sequence. Status: ${topActive.status}.`,
     });
   }
 
@@ -139,7 +94,10 @@ export default async function CampaignsReportPage({
           </div>
         </div>
         <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          Keap sequences with their active reach, plus GA4 traffic + revenue attributed to matching utm_campaign over {data.range.label.toLowerCase()}.
+          Keap sequences with their active reach and lifecycle. To attribute traffic or revenue
+          to a specific campaign, tag its outbound emails with{" "}
+          <code className="rounded bg-gray-100 px-1 dark:bg-white/10">utm_campaign=&lt;slug&gt;</code>{" "}
+          and check the Channels or Funnels report.
         </p>
       </header>
 
@@ -149,10 +107,10 @@ export default async function CampaignsReportPage({
         <KPIGrid
           accent="blue"
           kpis={[
-            { label: "Campaigns", value: data.totals.campaigns.toLocaleString() },
-            { label: "Active contacts", value: data.totals.activeContacts.toLocaleString(), hint: "across all sequences" },
-            { label: "Attributed sessions", value: data.totals.sessions.toLocaleString() },
-            { label: "Attributed revenue", value: data.totals.revenue > 0 ? fmtMoney(data.totals.revenue) : "—" },
+            { label: "Total campaigns", value: data.totals.campaigns.toLocaleString() },
+            { label: "Published", value: data.totals.publishedCount.toLocaleString() },
+            { label: "Active reach", value: data.totals.activeContacts.toLocaleString(), hint: "contacts in sequences right now" },
+            { label: "No active contacts", value: data.totals.deadCount.toLocaleString(), hint: "candidates for cleanup" },
           ]}
         />
       </div>
@@ -161,7 +119,7 @@ export default async function CampaignsReportPage({
         <Section
           id="section-insights"
           title="What stands out"
-          description="Computed from current data."
+          description="Computed from the current Keap campaign list."
           action={<ExportButton targetId="section-insights" filename="campaigns-insights" />}
         >
           <InsightGrid>
@@ -187,17 +145,18 @@ export default async function CampaignsReportPage({
               .map((c) => ({
                 label: c.name,
                 value: c.activeContacts,
-                sublabel: c.revenue > 0 ? `${fmtMoney(c.revenue)} revenue` : c.status,
+                sublabel: c.status,
               }))}
             formatValue={(n) => `${n.toLocaleString()} active`}
+            emptyMessage="No campaigns with active contacts in Keap right now."
           />
         </Card>
       </Section>
 
       <Section
         id="section-rollup"
-        title="Per-campaign rollup"
-        description="Keap sequence reach × GA4 traffic + revenue match (by utm_campaign normalized to the campaign name)."
+        title="All campaigns"
+        description={`${data.campaigns.length.toLocaleString()} sequences ranked by current active reach.`}
         action={<ExportButton targetId="section-rollup" filename="campaigns-rollup" />}
       >
         <Card padded={false}>
@@ -208,10 +167,8 @@ export default async function CampaignsReportPage({
                   <th className="px-5 py-3">Campaign</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3 text-right">Active</th>
-                  <th className="px-5 py-3 text-right">Sessions</th>
-                  <th className="px-5 py-3 text-right">Users</th>
-                  <th className="px-5 py-3 text-right">Purchases</th>
-                  <th className="px-5 py-3 text-right">Revenue</th>
+                  <th className="px-5 py-3 text-right">Completed</th>
+                  <th className="px-5 py-3 text-right">Lifetime reach</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -219,11 +176,9 @@ export default async function CampaignsReportPage({
                   <tr key={c.id} className="text-gray-700 dark:text-gray-300">
                     <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-100">{c.name}</td>
                     <td className="px-5 py-3 text-xs">{c.status}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.activeContacts.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.sessions.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.users.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.purchases.toLocaleString()}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.revenue > 0 ? fmtMoney(c.revenue) : <span className="text-gray-400">—</span>}</td>
+                    <td className="px-5 py-3 text-right tabular-nums font-semibold">{c.activeContacts.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-right tabular-nums">{c.completedContactCount.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-right tabular-nums">{c.historicalContactCount.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>

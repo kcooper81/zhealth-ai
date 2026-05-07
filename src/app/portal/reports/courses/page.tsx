@@ -56,13 +56,15 @@ async function loadCourses(searchParams: Record<string, string | string[] | unde
       listEnrollments({ limit: 250 }).catch(() => ({ items: [], meta: { pagination: { total_items: 0 } } }))
     ),
     accessToken
-      ? cachedFetch(`ga4:event:course_view:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "lms", rangeKey, "course_view", ["customEvent:course_slug"], 100).catch(() => [])
+      ? cachedFetch(`ga4:event:course_view:bypath:${rangeKey}`, TTL.GA4_REPORTS, () =>
+          // Use pagePath instead of customEvent:course_slug — pagePath works
+          // out-of-the-box in GA4 without needing a custom dimension registered.
+          getEventCounts(accessToken, "lms", rangeKey, "course_view", ["pagePath"], 200).catch(() => [])
         )
       : Promise.resolve([] as any[]),
     accessToken
-      ? cachedFetch(`ga4:event:begin_checkout:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "lms", rangeKey, "begin_checkout", ["customEvent:course_slug"], 100).catch(() => [])
+      ? cachedFetch(`ga4:event:begin_checkout:bypath:${rangeKey}`, TTL.GA4_REPORTS, () =>
+          getEventCounts(accessToken, "lms", rangeKey, "begin_checkout", ["pagePath"], 200).catch(() => [])
         )
       : Promise.resolve([] as any[]),
     accessToken
@@ -89,15 +91,21 @@ async function loadCourses(searchParams: Record<string, string | string[] | unde
     }
   }
 
-  // Index event counts by course_slug
+  // Index event counts by course slug, derived from pagePath
+  // GA4 reports paths like "/courses/<slug>" or "/courses/<slug>/lessons/..."
+  // We extract the slug from the first /courses/<X>/ segment.
+  function slugFromPath(p: string): string | null {
+    const m = (p || "").match(/^\/courses\/([^/?#]+)/i);
+    return m ? m[1].toLowerCase() : null;
+  }
   const viewsBySlug = new Map<string, number>();
   for (const r of courseViews) {
-    const slug = (r.dims && (r.dims["customEvent:course_slug"] || r.dims.course_slug)) || "";
+    const slug = slugFromPath(r.dims?.pagePath || "");
     if (slug) viewsBySlug.set(slug, (viewsBySlug.get(slug) ?? 0) + r.eventCount);
   }
   const checkoutsBySlug = new Map<string, number>();
   for (const r of beginCheckouts) {
-    const slug = (r.dims && (r.dims["customEvent:course_slug"] || r.dims.course_slug)) || "";
+    const slug = slugFromPath(r.dims?.pagePath || "");
     if (slug) checkoutsBySlug.set(slug, (checkoutsBySlug.get(slug) ?? 0) + r.eventCount);
   }
 
@@ -146,8 +154,8 @@ async function loadCourses(searchParams: Record<string, string | string[] | unde
       enrollmentsInWindow: enrollmentsByCourseId.get(c.id) ?? 0,
       ordersInWindow: orders.count,
       revenueInWindow: orders.revenue,
-      courseViews: viewsBySlug.get(c.slug) ?? 0,
-      checkouts: checkoutsBySlug.get(c.slug) ?? 0,
+      courseViews: viewsBySlug.get((c.slug || "").toLowerCase()) ?? 0,
+      checkouts: checkoutsBySlug.get((c.slug || "").toLowerCase()) ?? 0,
     };
   });
 

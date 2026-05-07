@@ -114,7 +114,25 @@ async function loadReportData(searchParams: Record<string, string | string[] | u
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
-  const grandTotalLeads = leadMagnetCounts.reduce((s, r) => s + r.count, 0) + leadSourceCounts.reduce((s, r) => s + r.count, 0);
+  // Grand total of leads in window — count UNIQUE contacts that match any
+  // mapped tag or any mapped lead_source_id, so contacts hit by both don't
+  // double-count.
+  const knownTagIds = new Set(LEAD_MAGNET_ROWS.map((r) => r.tagId));
+  const knownSourceIds = new Set(LEAD_SOURCE_ID_ROWS.map((r) => r.sourceId));
+  const uniqueAttributedContacts = new Set<number>();
+  for (const c of newContacts) {
+    let matched = false;
+    if (c.tag_ids) {
+      for (const t of c.tag_ids) {
+        if (knownTagIds.has(t)) { matched = true; break; }
+      }
+    }
+    if (!matched && c.lead_source_id && knownSourceIds.has(c.lead_source_id)) {
+      matched = true;
+    }
+    if (matched && c.id != null) uniqueAttributedContacts.add(c.id);
+  }
+  const grandTotalLeads = uniqueAttributedContacts.size;
   const weeklyChange = totalContacts.count - contactsLastWeek.count;
 
   return {

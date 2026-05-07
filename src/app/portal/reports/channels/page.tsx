@@ -70,16 +70,25 @@ async function loadChannels(searchParams: Record<string, string | string[] | und
     }
   }
 
-  // GA4 channel rollup → augment each row with revenue from campaignRevenue
+  // GA4 channel rollup → augment each row with revenue from campaignRevenue.
+  // We track whether the revenue lookup actually matched something so we can
+  // distinguish "$0 because attribution didn't match" from "$0 actual revenue".
   const campaignRevMap = new Map(
     campaignRevenue.map((r: any) => [r.dim, r.revenue])
   );
   const sourceRevMap = new Map(sourceRevenue.map((r: any) => [r.dim, r.revenue]));
 
-  const enriched = channels.map((c: any) => ({
-    ...c,
-    revenue: c.revenue || campaignRevMap.get(c.campaign) || sourceRevMap.get(c.source) || 0,
-  }));
+  const enriched = channels.map((c: any) => {
+    const directRev = c.revenue;
+    const campaignRev = campaignRevMap.get(c.campaign);
+    const sourceRev = sourceRevMap.get(c.source);
+    const matched = directRev > 0 || campaignRev !== undefined || sourceRev !== undefined;
+    return {
+      ...c,
+      revenue: directRev || campaignRev || sourceRev || 0,
+      revenueAttributed: matched,
+    };
+  });
 
   // Aggregate by source for the source-level summary
   const bySource = new Map<string, { source: string; sessions: number; users: number; conversions: number; revenue: number }>();
@@ -267,7 +276,15 @@ export default async function ChannelsReportPage({
                     <td className="px-5 py-3 text-right tabular-nums font-semibold">{c.sessions.toLocaleString()}</td>
                     <td className="px-5 py-3 text-right tabular-nums">{c.users.toLocaleString()}</td>
                     <td className="px-5 py-3 text-right tabular-nums">{c.conversions ? c.conversions.toLocaleString() : <span className="text-gray-400">0</span>}</td>
-                    <td className="px-5 py-3 text-right tabular-nums">{c.revenue > 0 ? fmtMoney(c.revenue) : <span className="text-gray-400">—</span>}</td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      {c.revenue > 0 ? (
+                        fmtMoney(c.revenue)
+                      ) : c.revenueAttributed ? (
+                        <span className="text-gray-400">$0</span>
+                      ) : (
+                        <span className="text-gray-300" title="No revenue could be attributed to this channel — likely missing utm_campaign on outbound links">unattributed</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
