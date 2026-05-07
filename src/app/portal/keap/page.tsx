@@ -6,6 +6,7 @@ import BarList from "@/components/portal/BarList";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import TagCountsTable from "@/components/portal/TagCountsTable";
+import ExportButton from "@/components/portal/ExportButton";
 import { parseTimeRange, isoDate, monthKey, pctChange } from "@/lib/time-range";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
@@ -262,7 +263,7 @@ export default async function KeapPortalPage({
   const orderRevenueInPeriod = data.window.orders.reduce((s, o) => s + (o.total ?? 0), 0);
 
   return (
-    <main className="mx-auto max-w-7xl px-8 py-12">
+    <main id="report-content" className="mx-auto max-w-7xl px-8 py-12">
       <header className="mb-10">
         <div className="flex items-baseline justify-between">
           <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
@@ -270,6 +271,7 @@ export default async function KeapPortalPage({
           </h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
+            <ExportButton targetId="report-content" filename="keap-report" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{updatedAt} PT</span>
           </div>
         </div>

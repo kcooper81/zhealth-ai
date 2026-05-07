@@ -1,6 +1,7 @@
 import StatusCard from "@/components/portal/StatusCard";
 import QuestionCard from "@/components/portal/QuestionCard";
 import DateRangePicker from "@/components/portal/DateRangePicker";
+import ExportButton from "@/components/portal/ExportButton";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
 import { listContacts, listTags, listCampaigns, listOpportunities } from "@/lib/keap";
@@ -255,7 +256,7 @@ export default async function PortalOverviewPage({
     data.keapContactsInPeriod > 0 ? data.completedOrders / data.keapContactsInPeriod : 0;
 
   return (
-    <main className="mx-auto max-w-7xl px-8 py-12">
+    <main id="report-content" className="mx-auto max-w-7xl px-8 py-12">
       <header className="mb-10">
         <div className="flex items-baseline justify-between">
           <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
@@ -263,6 +264,7 @@ export default async function PortalOverviewPage({
           </h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
+            <ExportButton targetId="report-content" filename="portal-overview" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{updatedAt} PT</span>
           </div>
         </div>

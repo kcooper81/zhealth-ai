@@ -4,6 +4,7 @@ import Section, { Card } from "@/components/portal/Section";
 import BarList from "@/components/portal/BarList";
 import Funnel from "@/components/portal/Funnel";
 import DateRangePicker from "@/components/portal/DateRangePicker";
+import ExportButton from "@/components/portal/ExportButton";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
@@ -384,7 +385,7 @@ export default async function AnalyticsPortalPage({
     .sort((a, b) => b.rate - a.rate);
 
   return (
-    <main className="mx-auto max-w-7xl px-8 py-12">
+    <main id="report-content" className="mx-auto max-w-7xl px-8 py-12">
       <header className="mb-10">
         <div className="flex items-baseline justify-between">
           <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
@@ -392,6 +393,7 @@ export default async function AnalyticsPortalPage({
           </h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
+            <ExportButton targetId="report-content" filename="analytics-report" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{updatedAt} PT</span>
           </div>
         </div>

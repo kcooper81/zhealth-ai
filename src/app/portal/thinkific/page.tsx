@@ -4,6 +4,7 @@ import Tabs, { TabPanel } from "@/components/portal/Tabs";
 import Section, { Card } from "@/components/portal/Section";
 import BarList from "@/components/portal/BarList";
 import DateRangePicker from "@/components/portal/DateRangePicker";
+import ExportButton from "@/components/portal/ExportButton";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, monthKey, pctChange } from "@/lib/time-range";
 import { cachedFetch, TTL } from "@/lib/cache";
@@ -334,7 +335,7 @@ export default async function ThinkificPortalPage({
     }));
 
   return (
-    <main className="mx-auto max-w-7xl px-8 py-12">
+    <main id="report-content" className="mx-auto max-w-7xl px-8 py-12">
       <header className="mb-10">
         <div className="flex items-baseline justify-between">
           <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
@@ -342,6 +343,7 @@ export default async function ThinkificPortalPage({
           </h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
+            <ExportButton targetId="report-content" filename="thinkific-report" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{updatedAt} PT</span>
           </div>
         </div>

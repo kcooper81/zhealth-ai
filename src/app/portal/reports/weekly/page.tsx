@@ -21,6 +21,9 @@ import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import EmailMetricsForm from "@/components/portal/EmailMetricsForm";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
+import BarList from "@/components/portal/BarList";
+import LineChart from "@/components/portal/LineChart";
+import ExportButton from "@/components/portal/ExportButton";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import {
   UPCOMING_EVENTS,
@@ -321,6 +324,25 @@ export default async function WeeklyReportPage({
   const reasonsRaw: string = m?.unsubscribe_reasons || "";
   const reasons = reasonsRaw ? reasonsRaw.split(/\n+/).map((r: string) => r.trim()).filter(Boolean) : [];
 
+  // Build line chart series from history (newest-first → reverse for chronological)
+  const history = [...data.emailMetricsHistory].sort((a, b) => a.week_of.localeCompare(b.week_of));
+  const ratesSeries = [
+    { label: "Open Rate", color: "#3b82f6", isPercent: true, points: history.map((h) => ({ x: h.week_of, y: h.open_rate })) },
+    { label: "Click Rate", color: "#10b981", isPercent: true, points: history.map((h) => ({ x: h.week_of, y: h.click_rate })) },
+    { label: "Complaint Rate", color: "#f43f5e", isPercent: true, points: history.map((h) => ({ x: h.week_of, y: h.complaint_rate })) },
+  ];
+  const unsubsSeries = [
+    { label: "Unsubs (30d)", color: "#f43f5e", points: history.map((h) => ({ x: h.week_of, y: h.unsubscribes_30d })) },
+  ];
+
+  // Combined leads bar list (lead magnets + sources, sorted)
+  const leadsBars = [
+    ...data.leadMagnetCounts.map((r: any) => ({ label: r.label.replace(/^Lead Magnet:\s*/, ""), value: r.count, sublabel: `tag ${r.tagId}` })),
+    ...data.leadSourceCounts.map((r: any) => ({ label: r.label, value: r.count, sublabel: `source ${r.sourceId}` })),
+  ]
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value);
+
   return (
     <main className="mx-auto max-w-7xl px-8 py-12">
       <header className="mb-10">
@@ -330,6 +352,7 @@ export default async function WeeklyReportPage({
           </h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
+            <ExportButton targetId="report-content" filename="weekly-report" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{updatedAt} PT</span>
           </div>
         </div>
@@ -337,6 +360,62 @@ export default async function WeeklyReportPage({
           Auto-pulled from Keap on each visit. {data.range.label.toLowerCase()} — {data.newContactsTotal.toLocaleString()} new contacts in window.
         </p>
       </header>
+      <div id="report-content" className="bg-white dark:bg-[#1c1c1e]">
+
+      {/* ===== HIGHLIGHTS — eye-catching summary at the top ===== */}
+      <Section title="At a glance" description={`The headline numbers for ${data.range.label.toLowerCase()}.`}>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {/* Engaged list with delta */}
+          <div className="overflow-hidden rounded-2xl border border-gray-200/70 bg-gradient-to-br from-blue-50 via-white to-white p-5 shadow-sm dark:border-white/5 dark:from-blue-950/30 dark:via-[#1f1f22] dark:to-[#1a1a1d]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Engaged List</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight tabular-nums text-gray-900 dark:text-gray-50">{data.totalEngaged.toLocaleString()}</div>
+            <div className="mt-1 text-xs">
+              {data.weeklyChange < 0 ? (
+                <span className="font-medium text-rose-600 dark:text-rose-400">▼ {Math.abs(data.weeklyChange).toLocaleString()} this week</span>
+              ) : data.weeklyChange > 0 ? (
+                <span className="font-medium text-emerald-600 dark:text-emerald-400">▲ {data.weeklyChange.toLocaleString()} this week</span>
+              ) : (
+                <span className="text-gray-500">no change</span>
+              )}
+            </div>
+          </div>
+          {/* New leads */}
+          <div className="overflow-hidden rounded-2xl border border-gray-200/70 bg-gradient-to-br from-emerald-50 via-white to-white p-5 shadow-sm dark:border-white/5 dark:from-emerald-950/30 dark:via-[#1f1f22] dark:to-[#1a1a1d]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">New Leads</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight tabular-nums text-gray-900 dark:text-gray-50">{data.newContactsTotal.toLocaleString()}</div>
+            <div className="mt-1 text-xs text-gray-500 dark:text-gray-500">{data.range.label.toLowerCase()}</div>
+          </div>
+          {/* Top lead source this period */}
+          <div className="overflow-hidden rounded-2xl border border-gray-200/70 bg-gradient-to-br from-amber-50 via-white to-white p-5 shadow-sm dark:border-white/5 dark:from-amber-950/30 dark:via-[#1f1f22] dark:to-[#1a1a1d]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Top Lead Magnet</div>
+            <div className="mt-2 truncate text-base font-semibold tracking-tight text-gray-900 dark:text-gray-50" title={leadsBars[0]?.label}>
+              {leadsBars[0]?.label || "—"}
+            </div>
+            <div className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+              {leadsBars[0] ? `${leadsBars[0].value} new contact${leadsBars[0].value === 1 ? "" : "s"}` : "no leads in window"}
+            </div>
+          </div>
+          {/* Open rate (manual) */}
+          <div className="overflow-hidden rounded-2xl border border-gray-200/70 bg-gradient-to-br from-rose-50 via-white to-white p-5 shadow-sm dark:border-white/5 dark:from-rose-950/30 dark:via-[#1f1f22] dark:to-[#1a1a1d]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Open Rate</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight tabular-nums text-gray-900 dark:text-gray-50">
+              {m?.open_rate != null ? fmtPct(m.open_rate) : "—"}
+            </div>
+            <div className="mt-1 text-xs">
+              {m?.open_rate != null && prev?.open_rate != null ? (
+                m.open_rate >= prev.open_rate ? (
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400">▲ {fmtPct(m.open_rate - prev.open_rate)} vs last week</span>
+                ) : (
+                  <span className="font-medium text-rose-600 dark:text-rose-400">▼ {fmtPct(prev.open_rate - m.open_rate)} vs last week</span>
+                )
+              ) : (
+                <span className="text-gray-500">{m?.open_rate != null ? "first week saved" : "manual entry"}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Section>
+
 
       {/* ===== INSIGHTS — dynamic, regenerated each render ===== */}
       {insights.length > 0 && (
@@ -517,6 +596,11 @@ export default async function WeeklyReportPage({
         title="New Leads"
         description={`Auto-derived from new Keap contacts in window (${data.newContactsTotal.toLocaleString()} total). Each row counts contacts created in window with the matching tag or lead_source_id.`}
       >
+        {leadsBars.length > 0 && (
+          <Card className="mb-4">
+            <BarList color="blue" items={leadsBars} />
+          </Card>
+        )}
         <Card padded={false}>
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
@@ -576,6 +660,43 @@ export default async function WeeklyReportPage({
           </Card>
         )}
       </Section>
+
+      {/* ===== TRENDS ===== */}
+      {history.length > 0 && (
+        <>
+          <Section
+            title="Email rate trends"
+            description={`Week-over-week movement of open / click / complaint rates. ${history.length} week${history.length === 1 ? "" : "s"} of history.`}
+          >
+            <Card>
+              <LineChart
+                series={ratesSeries}
+                height={260}
+                formatY={(v) => `${(v * 100).toFixed(2)}%`}
+                yLabel="Rate (%)"
+              />
+            </Card>
+          </Section>
+
+          {history.some((h: any) => h.unsubscribes_30d != null) && (
+            <Section
+              title="Unsubscribes (30-day) trend"
+              description="Track whether the email-frequency complaint pattern is improving over time."
+            >
+              <Card>
+                <LineChart
+                  series={unsubsSeries}
+                  height={220}
+                  formatY={(v) => v.toLocaleString()}
+                  yLabel="Unsubs"
+                />
+              </Card>
+            </Section>
+          )}
+        </>
+      )}
+
+      </div> {/* /report-content */}
 
       <Section
         title="Data sources"
