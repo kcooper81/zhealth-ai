@@ -35,6 +35,18 @@ async function resolveSiteParam(accessToken: string): Promise<string> {
   });
   if (!r.ok) {
     const text = await r.text().catch(() => "");
+    // Google returns 403 with "API has not been used" when the
+    // Search Console API isn't enabled in the Cloud project. The
+    // fix is one click — extract the project number from the
+    // message and produce a direct enable link.
+    const projMatch = text.match(/project (\d+)/i);
+    const apiDisabled = /has not been used|is disabled/i.test(text);
+    if (apiDisabled && projMatch) {
+      const enableUrl = `https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=${projMatch[1]}`;
+      throw new Error(
+        `API_DISABLED::${enableUrl}::The Search Console API is disabled in Google Cloud project ${projMatch[1]}. Enable it (one click), wait ~60 seconds, then refresh.`
+      );
+    }
     throw new Error(`Search Console — couldn't list properties (${r.status}). ${text.slice(0, 200)}`);
   }
   const data = await r.json();
