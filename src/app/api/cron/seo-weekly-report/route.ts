@@ -22,7 +22,11 @@ const BRAND_RE = /\b(z-?health|zhealth|z health|dr.?cobb|eric.?cobb)\b/i;
 function fmtDate(d: Date) { return d.toISOString().slice(0, 10); }
 function daysAgo(n: number) { const d = new Date(); d.setUTCDate(d.getUTCDate() - n); return d; }
 function pct(a: number, b: number) { if (!b) return a ? "—" : "0%"; const v = ((a - b) / b) * 100; return (v >= 0 ? "+" : "") + v.toFixed(1) + "%"; }
-function arrow(a: number, b: number) { return a > b ? "▲" : a < b ? "▼" : "→"; }
+function arrow(a: number, b: number) {
+  if (a > b) return '<span style="color:#16a34a;font-weight:bold">▲</span>';
+  if (a < b) return '<span style="color:#dc2626;font-weight:bold">▼</span>';
+  return '<span style="color:#888">→</span>';
+}
 function fmtNum(n: number) { return Math.round(n).toLocaleString(); }
 function path(url: string) { return (url || "").replace(/^https?:\/\/[^/]+/, ""); }
 
