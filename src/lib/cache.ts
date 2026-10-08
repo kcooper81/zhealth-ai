@@ -231,29 +231,58 @@ export async function cacheDelete(key: string): Promise<void> {
  * Fetch data with caching. Checks cache first, calls fetcher on miss,
  * stores result in cache.
  */
+type CFEnvelope = { __cf: unknown; __ts: number };
+function isEnvelope(v: unknown): v is CFEnvelope {
+  return !!v && typeof v === "object" && "__cf" in (v as any) && typeof (v as any).__ts === "number";
+}
+
 export async function cachedFetch<T>(
   key: string,
   ttlSeconds: number,
   fetcher: () => Promise<T>
 ): Promise<T> {
-  const cached = await cacheGet<T>(key);
-  if (cached !== null) return cached;
+  // Stale-while-revalidate: the value is kept for a long "hard" window so a
+  // cached copy is almost always available to serve INSTANTLY, and is only
+  // considered "fresh" for `ttlSeconds`. Past that, we return the cached copy
+  // immediately and refresh in the background — so report pages never block on
+  // live API calls after the very first load.
+  const hardTtl = Math.max(ttlSeconds, 24 * 60 * 60);
+  const raw = await cacheGet<unknown>(key);
 
-  // Dedupe concurrent misses for the same key
+  if (isEnvelope(raw)) {
+    const stale = Date.now() - raw.__ts > ttlSeconds * 1000;
+    if (stale && !inflight.has(key)) {
+      const p = (async () => {
+        try {
+          const fresh = await fetcher();
+          cacheSet(key, { __cf: fresh, __ts: Date.now() }, hardTtl);
+        } catch {
+          /* keep serving stale */
+        } finally {
+          inflight.delete(key);
+        }
+      })();
+      inflight.set(key, p as Promise<unknown>);
+    }
+    return raw.__cf as T;
+  }
+
+  // Legacy (pre-envelope) cached value — serve it, it'll be re-wrapped on the
+  // next miss when its original TTL lapses.
+  if (raw !== null) return raw as T;
+
+  // Miss — dedupe concurrent fetchers, then fetch + store wrapped.
   const existing = inflight.get(key);
   if (existing) return existing as Promise<T>;
-
   const promise = (async () => {
     try {
       const data = await fetcher();
-      // Fire-and-forget cache write so we don't block the return
-      cacheSet(key, data, ttlSeconds);
+      cacheSet(key, { __cf: data, __ts: Date.now() }, hardTtl);
       return data;
     } finally {
       inflight.delete(key);
     }
   })();
-
   inflight.set(key, promise);
   return promise;
 }
