@@ -13,6 +13,7 @@ import {
   Mail,
   Target,
   Funnel,
+  Monitor,
   Map,
   GraduationCap,
   Settings,
@@ -56,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/portal/reports/page-flows", label: "Page flow", icon: Activity, status: "live" },
       { href: "/portal/reports/funnels", label: "Funnels", icon: Funnel, status: "live" },
+      { href: "/portal/reports/webinars", label: "Webinars", icon: Monitor, status: "live" },
       { href: "/portal/reports/channels", label: "Channels", icon: Map, status: "live" },
       { href: "/portal/reports/landing-pages", label: "Landing pages", icon: Target, status: "live" },
       { href: "/portal/reports/courses", label: "Courses", icon: GraduationCap, status: "live" },
@@ -95,7 +97,9 @@ function statusDot(status?: NavItem["status"], pending?: boolean) {
       </span>
     );
   }
-  if (!status) return null;
+  // "live" is the default for everything, so a green dot on every row is just
+  // noise — only flag the exceptions (scaffold / coming-soon).
+  if (!status || status === "live") return null;
   const cls = {
     live: "bg-emerald-500",
     scaffold: "bg-amber-500",

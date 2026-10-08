@@ -229,12 +229,14 @@ export async function getContactsWithTag(
   tagId: number,
   params?: { limit?: number; offset?: number }
 ): Promise<{ contacts: KeapContact[]; count: number }> {
+  // Use the dedicated tag-contacts endpoint. The /contacts?tag_id= filter is
+  // ignored by this API (it returns the full account total for every tag),
+  // which made every tag count show the same ~57k. /tags/{id}/contacts filters
+  // correctly and returns the real per-tag count.
   const qs = new URLSearchParams();
-  qs.set("tag_id", String(tagId));
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
-
-  const data = await keapFetch(`/contacts?${qs}`);
+  const data = await keapFetch(`/tags/${tagId}/contacts?${qs}`);
   return { contacts: data.contacts || [], count: data.count || 0 };
 }
 
