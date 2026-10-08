@@ -13,6 +13,7 @@ import KPIGrid from "@/components/portal/KPIGrid";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
   getPagesWithEntrances,
@@ -36,7 +37,7 @@ async function loadLandingPages(searchParams: Record<string, string | string[] |
   const rangeSeg = rangeCacheSegment(range);
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   const [pages, formSubmits, ctaClicks, enrollClicks, campaignRev, contactsInWindow] = await Promise.all([
     accessToken

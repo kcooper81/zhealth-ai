@@ -18,6 +18,7 @@ import { type PageGroup } from "@/components/portal/FunnelBuilder";
 import { FunnelCardSkeleton } from "@/components/portal/Skeletons";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import { getFunnelSteps, getPagesWithEntrances } from "@/lib/google-analytics";
 import { FUNNEL_EVENT_CATALOG } from "@/lib/funnel-config";
@@ -45,7 +46,7 @@ async function loadShellData(searchParams: Record<string, string | string[] | un
   const rangeKey = range.key === "custom" ? "30d" : range.key;
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   // Seed/migrate run idempotently — both no-op fast on the common path.
   await seedBuiltInFunnels("if-missing").catch(() => null);
@@ -113,7 +114,7 @@ async function FunnelsListSection({
   const rangeKey = range.key === "custom" ? "30d" : range.key;
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   const funnelResults = await Promise.all(
     saved.map(async (f) => {

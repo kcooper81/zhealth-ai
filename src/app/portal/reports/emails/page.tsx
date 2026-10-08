@@ -17,6 +17,7 @@ import BarList from "@/components/portal/BarList";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import { getEventCounts, getEcommerce } from "@/lib/google-analytics";
 import { listEmails } from "@/lib/keap";
@@ -45,7 +46,7 @@ async function loadEmails(searchParams: Record<string, string | string[] | undef
   const rangeSeg = rangeCacheSegment(range);
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   const [emailRes, emailMediumSessions, campaignRevenue, campaignPurchases, enrollClicks] = await Promise.all([
     cachedFetch(`keap:emails:since:${rangeSeg}`, TTL.KEAP_EMAILS, () =>

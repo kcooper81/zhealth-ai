@@ -8,6 +8,7 @@ import ExportButton from "@/components/portal/ExportButton";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
   getTrafficOverview,
@@ -53,7 +54,7 @@ async function loadAnalytics(searchParams: Record<string, string | string[] | un
   const rangeSeg = rangeCacheSegment(range);
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
   const sessionError = session?.error;
 
   // Default empty GA4 result if not authenticated

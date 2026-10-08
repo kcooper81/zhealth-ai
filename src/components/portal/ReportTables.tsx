@@ -274,3 +274,68 @@ export function EmailsTable({ rows }: { rows: EmailRow[] }) {
     />
   );
 }
+
+// ---- Page Flow (all pages: WP + Thinkific) -----------------------------
+
+export type PageFlowRow = {
+  page: string;
+  surface: "WordPress" | "Thinkific" | "Other";
+  pageviews: number;
+  users: number;
+  sessions: number;
+  entrances: number;
+  exitsEst: number;
+  bounceRate: number;
+  engagementRate: number;
+  avgDuration: number;
+};
+
+const fmtDur = (s: number) => {
+  if (!s) return "0s";
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return m ? `${m}m ${sec}s` : `${sec}s`;
+};
+
+const surfaceBadge = (s: PageFlowRow["surface"]) => {
+  const map = {
+    WordPress: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+    Thinkific: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+    Other: "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300",
+  } as const;
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[s]}`}>{s}</span>;
+};
+
+const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
+
+export function PageFlowTable({ rows }: { rows: PageFlowRow[] }) {
+  const columns: Column<PageFlowRow>[] = [
+    { key: "page", label: "Page", sortable: true, accessor: (r) => r.page, render: (r) => <span className="font-mono text-xs text-gray-900 dark:text-gray-100">{r.page || "(not set)"}</span> },
+    { key: "surface", label: "Where", sortable: true, accessor: (r) => r.surface, render: (r) => surfaceBadge(r.surface) },
+    { key: "pageviews", label: "Views", sortable: true, numeric: true, accessor: (r) => r.pageviews, render: (r) => r.pageviews.toLocaleString() },
+    { key: "sessions", label: "Sessions", sortable: true, numeric: true, accessor: (r) => r.sessions, render: (r) => r.sessions.toLocaleString() },
+    { key: "entrances", label: "Entrances", sortable: true, numeric: true, accessor: (r) => r.entrances, render: (r) => <span title="Sessions that started on this page">{r.entrances.toLocaleString()}</span> },
+    { key: "exitsEst", label: "Exits (est)", sortable: true, numeric: true, accessor: (r) => r.exitsEst, render: (r) => <span className="text-gray-500" title="Estimated: bounced + likely last-page sessions">{r.exitsEst.toLocaleString()}</span> },
+    { key: "bounceRate", label: "Bounce", sortable: true, numeric: true, accessor: (r) => r.bounceRate, render: (r) => <span className={r.bounceRate > 0.6 ? "text-rose-600 dark:text-rose-400 font-medium" : ""}>{pct(r.bounceRate)}</span> },
+    { key: "engagementRate", label: "Engaged", sortable: true, numeric: true, accessor: (r) => r.engagementRate, render: (r) => <span className={r.engagementRate >= 0.7 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{pct(r.engagementRate)}</span> },
+    { key: "avgDuration", label: "Avg time", sortable: true, numeric: true, accessor: (r) => r.avgDuration, render: (r) => fmtDur(r.avgDuration) },
+  ];
+  return (
+    <FilterableTable
+      rows={rows}
+      rowKey={(r) => r.page}
+      searchableKeys={["page"]}
+      placeholder="Search page path…"
+      maxHeight={620}
+      presets={[
+        { label: "WordPress", predicate: (r) => r.surface === "WordPress" },
+        { label: "Thinkific", predicate: (r) => r.surface === "Thinkific" },
+        { label: "Entry points", predicate: (r) => r.entrances > 0 },
+        { label: "High bounce (>60%)", predicate: (r) => r.bounceRate > 0.6 && r.pageviews >= 30 },
+        { label: ">100 views", predicate: (r) => r.pageviews > 100 },
+      ]}
+      initialSort={{ key: "pageviews", dir: "desc" }}
+      columns={columns}
+    />
+  );
+}

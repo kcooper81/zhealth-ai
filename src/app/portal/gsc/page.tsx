@@ -18,6 +18,7 @@ import ExportButton from "@/components/portal/ExportButton";
 import { SectionSkeleton, KPIGridSkeleton } from "@/components/portal/Skeletons";
 import { GSCQueriesTable, GSCPagesTable } from "@/components/portal/GSCTables";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import {
   getOverview,
@@ -44,7 +45,7 @@ async function GSCBody({
   const range = parseTimeRange(searchParams);
   const rangeKey = range.key === "custom" ? "30d" : range.key;
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   if (!accessToken) {
     return (

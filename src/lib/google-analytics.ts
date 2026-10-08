@@ -494,6 +494,152 @@ export async function getFunnelSteps(
   );
 }
 
+/**
+ * Full per-page flow metrics — pageviews, users, sessions, entrances,
+ * bounce rate, engagement rate, and avg session duration. Powers the
+ * Page Flow report's main table. Covers WP + LMS pages (same property).
+ */
+export async function getPageFlow(
+  accessToken: string,
+  property: GA4Property = "website",
+  dateRange: string = "30d",
+  limit: number = 300
+): Promise<Array<{
+  host: string;
+  page: string;
+  pageviews: number;
+  users: number;
+  sessions: number;
+  bounceRate: number;
+  engagementRate: number;
+  avgDuration: number;
+}>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "hostName" }, { name: "pagePath" }],
+    metrics: [
+      { name: "screenPageViews" },
+      { name: "totalUsers" },
+      { name: "sessions" },
+      { name: "bounceRate" },
+      { name: "engagementRate" },
+      { name: "averageSessionDuration" },
+    ],
+    orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => ({
+    host: row.dimensionValues?.[0]?.value || "",
+    page: row.dimensionValues?.[1]?.value || "",
+    pageviews: parseInt(row.metricValues?.[0]?.value || "0"),
+    users: parseInt(row.metricValues?.[1]?.value || "0"),
+    sessions: parseInt(row.metricValues?.[2]?.value || "0"),
+    bounceRate: parseFloat(row.metricValues?.[3]?.value || "0"),
+    engagementRate: parseFloat(row.metricValues?.[4]?.value || "0"),
+    avgDuration: parseFloat(row.metricValues?.[5]?.value || "0"),
+  }));
+}
+
+/**
+ * Entrances per page via the `landingPage` dimension (the page where a
+ * session started) × sessions. This is GA4's correct "entrances" — the
+ * `entrances` metric does not exist in the Data API.
+ */
+export async function getEntrances(
+  accessToken: string,
+  property: GA4Property = "website",
+  dateRange: string = "30d",
+  limit: number = 200
+): Promise<Array<{ page: string; entrances: number; bounceRate: number; conversions: number }>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "landingPage" }],
+    metrics: [{ name: "sessions" }, { name: "bounceRate" }, { name: "conversions" }],
+    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => ({
+    page: row.dimensionValues?.[0]?.value || "",
+    entrances: parseInt(row.metricValues?.[0]?.value || "0"),
+    bounceRate: parseFloat(row.metricValues?.[1]?.value || "0"),
+    conversions: parseFloat(row.metricValues?.[2]?.value || "0"),
+  }));
+}
+
+/**
+ * Daily trend with conversions — date × {sessions, users, conversions}.
+ */
+export async function getConversionTrend(
+  accessToken: string,
+  property: GA4Property = "website",
+  dateRange: string = "30d"
+): Promise<Array<{ date: string; sessions: number; users: number; conversions: number }>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "date" }],
+    metrics: [{ name: "sessions" }, { name: "totalUsers" }, { name: "conversions" }],
+    orderBys: [{ dimension: { dimensionName: "date" }, desc: false }],
+  });
+
+  return (data.rows || []).map((row: any) => {
+    const raw = row.dimensionValues?.[0]?.value || "";
+    const date = raw ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : "";
+    return {
+      date,
+      sessions: parseInt(row.metricValues?.[0]?.value || "0"),
+      users: parseInt(row.metricValues?.[1]?.value || "0"),
+      conversions: parseFloat(row.metricValues?.[2]?.value || "0"),
+    };
+  });
+}
+
+/**
+ * Generic single-dimension breakdown with session/user/conversion/engagement.
+ * Use for deviceCategory, sessionDefaultChannelGroup, country, etc.
+ */
+export async function getBreakdown(
+  accessToken: string,
+  property: GA4Property,
+  dateRange: string,
+  dimension: string,
+  limit: number = 25
+): Promise<Array<{ label: string; sessions: number; users: number; conversions: number; engagementRate: number }>> {
+  const { startDate, endDate } = parseDateRange(dateRange);
+  const propertyId = getPropertyId(property);
+
+  const data = await ga4Fetch(propertyId, accessToken, "runReport", {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: dimension }],
+    metrics: [
+      { name: "sessions" },
+      { name: "totalUsers" },
+      { name: "conversions" },
+      { name: "engagementRate" },
+    ],
+    orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    limit,
+  });
+
+  return (data.rows || []).map((row: any) => ({
+    label: row.dimensionValues?.[0]?.value || "(not set)",
+    sessions: parseInt(row.metricValues?.[0]?.value || "0"),
+    users: parseInt(row.metricValues?.[1]?.value || "0"),
+    conversions: parseFloat(row.metricValues?.[2]?.value || "0"),
+    engagementRate: parseFloat(row.metricValues?.[3]?.value || "0"),
+  }));
+}
+
 // ---- Comparison ----
 
 export async function getTrafficOverviewWithComparison(

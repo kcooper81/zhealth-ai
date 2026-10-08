@@ -48,11 +48,13 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/portal", label: "Home", icon: Layers, status: "live" },
       { href: "/portal/reports/weekly", label: "Weekly digest", icon: FileText, status: "live" },
+      { href: "/portal/marketing", label: "Marketing plan", icon: Target, status: "live" },
     ],
   },
   {
     title: "Reports",
     items: [
+      { href: "/portal/reports/page-flows", label: "Page flow", icon: Activity, status: "live" },
       { href: "/portal/reports/funnels", label: "Funnels", icon: Funnel, status: "live" },
       { href: "/portal/reports/channels", label: "Channels", icon: Map, status: "live" },
       { href: "/portal/reports/landing-pages", label: "Landing pages", icon: Target, status: "live" },

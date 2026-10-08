@@ -22,6 +22,7 @@ import { SectionSkeleton, TableSkeleton, KPIGridSkeleton } from "@/components/po
 import SEOAuditTable from "@/components/portal/SEOAuditTable";
 import { runSEOAudit } from "@/lib/wp-seo-audit";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import { getTopPages } from "@/lib/google-analytics";
 import { getTopQueries, getStrikingDistance, getLowCTRQueries, getOverview, getTopPagesGSC } from "@/lib/google-search-console";
@@ -70,7 +71,7 @@ async function HighImpactSection({
   const rangeKey = range.key === "custom" ? "30d" : range.key;
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   const [audit, topPages] = await Promise.all([
     runSEOAudit(),
@@ -167,7 +168,7 @@ async function SearchConsoleSection({
   const range = parseTimeRange(searchParams);
   const rangeKey = range.key === "custom" ? "30d" : range.key;
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   if (!accessToken) {
     return (
@@ -327,7 +328,7 @@ async function CoreWebVitalsSummary({
   const range = parseTimeRange(searchParams);
   const rangeKey = range.key === "custom" ? "30d" : range.key;
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   // Pick which URLs to score: GSC top pages if available, otherwise the
   // homepage + top pages from the audit.

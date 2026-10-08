@@ -32,3 +32,29 @@ export async function getGoogleAccessToken(): Promise<string> {
   const data = await r.json();
   return data.access_token as string;
 }
+
+// In-memory memo so we don't do an OAuth round-trip on every report render
+// within a warm serverless instance. Access tokens last ~1h; memo for 50m.
+let _memo: { token: string; exp: number } | null = null;
+
+export async function getGoogleAccessTokenCached(): Promise<string> {
+  if (_memo && _memo.exp > Date.now()) return _memo.token;
+  const token = await getGoogleAccessToken();
+  _memo = { token, exp: Date.now() + 50 * 60 * 1000 };
+  return token;
+}
+
+/**
+ * Resolve the GA4/GSC access token for portal reports. Prefers the project's
+ * service refresh token — it reliably has access to the company GA4 + Search
+ * Console, so every report shows data regardless of which teammate is signed
+ * in (and the same token works for cron pre-warming). Falls back to the
+ * signed-in user's OAuth token if the service token can't be minted.
+ */
+export async function getPortalGa4Token(sessionToken?: string): Promise<string | undefined> {
+  try {
+    return await getGoogleAccessTokenCached();
+  } catch {
+    return sessionToken;
+  }
+}

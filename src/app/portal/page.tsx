@@ -4,6 +4,7 @@ import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { listContacts, listTags, listCampaigns, listOpportunities } from "@/lib/keap";
 import { getLMSOverview, listCourses, listOrders, listEnrollments } from "@/lib/thinkific";
 import { getTrafficOverviewWithComparison, getTrafficSources } from "@/lib/google-analytics";
@@ -36,7 +37,7 @@ async function loadOverviewData(searchParams: Record<string, string | string[] |
   const priorToMs = range.prior.to.getTime();
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
   const sessionError = session?.error;
 
   const rangeSeg = rangeCacheSegment(range);

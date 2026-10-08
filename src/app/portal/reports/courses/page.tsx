@@ -15,6 +15,7 @@ import BarList from "@/components/portal/BarList";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import {
   getEventCounts,
@@ -41,7 +42,7 @@ async function loadCourses(searchParams: Record<string, string | string[] | unde
   const rangeSeg = rangeCacheSegment(range);
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   const [coursesRes, ordersRes, productsRes, enrollmentsRes, courseViews, beginCheckouts, purchasesByCampaign, purchasesBySource] = await Promise.all([
     cachedFetch("thinkific:courses:250", TTL.THINKIFIC_COURSES, () =>

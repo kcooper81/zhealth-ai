@@ -8,6 +8,7 @@ import Insight, { InsightGrid } from "@/components/portal/Insight";
 import WPAuditView from "@/components/portal/WPAuditView";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL } from "@/lib/cache";
 import {
   getTrafficOverviewWithComparison,
@@ -170,7 +171,7 @@ async function loadWPAudit() {
 
 async function loadGA4(rangeKey: string) {
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
   const sessionError = session?.error;
 
   if (sessionError === "RefreshAccessTokenError") {

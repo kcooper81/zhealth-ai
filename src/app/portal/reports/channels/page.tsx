@@ -15,6 +15,7 @@ import KPIGrid from "@/components/portal/KPIGrid";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
 import { parseTimeRange, pctChange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
+import { getPortalGa4Token } from "@/lib/reports/google-auth";
 import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
 import { getChannelRollup, getEcommerce } from "@/lib/google-analytics";
 import { listAllContactsInRange } from "@/lib/keap";
@@ -38,7 +39,7 @@ async function loadChannels(searchParams: Record<string, string | string[] | und
   const rangeSeg = rangeCacheSegment(range);
 
   const session = (await getServerSession()) as any;
-  const accessToken = session?.accessToken;
+  const accessToken = await getPortalGa4Token(session?.accessToken);
 
   const [channels, campaignRevenue, sourceRevenue, contacts] = await Promise.all([
     accessToken
