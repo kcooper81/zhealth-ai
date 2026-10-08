@@ -552,14 +552,20 @@ export async function getEntrances(
   property: GA4Property = "website",
   dateRange: string = "30d",
   limit: number = 200
-): Promise<Array<{ page: string; entrances: number; bounceRate: number; conversions: number }>> {
+): Promise<Array<{ page: string; entrances: number; bounceRate: number; engagementRate: number; avgDuration: number; conversions: number }>> {
   const { startDate, endDate } = parseDateRange(dateRange);
   const propertyId = getPropertyId(property);
 
   const data = await ga4Fetch(propertyId, accessToken, "runReport", {
     dateRanges: [{ startDate, endDate }],
     dimensions: [{ name: "landingPage" }],
-    metrics: [{ name: "sessions" }, { name: "bounceRate" }, { name: "conversions" }],
+    metrics: [
+      { name: "sessions" },
+      { name: "bounceRate" },
+      { name: "engagementRate" },
+      { name: "averageSessionDuration" },
+      { name: "conversions" },
+    ],
     orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
     limit,
   });
@@ -568,7 +574,9 @@ export async function getEntrances(
     page: row.dimensionValues?.[0]?.value || "",
     entrances: parseInt(row.metricValues?.[0]?.value || "0"),
     bounceRate: parseFloat(row.metricValues?.[1]?.value || "0"),
-    conversions: parseFloat(row.metricValues?.[2]?.value || "0"),
+    engagementRate: parseFloat(row.metricValues?.[2]?.value || "0"),
+    avgDuration: parseFloat(row.metricValues?.[3]?.value || "0"),
+    conversions: parseFloat(row.metricValues?.[4]?.value || "0"),
   }));
 }
 

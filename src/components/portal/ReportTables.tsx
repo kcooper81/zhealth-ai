@@ -339,3 +339,47 @@ export function PageFlowTable({ rows }: { rows: PageFlowRow[] }) {
     />
   );
 }
+
+// ---- Landing pages (per-page conversion from the landingPage dimension) -----
+
+export type LandingRow = {
+  page: string;
+  entrances: number;
+  bounceRate: number;
+  engagementRate: number;
+  avgDuration: number;
+  conversions: number;
+  convRate: number;
+};
+
+const _fdur = (s: number) => { const m = Math.floor(s / 60); return m ? `${m}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`; };
+const _pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+
+export function LandingTable({ rows }: { rows: LandingRow[] }) {
+  const columns: Column<LandingRow>[] = [
+    { key: "page", label: "Landing page", sortable: true, accessor: (r) => r.page, render: (r) => <span className="font-mono text-xs text-gray-900 dark:text-gray-100">{r.page || "(not set)"}</span> },
+    { key: "entrances", label: "Entrances", sortable: true, numeric: true, accessor: (r) => r.entrances, render: (r) => <span title="Sessions that started on this page">{r.entrances.toLocaleString()}</span> },
+    { key: "bounceRate", label: "Bounce", sortable: true, numeric: true, accessor: (r) => r.bounceRate, render: (r) => <span className={r.bounceRate > 0.6 ? "text-rose-600 dark:text-rose-400 font-medium" : ""}>{_pct(r.bounceRate)}</span> },
+    { key: "engagementRate", label: "Engaged", sortable: true, numeric: true, accessor: (r) => r.engagementRate, render: (r) => <span className={r.engagementRate >= 0.7 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{_pct(r.engagementRate)}</span> },
+    { key: "avgDuration", label: "Avg time", sortable: true, numeric: true, accessor: (r) => r.avgDuration, render: (r) => _fdur(r.avgDuration) },
+    { key: "conversions", label: "Conversions", sortable: true, numeric: true, accessor: (r) => r.conversions, render: (r) => r.conversions ? <span className="font-medium text-emerald-700 dark:text-emerald-300">{Math.round(r.conversions).toLocaleString()}</span> : <span className="text-gray-400">0</span> },
+    { key: "convRate", label: "Conv. rate", sortable: true, numeric: true, accessor: (r) => r.convRate, render: (r) => r.convRate ? `${(r.convRate * 100).toFixed(2)}%` : <span className="text-gray-400">—</span> },
+  ];
+  return (
+    <FilterableTable
+      rows={rows}
+      rowKey={(r) => r.page}
+      searchableKeys={["page"]}
+      placeholder="Search landing page path…"
+      maxHeight={620}
+      presets={[
+        { label: "Converted", predicate: (r) => r.conversions > 0 },
+        { label: "High bounce (>60%)", predicate: (r) => r.bounceRate > 0.6 && r.entrances >= 20 },
+        { label: "Well-engaged (>70%)", predicate: (r) => r.engagementRate >= 0.7 },
+        { label: ">50 entrances", predicate: (r) => r.entrances > 50 },
+      ]}
+      initialSort={{ key: "entrances", dir: "desc" }}
+      columns={columns}
+    />
+  );
+}

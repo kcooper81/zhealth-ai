@@ -1,294 +1,154 @@
 /**
- * Landing Pages report — for every page that received traffic, computes:
- *   GA4 visits → cta_click → form_submit → Keap tag count → enrollment → revenue
- *
- * Cross-stitches the three datasets via the LANDING_PAGE_TAG_MAP:
- *   path → Keap tag → contacts created in window with that tag → Thinkific
- *   purchases attributable via utm_campaign carried over.
+ * Landing Pages — where sessions start, how sticky those pages are, and how
+ * well they convert. Built on GA4's landingPage dimension (entrances) +
+ * bounce / engagement / avg time / conversions (key events), which all
+ * populate today. Loads from a cached snapshot (stale-while-revalidate).
  */
 import Section, { Card } from "@/components/portal/Section";
 import DateRangePicker from "@/components/portal/DateRangePicker";
 import ExportButton from "@/components/portal/ExportButton";
 import KPIGrid from "@/components/portal/KPIGrid";
 import Insight, { InsightGrid } from "@/components/portal/Insight";
+import BarList from "@/components/portal/BarList";
+import { LandingTable, type LandingRow } from "@/components/portal/ReportTables";
 import { parseTimeRange } from "@/lib/time-range";
 import { getServerSession } from "@/lib/auth";
 import { getPortalGa4Token } from "@/lib/reports/google-auth";
-import { cachedFetch, TTL, rangeCacheSegment } from "@/lib/cache";
-import {
-  getPagesWithEntrances,
-  getEventCounts,
-  getEcommerce,
-} from "@/lib/google-analytics";
-import { listAllContactsInRange } from "@/lib/keap";
-import { LANDING_PAGE_TAG_MAP, findLandingPageRow } from "@/lib/landing-page-tag-map";
-import { LandingPagesFunnelTable } from "@/components/portal/ReportTables";
+import { cachedFetchSWR } from "@/lib/cache";
+import { getEntrances } from "@/lib/google-analytics";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-function fmtMoney(n: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-}
-
-async function loadLandingPages(searchParams: Record<string, string | string[] | undefined>) {
-  const range = parseTimeRange(searchParams);
-  const rangeKey = range.key === "custom" ? "30d" : range.key;
-  const rangeSeg = rangeCacheSegment(range);
-
-  const session = (await getServerSession()) as any;
-  const accessToken = await getPortalGa4Token(session?.accessToken);
-
-  const [pages, formSubmits, ctaClicks, enrollClicks, campaignRev, contactsInWindow] = await Promise.all([
-    accessToken
-      ? cachedFetch(`ga4:pages:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getPagesWithEntrances(accessToken, "website", rangeKey, 200)
-        ).catch(() => [])
-      : Promise.resolve([] as any[]),
-    accessToken
-      ? cachedFetch(`ga4:event:form_submit:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "website", rangeKey, "form_submit", ["pagePath"], 200)
-        ).catch(() => [])
-      : Promise.resolve([] as any[]),
-    accessToken
-      ? cachedFetch(`ga4:event:cta_click:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "website", rangeKey, "cta_click", ["pagePath"], 200)
-        ).catch(() => [])
-      : Promise.resolve([] as any[]),
-    accessToken
-      ? cachedFetch(`ga4:event:enroll_click:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEventCounts(accessToken, "website", rangeKey, "enroll_click", ["pagePath"], 200)
-        ).catch(() => [])
-      : Promise.resolve([] as any[]),
-    accessToken
-      ? cachedFetch(`ga4:ecom:campaign:${rangeKey}`, TTL.GA4_REPORTS, () =>
-          getEcommerce(accessToken, "website", rangeKey, "sessionCampaignName", 100)
-        ).catch(() => [])
-      : Promise.resolve([] as any[]),
-    // Pull every contact created in window with their tag_ids — we'll
-    // count per LP tag below, which gives us "leads in window" instead
-    // of all-time count.
-    cachedFetch(
-      `keap:contacts:in-range-with-tags:${rangeSeg}`,
-      TTL.KEAP_STATS,
-      () => listAllContactsInRange(range.from.toISOString(), range.to.toISOString()).catch(() => [])
-    ),
-  ]);
-
-  // Count how many in-window contacts have each LP tag
-  const keapByTag = new Map<number, number>();
-  for (const c of contactsInWindow as any[]) {
-    if (c.tag_ids) {
-      for (const tid of c.tag_ids) keapByTag.set(tid, (keapByTag.get(tid) ?? 0) + 1);
-    }
-  }
-
-  // Index helpers
-  const formByPath = new Map<string, number>(formSubmits.map((r: any) => [r.dims.pagePath || "", r.eventCount]));
-  const ctaByPath = new Map<string, number>(ctaClicks.map((r: any) => [r.dims.pagePath || "", r.eventCount]));
-  const enrollByPath = new Map<string, number>(enrollClicks.map((r: any) => [r.dims.pagePath || "", r.eventCount]));
-  const campaignRevMap = new Map<string, number>(campaignRev.map((r: any) => [r.dim, r.revenue]));
-  // keapByTag computed above from in-window contacts
-
-  // For each page from GA4, build the funnel
-  const funnel = pages.map((p: any) => {
-    const lp = findLandingPageRow(p.page);
-    const keapTagCount = lp ? keapByTag.get(lp.tagId) ?? 0 : 0;
-    const revenue = lp?.utmCampaign ? (campaignRevMap.get(lp.utmCampaign) ?? 0) : 0;
-
-    return {
-      page: p.page,
-      label: lp?.label || p.page,
-      pageviews: p.pageviews,
-      users: p.users,
-      sessions: p.sessions,
-      entrances: p.entrances,
-      bounceRate: p.bounceRate,
-      ctaClicks: ctaByPath.get(p.page) ?? 0,
-      formSubmits: formByPath.get(p.page) ?? 0,
-      enrollClicks: enrollByPath.get(p.page) ?? 0,
-      keapTagged: keapTagCount,
-      lp,
-      revenue,
-    };
-  });
-
-  // Order: prioritize mapped LPs that have signups, then by traffic
-  funnel.sort((a, b) => {
-    if (a.lp && !b.lp) return -1;
-    if (!a.lp && b.lp) return 1;
-    return b.pageviews - a.pageviews;
-  });
-
-  const totals = {
-    pageviews: funnel.reduce((s, r) => s + r.pageviews, 0),
-    formSubmits: funnel.reduce((s, r) => s + r.formSubmits, 0),
-    enrollClicks: funnel.reduce((s, r) => s + r.enrollClicks, 0),
-    revenue: funnel.reduce((s, r) => s + r.revenue, 0),
-    mappedLPs: funnel.filter((r) => r.lp).length,
-  };
-
-  return { range, accessToken: !!accessToken, funnel, totals };
-}
-
 export const metadata = { title: "Landing Pages — Z-Health Portal" };
 
-export default async function LandingPagesReportPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  const data = await loadLandingPages(searchParams);
+const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+const num = (n: number) => Math.round(n).toLocaleString();
+const ago = (ts: number) => {
+  const m = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+};
+
+async function load(searchParams: Record<string, string | string[] | undefined>) {
+  const range = parseTimeRange(searchParams);
+  const rangeKey = range.key === "custom" ? "30d" : range.key;
+  const session = (await getServerSession()) as any;
+  const token = await getPortalGa4Token(session?.accessToken);
+  if (!token) return { ok: false as const, range, rangeKey, updatedAt: 0, stale: false, rows: [] as LandingRow[] };
+
+  const { data, updatedAt, stale } = await cachedFetchSWR(
+    `lp:report:${rangeKey}`,
+    30 * 60,
+    24 * 60 * 60,
+    () => getEntrances(token, "website", rangeKey, 300)
+  );
+
+  const rows: LandingRow[] = (data || []).map((e) => ({
+    page: e.page,
+    entrances: e.entrances,
+    bounceRate: e.bounceRate,
+    engagementRate: e.engagementRate,
+    avgDuration: e.avgDuration,
+    conversions: e.conversions,
+    convRate: e.entrances ? e.conversions / e.entrances : 0,
+  }));
+
+  return { ok: true as const, range, rangeKey, updatedAt, stale, rows };
+}
+
+export default async function LandingPagesReportPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  const d = await load(searchParams);
+
+  if (!d.ok) {
+    return (
+      <main className="mx-auto max-w-7xl px-8 py-12">
+        <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">Landing Pages</h1>
+        <Card className="mt-8 border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <p className="text-sm text-amber-900 dark:text-amber-200"><strong>No analytics data available.</strong> The GA4 service token couldn&apos;t be loaded.</p>
+        </Card>
+      </main>
+    );
+  }
+
+  const rows = d.rows;
+  const totalEntr = rows.reduce((s, r) => s + r.entrances, 0);
+  const totalConv = rows.reduce((s, r) => s + r.conversions, 0);
+  const wBounce = totalEntr ? rows.reduce((s, r) => s + r.bounceRate * r.entrances, 0) / totalEntr : 0;
+  const convRate = totalEntr ? totalConv / totalEntr : 0;
+
+  const topConv = [...rows].filter((r) => r.conversions > 0).sort((a, b) => b.conversions - a.conversions).slice(0, 8);
+  const topEntr = [...rows].sort((a, b) => b.entrances - a.entrances).slice(0, 8);
 
   const insights: Array<{ severity: "good" | "warn" | "alert" | "info"; title: string; body: string }> = [];
-
-  // Best-converting LP by form_submit ÷ pageviews
-  const mappedLPs = data.funnel.filter((r) => r.lp && r.pageviews > 0);
-  if (mappedLPs.length > 0) {
-    const best = [...mappedLPs].sort((a, b) => (b.formSubmits / b.pageviews) - (a.formSubmits / a.pageviews))[0];
-    if (best.formSubmits > 0) {
-      const rate = (best.formSubmits / best.pageviews) * 100;
-      insights.push({
-        severity: "good",
-        title: `Best-converting landing page: ${best.label}`,
-        body: `${rate.toFixed(2)}% form-submit rate (${best.formSubmits} signups / ${best.pageviews} views).`,
-      });
-    }
-
-    const worst = [...mappedLPs]
-      .filter((r) => r.pageviews > 50)
-      .sort((a, b) => (a.formSubmits / a.pageviews) - (b.formSubmits / b.pageviews))[0];
-    if (worst && worst.formSubmits / worst.pageviews < 0.01) {
-      insights.push({
-        severity: "warn",
-        title: `${worst.label} has high traffic but low conversion`,
-        body: `${worst.pageviews.toLocaleString()} views → ${worst.formSubmits} form submits (${((worst.formSubmits / worst.pageviews) * 100).toFixed(2)}%). Worth reviewing form placement, copy, or offer.`,
-      });
-    }
-  }
-
-  if (data.totals.mappedLPs === 0) {
-    insights.push({
-      severity: "info",
-      title: "No landing pages mapped yet",
-      body: "Edit src/lib/landing-page-tag-map.ts and add rows for each LP that captures emails. Until then, the funnel columns won't tie to Keap.",
-    });
-  }
+  const bestRate = [...rows].filter((r) => r.entrances >= 50 && r.conversions > 0).sort((a, b) => b.convRate - a.convRate)[0];
+  if (bestRate) insights.push({ severity: "good", title: `Best-converting entry page: ${bestRate.page}`, body: `${(bestRate.convRate * 100).toFixed(2)}% conversion (${num(bestRate.conversions)} from ${num(bestRate.entrances)} entrances).` });
+  const leak = [...rows].filter((r) => r.entrances >= 100 && r.conversions === 0).sort((a, b) => b.entrances - a.entrances)[0];
+  if (leak) insights.push({ severity: "warn", title: `High traffic, zero conversions: ${leak.page}`, body: `${num(leak.entrances)} entrances, ${pct(leak.bounceRate)} bounce, ${pct(leak.engagementRate)} engaged — but no conversions. Review the offer/CTA on this entry page.` });
+  const bouncy = [...rows].filter((r) => r.entrances >= 100).sort((a, b) => b.bounceRate - a.bounceRate)[0];
+  if (bouncy && bouncy.bounceRate > 0.6) insights.push({ severity: "alert", title: `Highest bounce among busy entries: ${bouncy.page}`, body: `${pct(bouncy.bounceRate)} of ${num(bouncy.entrances)} entrances leave immediately. Worth checking load speed, message match, and above-the-fold content.` });
 
   return (
     <main className="mx-auto max-w-7xl px-8 py-12">
       <header className="mb-10">
-        <div className="flex items-baseline justify-between">
-          <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
-            Landing Pages
-          </h1>
+        <div className="flex items-baseline justify-between gap-4">
+          <h1 className="text-4xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">Landing Pages</h1>
           <div className="flex items-center gap-3">
             <DateRangePicker />
             <ExportButton targetId="report-content" filename="landing-pages-report" label="Export all" />
           </div>
         </div>
-        <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-400">
-          How does each page convert from visit to lead to sale?
+        <p className="mt-2 max-w-3xl text-gray-600 dark:text-gray-400">Where sessions start, how engaged those visitors are, and which entry pages actually produce signups.</p>
+        <p className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${d.stale ? "bg-amber-400" : "bg-emerald-400"}`} />
+          Data cached · updated {ago(d.updatedAt)}{d.stale ? " · refreshing in background" : ""}.
         </p>
       </header>
 
-      {!data.accessToken && (
-        <Card className="mb-8 border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
-          <p className="text-sm text-amber-900 dark:text-amber-200">
-            <strong>GA4 not connected.</strong> Sign in via <a href="/portal/analytics" className="underline">Analytics</a> first.
-          </p>
-        </Card>
-      )}
-
       <div id="report-content" className="bg-white dark:bg-[#1c1c1e]">
-
-      <div className="mb-10">
-        <KPIGrid
-          accent="green"
-          kpis={[
-            { label: "Pages with traffic", value: data.funnel.length.toLocaleString(), hint: `${data.totals.mappedLPs} mapped to Keap tags` },
-            { label: "Form submits", value: data.totals.formSubmits.toLocaleString() },
-            { label: "Enroll clicks", value: data.totals.enrollClicks.toLocaleString(), hint: "WP → Thinkific outbound" },
-            { label: "Attributed revenue", value: data.totals.revenue > 0 ? fmtMoney(data.totals.revenue) : "—", hint: "via utm_campaign" },
-          ]}
-        />
-      </div>
-
-      {insights.length > 0 && (
-        <Section
-          id="section-insights"
-          title="What stands out"
-          description="Computed from current data."
-          action={<ExportButton targetId="section-insights" filename="landing-pages-insights" />}
-        >
-          <InsightGrid>
-            {insights.map((i, idx) => (
-              <Insight key={idx} severity={i.severity} title={i.title}>{i.body}</Insight>
-            ))}
-          </InsightGrid>
-        </Section>
-      )}
-
-      <Section
-        id="section-funnel"
-        title={`Per-page funnel (${data.funnel.length})`}
-        description="Search by title or path. Click headers to sort. Use the chips to narrow."
-        action={<ExportButton targetId="section-funnel" filename="landing-pages-funnel" />}
-      >
-        {data.funnel.length === 0 ? (
-          <Card>
-            <p className="text-sm text-gray-500">No GA4 page data yet.</p>
-          </Card>
-        ) : (
-          <LandingPagesFunnelTable
-            rows={data.funnel.map((r) => ({
-              page: r.page,
-              label: r.label,
-              pageviews: r.pageviews,
-              ctaClicks: r.ctaClicks,
-              formSubmits: r.formSubmits,
-              enrollClicks: r.enrollClicks,
-              keapTagged: r.keapTagged,
-              hasMappedTag: !!r.lp,
-              mappedTagId: r.lp?.tagId,
-              revenue: r.revenue,
-            }))}
+        <div className="mb-10">
+          <KPIGrid
+            accent="purple"
+            kpis={[
+              { label: "Entry pages", value: num(rows.length) },
+              { label: "Entrances", value: num(totalEntr), hint: "sessions that start on a page" },
+              { label: "Conversions", value: num(totalConv), hint: "GA4 key events on entry sessions" },
+              { label: "Conversion rate", value: `${(convRate * 100).toFixed(2)}%` },
+              { label: "Avg. bounce", value: pct(wBounce), hint: "traffic-weighted" },
+            ]}
           />
+        </div>
+
+        {insights.length > 0 && (
+          <Section id="section-insights" title="What stands out" description="Computed from the current window.">
+            <InsightGrid>
+              {insights.map((i, idx) => <Insight key={idx} severity={i.severity} title={i.title}>{i.body}</Insight>)}
+            </InsightGrid>
+          </Section>
         )}
-      </Section>
 
-      <Section
-        id="section-mapping"
-        title="Landing-page → Keap-tag mapping"
-        description="Edit src/lib/landing-page-tag-map.ts to add or change."
-        action={<ExportButton targetId="section-mapping" filename="landing-pages-mapping" />}
-      >
-        <Card padded={false}>
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-200/70 bg-gray-50/50 dark:border-white/5 dark:bg-white/[0.02]">
-              <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                <th className="px-5 py-3">Path</th>
-                <th className="px-5 py-3">Label</th>
-                <th className="px-5 py-3">Keap tag</th>
-                <th className="px-5 py-3">UTM campaign</th>
-                <th className="px-5 py-3">Course</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-              {LANDING_PAGE_TAG_MAP.map((lp) => (
-                <tr key={lp.path} className="text-gray-700 dark:text-gray-300">
-                  <td className="px-5 py-3 font-mono text-xs text-gray-900 dark:text-gray-100">{lp.path}</td>
-                  <td className="px-5 py-3">{lp.label}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{lp.tagId}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{lp.utmCampaign || "—"}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{lp.thinkificCourseSlug || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      </Section>
+        <Section id="section-top" title="Top entry pages">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-500">Most conversions</p>
+              <BarList color="green" items={topConv.length ? topConv.map((r) => ({ label: r.page || "(not set)", value: Math.round(r.conversions), sublabel: `${(r.convRate * 100).toFixed(1)}% of ${num(r.entrances)}` })) : [{ label: "No conversions recorded on entry pages", value: 0 }]} />
+            </Card>
+            <Card>
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-500">Most entrances</p>
+              <BarList color="blue" items={topEntr.map((r) => ({ label: r.page || "(not set)", value: r.entrances, sublabel: `${pct(r.bounceRate)} bounce · ${num(r.conversions)} conv` }))} />
+            </Card>
+          </div>
+        </Section>
 
+        <Section
+          id="section-table"
+          title={`All entry pages (${rows.length})`}
+          description="Search by path, click headers to sort, use the chips to filter by converters, high bounce, or engagement."
+          action={<ExportButton targetId="section-table" filename="landing-pages-table" />}
+        >
+          {rows.length === 0 ? <Card><p className="text-sm text-gray-500">No GA4 landing-page data yet.</p></Card> : <LandingTable rows={rows} />}
+        </Section>
       </div>
     </main>
   );

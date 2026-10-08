@@ -90,7 +90,7 @@ export const TRACKING_CODE = String.raw`<script>
     if (a.hostname === location.hostname) return;
     var name = 'outbound_click';
     var extra = { destination_host: a.hostname, destination_url: href };
-    if (/courses\.zhealtheducation\.com|\.thinkific\.com/i.test(a.hostname)) {
+    if (/courses\.zhealtheducation\.com|zuniversity\.zhealtheducation\.com|\.thinkific\.com/i.test(a.hostname)) {
       name = 'enroll_click';
       var m = href.match(/\/courses\/([^/?#]+)/i);
       if (m) extra.course_slug = m[1];
@@ -110,7 +110,7 @@ export const TRACKING_CODE = String.raw`<script>
   }, true);
 
   function tagThinkificLinks() {
-    var links = document.querySelectorAll('a[href*="courses.zhealtheducation.com"], a[href*=".thinkific.com"]');
+    var links = document.querySelectorAll('a[href*="courses.zhealtheducation.com"], a[href*="zuniversity.zhealtheducation.com"], a[href*=".thinkific.com"]');
     var pageSlug = (location.pathname.replace(/^\/+|\/+$/g, '') || 'home').replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
     links.forEach(function (a) {
       try {
