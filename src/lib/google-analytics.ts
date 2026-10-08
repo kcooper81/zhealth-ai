@@ -181,7 +181,6 @@ export async function getPagePerformance(
       { name: "totalUsers" },
       { name: "averageSessionDuration" },
       { name: "bounceRate" },
-      { name: "entrances" },
     ],
   });
 
@@ -191,7 +190,7 @@ export async function getPagePerformance(
     users: parseInt(row[1]?.value || "0"),
     avgTimeOnPage: parseFloat(row[2]?.value || "0"),
     bounceRate: parseFloat(row[3]?.value || "0"),
-    entrances: parseInt(row[4]?.value || "0"),
+    entrances: 0, // GA4 Data API has no `entrances` metric; use getEntrances (landingPage) instead
   };
 }
 
@@ -363,7 +362,6 @@ export async function getPagesWithEntrances(
       { name: "screenPageViews" },
       { name: "totalUsers" },
       { name: "sessions" },
-      { name: "entrances" },
       { name: "bounceRate" },
     ],
     orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
@@ -375,8 +373,8 @@ export async function getPagesWithEntrances(
     pageviews: parseInt(row.metricValues?.[0]?.value || "0"),
     users: parseInt(row.metricValues?.[1]?.value || "0"),
     sessions: parseInt(row.metricValues?.[2]?.value || "0"),
-    entrances: parseInt(row.metricValues?.[3]?.value || "0"),
-    bounceRate: parseFloat(row.metricValues?.[4]?.value || "0"),
+    entrances: 0, // GA4 Data API has no `entrances` metric; use getEntrances (landingPage) for true entrances
+    bounceRate: parseFloat(row.metricValues?.[3]?.value || "0"),
   }));
 }
 
