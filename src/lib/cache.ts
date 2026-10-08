@@ -300,6 +300,64 @@ export async function cacheRefresh<T>(
   return data;
 }
 
+type SWREnvelope<T> = { v: T; ts: number };
+
+/**
+ * Stale-while-revalidate. Serves cached data INSTANTLY (even when past the
+ * "fresh" window) and kicks off a best-effort background refresh when stale,
+ * so report pages render immediately and the data trails slightly behind
+ * rather than blocking on ~8 live API calls per visit.
+ *
+ * - `freshSeconds`: how long data is considered fresh (no background refresh)
+ * - `hardSeconds`: how long the snapshot survives before a cold recompute
+ *
+ * Only the very first visit per `hardSeconds` window pays the full cost; the
+ * manual "Refresh" button (cacheRefresh) and cron can force a recompute.
+ */
+export async function cachedFetchSWR<T>(
+  key: string,
+  freshSeconds: number,
+  hardSeconds: number,
+  fetcher: () => Promise<T>
+): Promise<{ data: T; updatedAt: number; stale: boolean }> {
+  const env = await cacheGet<SWREnvelope<T>>(key);
+  if (env && typeof env.ts === "number") {
+    const stale = Date.now() - env.ts > freshSeconds * 1000;
+    if (stale && !inflight.has(key)) {
+      // best-effort background revalidate (deduped)
+      const p = (async () => {
+        try {
+          const fresh = await fetcher();
+          await cacheSet(key, { v: fresh, ts: Date.now() }, hardSeconds);
+        } catch {
+          /* keep serving stale */
+        } finally {
+          inflight.delete(key);
+        }
+      })();
+      inflight.set(key, p as Promise<unknown>);
+    }
+    return { data: env.v, updatedAt: env.ts, stale };
+  }
+  // Cold: compute now and store.
+  const fresh = await fetcher();
+  const ts = Date.now();
+  await cacheSet(key, { v: fresh, ts }, hardSeconds);
+  return { data: fresh, updatedAt: ts, stale: false };
+}
+
+/** Force a recompute + store, returning the new timestamp. Used by the "Refresh" button. */
+export async function cacheRecomputeSWR<T>(
+  key: string,
+  hardSeconds: number,
+  fetcher: () => Promise<T>
+): Promise<number> {
+  const fresh = await fetcher();
+  const ts = Date.now();
+  await cacheSet(key, { v: fresh, ts }, hardSeconds);
+  return ts;
+}
+
 // ---------------------------------------------------------------------------
 // Sync metadata — when did the background sync last run, per system
 // ---------------------------------------------------------------------------
