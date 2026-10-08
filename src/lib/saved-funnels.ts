@@ -25,7 +25,7 @@ const ON_PAGE_EVENTS = new Set([
   "outbound_click",
 ]);
 
-const STORE_KEY = "saved-funnels:list";
+const STORE_KEY = "saved-funnels:list:v2";
 const STORE_TTL = 365 * 24 * 60 * 60; // effectively forever (1 year)
 
 export type SavedFunnel = FunnelDefinition & {
