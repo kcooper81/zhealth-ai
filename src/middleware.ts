@@ -8,6 +8,8 @@ export default withAuth({
 
 export const config = {
   matcher: [
-    "/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|robots\\.txt|.*\\.).*)",
+    // Exclude cron/refresh endpoints — they enforce their own auth
+    // (CRON_SECRET bearer or a signed-in session) inside the route handler.
+    "/((?!login|api/auth|api/cron|api/portal/page-flows/refresh|_next/static|_next/image|favicon\\.ico|robots\\.txt|.*\\.).*)",
   ],
 };
