@@ -37,8 +37,13 @@ const ago = (ts: number) => {
 };
 // LineChart sorts its X axis as strings, so use an ISO date (YYYY-MM-DD from
 // the YYYYMMDD dateKey) — sorts chronologically and reads clearly.
-const isoFromDateKey = (k: string) =>
-  k && k.length === 8 ? `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}` : k;
+const isoFromDateKey = (k: string) => {
+  if (!k || k.length !== 8) return k;
+  const [y, mo, day] = [k.slice(0, 4), k.slice(4, 6), k.slice(6, 8)];
+  if (mo === "00") return y;
+  if (day === "00") return `${y}-${mo}`;
+  return `${y}-${mo}-${day}`;
+};
 
 async function load() {
   const session = await getServerSession();
