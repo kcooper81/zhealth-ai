@@ -19,14 +19,30 @@ export type WebinarTag = { id: number; name: string; role: WebinarRole; source: 
 
 export type WebinarStat = {
   webinar: string;           // grouped webinar label
+  dateKey: string;           // YYYYMMDD for sorting/trends ("" if unparseable)
   registered: number;        // primary registration (best signup tag)
   registeredBySource: Record<string, number>;
-  replaySignups: number;
+  topSource: string;         // highest-registration source
+  replaySignups: number;     // total (live + on-demand)
+  replayLive: number;
+  replayOnDemand: number;
   saleClaimed: number;
   regToReplay: number;       // replay / registered
   regToSale: number;         // sale / registered
   tags: WebinarTag[];
 };
+
+const MONTHS: Record<string, string> = {
+  january: "01", february: "02", march: "03", april: "04", may: "05", june: "06",
+  july: "07", august: "08", september: "09", october: "10", november: "11", december: "12",
+};
+function parseDateKey(name: string): string {
+  const y = name.match(/\b(20\d{2})\b/)?.[1];
+  const mo = name.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i)?.[1]?.toLowerCase();
+  const day = name.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\b/i)?.[2];
+  if (!y) return "";
+  return `${y}${mo ? MONTHS[mo] : "00"}${day ? String(day).padStart(2, "0") : "00"}`;
+}
 
 function classify(name: string): { key: string; role: WebinarRole; source: WebinarSource } {
   const u = name.toUpperCase();
@@ -86,14 +102,22 @@ export async function getWebinarStats(): Promise<WebinarStat[]> {
     const registered = regTags.reduce((mx, t) => Math.max(mx, t.count), 0);
     const registeredBySource: Record<string, number> = {};
     for (const t of regTags) registeredBySource[t.source] = Math.max(registeredBySource[t.source] || 0, t.count);
-    const replaySignups = replayTags.reduce((mx, t) => Math.max(mx, t.count), 0);
+    const topSource = Object.entries(registeredBySource).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
+    const replayLive = replayTags.filter((t) => /live\s*replay/i.test(t.name)).reduce((mx, t) => Math.max(mx, t.count), 0);
+    const replayOnDemand = replayTags.filter((t) => /on-?demand/i.test(t.name)).reduce((mx, t) => Math.max(mx, t.count), 0);
+    const replayGeneric = replayTags.filter((t) => !/live\s*replay|on-?demand/i.test(t.name)).reduce((mx, t) => Math.max(mx, t.count), 0);
+    const replaySignups = replayLive + replayOnDemand || replayGeneric;
     const saleClaimed = saleTags.reduce((s, t) => s + t.count, 0);
 
     stats.push({
       webinar,
+      dateKey: parseDateKey(webinar),
       registered,
       registeredBySource,
+      topSource,
       replaySignups,
+      replayLive,
+      replayOnDemand,
       saleClaimed,
       regToReplay: registered ? replaySignups / registered : 0,
       regToSale: registered ? saleClaimed / registered : 0,
@@ -101,10 +125,12 @@ export async function getWebinarStats(): Promise<WebinarStat[]> {
     });
   }
 
-  // Newest first (tags are named with the year up front).
-  return stats.filter((s) => s.registered > 0 || s.saleClaimed > 0).sort((a, b) => b.webinar.localeCompare(a.webinar));
+  // Newest first by parsed date (fallback to name).
+  return stats
+    .filter((s) => s.registered > 0 || s.saleClaimed > 0)
+    .sort((a, b) => (b.dateKey || "0").localeCompare(a.dateKey || "0") || b.webinar.localeCompare(a.webinar));
 }
 
 export const WEBINAR_FRESH_SECONDS = 60 * 60;      // 1h fresh
 export const WEBINAR_HARD_SECONDS = 24 * 60 * 60;  // 24h snapshot
-export const WEBINAR_CACHE_KEY = "webinars:stats:v1";
+export const WEBINAR_CACHE_KEY = "webinars:stats:v2";

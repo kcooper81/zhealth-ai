@@ -383,3 +383,43 @@ export function LandingTable({ rows }: { rows: LandingRow[] }) {
     />
   );
 }
+
+// ---- Webinars comparison (marketing reporting) -------------------------
+
+export type WebinarCompareRow = {
+  webinar: string;
+  registered: number;
+  replaySignups: number;
+  saleClaimed: number;
+  regToReplay: number;
+  regToSale: number;
+  topSource: string;
+};
+
+export function WebinarCompareTable({ rows }: { rows: WebinarCompareRow[] }) {
+  const p = (n: number) => `${(n * 100).toFixed(1)}%`;
+  const columns: Column<WebinarCompareRow>[] = [
+    { key: "webinar", label: "Masterclass", sortable: true, accessor: (r) => r.webinar, render: (r) => <span className="font-medium text-gray-900 dark:text-gray-100">{r.webinar}</span> },
+    { key: "registered", label: "Registered", sortable: true, numeric: true, accessor: (r) => r.registered, render: (r) => r.registered.toLocaleString() },
+    { key: "replaySignups", label: "Replay signups", sortable: true, numeric: true, accessor: (r) => r.replaySignups, render: (r) => r.replaySignups.toLocaleString() },
+    { key: "regToReplay", label: "Reg→Replay", sortable: true, numeric: true, accessor: (r) => r.regToReplay, render: (r) => r.replaySignups ? p(r.regToReplay) : <span className="text-gray-400">—</span> },
+    { key: "saleClaimed", label: "Sales", sortable: true, numeric: true, accessor: (r) => r.saleClaimed, render: (r) => r.saleClaimed ? <span className="font-medium text-emerald-700 dark:text-emerald-300">{r.saleClaimed.toLocaleString()}</span> : <span className="text-gray-400">0</span> },
+    { key: "regToSale", label: "Reg→Sale", sortable: true, numeric: true, accessor: (r) => r.regToSale, render: (r) => r.saleClaimed ? <span className="font-medium">{p(r.regToSale)}</span> : <span className="text-gray-400">—</span> },
+    { key: "topSource", label: "Top source", sortable: true, accessor: (r) => r.topSource, render: (r) => <span className="text-xs">{r.topSource}</span> },
+  ];
+  return (
+    <FilterableTable
+      rows={rows}
+      rowKey={(r) => r.webinar}
+      searchableKeys={["webinar", "topSource"]}
+      placeholder="Search masterclass…"
+      maxHeight={560}
+      presets={[
+        { label: "Had sales", predicate: (r) => r.saleClaimed > 0 },
+        { label: "1k+ registered", predicate: (r) => r.registered >= 1000 },
+      ]}
+      initialSort={{ key: "registered", dir: "desc" }}
+      columns={columns}
+    />
+  );
+}
